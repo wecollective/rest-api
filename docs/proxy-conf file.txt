@@ -1,0 +1,40 @@
+server {
+    # port
+    listen 80;
+
+    # server name
+    server_name api.weco.io;
+
+    # automatically route HTTP to HTTPS
+	location / { return 301 https://$server_name$request_uri; }
+}
+server {
+    # port
+    listen 443 ssl;
+
+    # server name
+    server_name api.weco.io;
+
+    # certificate
+    ssl_certificate /etc/letsencrypt/live/api.weco.io/cert.pem;
+
+    # private key
+    ssl_certificate_key /etc/letsencrypt/live/api.weco.io/privkey.pem;
+
+    # api
+    location / {
+        proxy_pass http://localhost:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # websocket
+	location /socket.io/ {
+        proxy_pass http://localhost:5001/socket.io/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
