@@ -777,7 +777,7 @@ router.get('/space-users', (req, res) => {
             model: Holon,
             as: 'FollowedHolons',
             attributes: [],
-            through: { where: { relationship: 'follower', state: 'active' }, attributes: [] }
+            through: { where: { state: 'active' }, attributes: [] }
         }],
     })
     .then(users => {
