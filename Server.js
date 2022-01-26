@@ -114,6 +114,11 @@ io.on('connection', socket => {
             .catch((error) => console.log('error: ', error))
     })
 
+    socket.on('sending-save-game', data => {
+        const { roomId } = data
+        io.in(roomId).emit('returning-save-game', data)
+    })
+
     socket.on('sending-audio-bead', data => {
         io.in(data.roomId).emit('returning-audio-bead', data)
     })
