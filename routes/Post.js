@@ -1112,18 +1112,16 @@ router.post('/viable-post-spaces', (req, res) => {
     .then(spaces => res.send(spaces))
 })
 
-// DELETE
-router.delete('/delete-post', (req, res) => {
-    // TODO: endpoints like this are currently unsafe/open to anyone. include authenticate middleware.
-    const { itemId } = req.body
+router.post('/delete-post', authenticateToken, (req, res) => {
+    const accountId = req.user.id
+    const { postId } = req.body
     Post
-        .update({ state: 'hidden' }, { where: { id: itemId } })
-        .then(res.send('success'))
-        .catch((error) => {
-            console.error(error)
-        })
+        .update({ state: 'deleted' }, { where: { id: postId, creatorId: accountId } })
+        .then(res.status(200).json({ message: 'Post deleted' }))
+        .catch(error => console.log(error))
 })
 
+// DELETE
 router.delete('/delete-comment', (req, res) => {
     // TODO: endpoints like this are currently unsafe/open to anyone. include authenticate middleware.
     const { itemId } = req.body
