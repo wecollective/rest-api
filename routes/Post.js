@@ -515,6 +515,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
         GlassBeadGame.create({
             postId: post.id,
             topic: topic,
+            locked: false,
         })
     }
 
@@ -1043,13 +1044,9 @@ router.post('/save-glass-bead-game', (req, res) => {
         beads
     } = req.body
 
-    console.log(req.body)
-
-    // lock game
     GlassBeadGame
-        .update({ locked: true }, { where: { id: gameId }})
+        .update({ locked: true }, { where: { id: gameId, locked: false }})
         .then(() => {
-            // save beads
             beads.forEach((bead) => {
                 GlassBead.create({
                     gameId,
