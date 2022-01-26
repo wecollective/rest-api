@@ -673,8 +673,9 @@ router.get('/space-posts', (req, res) => {
                     include: [{ 
                         model: GlassBead,
                         // attributes: [],
+                        where: { state: 'visible' },
+                        required: false,
                         order: [['index', 'ASC']],
-                        // separate: true,
                         include: [
                             {
                                 model: User,

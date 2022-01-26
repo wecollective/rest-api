@@ -37,6 +37,8 @@ app.use(morgan(settings, { stream: accessLogStream }))
 app.use(express.urlencoded({ extended: true }))
 app.use(express.json())
 
+app.get('/', (req, res) => res.send("Welcome to weco.io's REST API"))
+
 // import routes
 app.use('/', require('./routes/Auth'))
 app.use('/', require('./routes/Account'))

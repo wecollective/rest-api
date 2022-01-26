@@ -383,7 +383,8 @@ router.get('/glass-bead-game-data', (req, res) => {
                 model: GlassBead,
                 // attributes: [],
                 order: [['index', 'ASC']],
-                separate: true,
+                where: { state: 'visible' },
+                required: false,
                 include: [
                     {
                         model: User,
@@ -1055,7 +1056,7 @@ router.post('/save-glass-bead-game', (req, res) => {
                     index: bead.index,
                     userId: bead.user.id,
                     beadUrl: bead.beadUrl,
-                    // state: 'active'
+                    state: 'visible'
                 })
             })
             res.status(200).send({ message: 'Game saved' })
