@@ -669,20 +669,15 @@ router.get('/space-posts', (req, res) => {
                 {
                     model: GlassBeadGame,
                     attributes: ['topic'],
-                    // required: false,
                     include: [{ 
                         model: GlassBead,
-                        // attributes: [],
                         where: { state: 'visible' },
                         required: false,
-                        order: [['index', 'ASC']],
-                        include: [
-                            {
-                                model: User,
-                                as: 'user',
-                                attributes: ['handle', 'name', 'flagImagePath']
-                            }
-                        ]
+                        include: [{
+                            model: User,
+                            as: 'user',
+                            attributes: ['handle', 'name', 'flagImagePath']
+                        }]
                     }]
                 }
             ]

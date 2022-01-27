@@ -381,28 +381,21 @@ router.get('/glass-bead-game-data', (req, res) => {
         include: [
             { 
                 model: GlassBead,
-                // attributes: [],
-                order: [['index', 'ASC']],
                 where: { state: 'visible' },
                 required: false,
-                include: [
-                    {
-                        model: User,
-                        as: 'user',
-                        attributes: ['handle', 'name', 'flagImagePath']
-                    }
-                ]
+                include: [{
+                    model: User,
+                    as: 'user',
+                    attributes: ['handle', 'name', 'flagImagePath']
+                }]
             },
             {
                 model: GlassBeadGameComment,
-                // attributes: [],
-                include: [
-                    {
-                        model: User,
-                        as: 'user',
-                        attributes: ['handle', 'name', 'flagImagePath']
-                    }
-                ]
+                include: [{
+                    model: User,
+                    as: 'user',
+                    attributes: ['handle', 'name', 'flagImagePath']
+                }]
             },
 
         ]
