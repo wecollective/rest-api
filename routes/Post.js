@@ -378,6 +378,10 @@ router.get('/glass-bead-game-data', (req, res) => {
             'introDuration',
             'intervalDuration'
         ],
+        order: [
+            [GlassBeadGameComment, 'createdAt', 'ASC'],
+            [GlassBead, 'createdAt', 'DESC'],
+        ],
         include: [
             { 
                 model: GlassBead,
@@ -391,8 +395,10 @@ router.get('/glass-bead-game-data', (req, res) => {
             },
             {
                 model: GlassBeadGameComment,
+                required: false,
                 include: [{
                     model: User,
+                    required: false,
                     as: 'user',
                     attributes: ['handle', 'name', 'flagImagePath']
                 }]
