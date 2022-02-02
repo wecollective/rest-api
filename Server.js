@@ -84,7 +84,11 @@ io.on('connection', socket => {
     })
 
     socket.on('returning-signal', payload => {
-        io.to(payload.callerID).emit('signal-returned', { signal: payload.signal, id: socket.id })
+        io.to(payload.userToSignal).emit('signal-returned', { signal: payload.signal, id: socket.id })
+    })
+
+    socket.on('outgoing-refresh-request', payload => {
+        io.to(payload.userToSignal).emit('incoming-refresh-request', { signal: payload.signal, id: socket.id })
     })
 
     socket.on('sending-comment', data => {
