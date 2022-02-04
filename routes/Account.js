@@ -24,6 +24,7 @@ router.get('/account-data', authenticateToken, (req, res) => {
           model: Holon,
           as: 'FollowedHolons',
           where: { state: 'active' },
+          required: false,
           attributes: ['handle', 'name', 'flagImagePath'],
           through: { where: { relationship: 'follower', state: 'active' }, attributes: [] }
         },
