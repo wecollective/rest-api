@@ -14,9 +14,15 @@ module.exports = {
             topic: {
                 type: Sequelize.STRING
             },
-            //   numberOfPlayers: {
-            //     type: Sequelize.INTEGER
-            //   },
+            topicGroup: {
+                type: Sequelize.STRING
+            },
+            topicImage: {
+                type: Sequelize.TEXT
+            },
+            backgroundImage: {
+                type: Sequelize.TEXT
+            },
             playerOrder: {
                 type: Sequelize.TEXT
             },

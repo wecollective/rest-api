@@ -3,11 +3,13 @@ module.exports = (sequelize, DataTypes) => {
   const GlassBeadGame = sequelize.define('GlassBeadGame', {
     postId: DataTypes.INTEGER,
     topic: DataTypes.STRING,
+    topicGroup: DataTypes.STRING,
+    topicImage: DataTypes.TEXT,
+    backgroundImage: DataTypes.TEXT,
     numberOfTurns: DataTypes.INTEGER,
     moveDuration: DataTypes.INTEGER,
     introDuration: DataTypes.INTEGER,
     intervalDuration: DataTypes.INTEGER,
-    // numberOfPlayers: DataTypes.INTEGER,
     playerOrder: DataTypes.TEXT,
     locked: DataTypes.BOOLEAN
   }, {});
