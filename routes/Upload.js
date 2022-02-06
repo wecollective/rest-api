@@ -6,8 +6,7 @@ var aws = require('aws-sdk')
 var multer = require('multer')
 var multerS3 = require('multer-s3')
 
-const User = require('../models').User
-const Holon = require('../models').Holon
+const { User, Holon, GlassBeadGame } = require('../models')
 
 const authenticateToken = require('../middleware/authenticateToken')
 
@@ -23,113 +22,73 @@ aws.config.update({
 })
   
 const s3 = new aws.S3({})
-  
-const userFlagImageUpload = multer({
-  storage: multerS3({
-        s3: s3,
-        bucket: `weco-${process.env.NODE_ENV}-user-flag-images`,
-        acl: 'public-read',
-        metadata: function (req, file, cb) {
-            cb(null, {fieldName: 'testing...'})
-        },
-        key: function (req, file, cb) {
-            cb(null, Date.now().toString())
+
+router.post('/image-upload', authenticateToken, (req, res) => {
+    const accountId = req.user.id
+    const { type, id } = req.query
+    const { imageURL } = req.body
+
+    function saveImage(imageType, url) {
+        switch (imageType) {
+            case 'user-flag':
+                User
+                    .update({ flagImagePath: url }, { where: { id: accountId }})
+                    .then(res.status(200).json({ message: 'Success', imageURL: url }))
+                break
+            case 'user-cover':
+                User
+                    .update({ coverImagePath: url }, { where: { id: accountId }})
+                    .then(res.status(200).json({ message: 'Success', imageURL: url }))
+                break
+            case 'space-flag':
+                Holon
+                    .update({ flagImagePath: url }, { where: { id } })
+                    .then(res.status(200).json({ message: 'Success', imageURL: url }))
+                break
+            case 'space-cover':
+                Holon
+                    .update({ coverImagePath: url }, { where: { id } })
+                    .then(res.status(200).json({ message: 'Success', imageURL: url }))
+                break
+            case 'gbg-topic':
+                GlassBeadGame
+                    .update({ topicImage: url }, { where: { id }})
+                    .then(res.status(200).json({ message: 'Success', imageURL: url }))
+                break
+            case 'gbg-background':
+                GlassBeadGame
+                    .update({ backgroundImage: url }, { where: { id }})
+                    .then(res.status(200).json({ message: 'Success', imageURL: url }))
+                break
+            default:
+                break
         }
-    })
-})
-  
-const userCoverImageUpload = multer({
-    storage: multerS3({
-        s3: s3,
-        bucket: `weco-${process.env.NODE_ENV}-user-cover-images`,
-        acl: 'public-read',
-        metadata: function (req, file, cb) {
-            cb(null, {fieldName: 'testing...'})
-        },
-        key: function (req, file, cb) {
-            cb(null, Date.now().toString())
-        }
-    })
-})
-  
-const holonFlagImageUpload = multer({
-    storage: multerS3({
-        s3: s3,
-        bucket: `weco-${process.env.NODE_ENV}-space-flag-images`,
-        acl: 'public-read',
-        metadata: function (req, file, cb) {
-            cb(null, {fieldName: 'testing...'});
-        },
-        key: function (req, file, cb) {
-            cb(null, Date.now().toString())
-        }
-    })
-})
-  
-const holonCoverImageUpload = multer({
-    storage: multerS3({
-        s3: s3,
-        bucket: `weco-${process.env.NODE_ENV}-space-cover-images`,
-        acl: 'public-read',
-        metadata: function (req, file, cb) {
-            cb(null, {fieldName: 'testing...'});
-        },
-        key: function (req, file, cb) {
-            cb(null, Date.now().toString())
-        }
-    })
-})
-  
-router.post('/user-flag-image-upload', authenticateToken, function(req, res) {
-    console.log('user-flag-image-upload')
-    userFlagImageUpload.single('image')(req, res, function(err) {
-        const { file, user } = req
-        if (err) { console.log(err) }
-        if (file) {
-            User.update({ flagImagePath: file.location }, { where: { id: user.id }})
-                .then(res.send('success'))
-        } else { res.json({ message: 'failed' }) }
-    })
-})
-  
-router.post('/user-cover-image-upload', authenticateToken, function(req, res) {
-    console.log('user-cover-image-upload')
-    userCoverImageUpload.single('image')(req, res, function(err) {
-      const { file, user } = req
-      if (err) { console.log(err) }
-      if (file) {
-        User
-          .update({ coverImagePath: file.location }, { where: { id: user.id }})
-          .then(res.send('success'))
-      } else { res.json({ message: 'failed' }) }
-    })
-})
-  
-router.post('/holon-flag-image-upload', authenticateToken, function(req, res) {
-    console.log('holon-flag-image-upload')
-    holonFlagImageUpload.single('image')(req, res, function(err) {
-      const { file, query } = req
-      if (err) { console.log(err) }
-      if (file) {
-        Holon
-          .update({ flagImagePath: file.location }, { where: { id: query.holonId } })
-          .then(res.send('success'))
-      } else { res.json({ message: 'failed' }) }
-    })
-})
-  
-router.post('/holon-cover-image-upload', authenticateToken, function(req, res) {
-    console.log('holon-cover-image-upload')
-    holonCoverImageUpload.single('image')(req, res, function(err) {
-      const { file, query } = req
-      console.log('file: ', file)
-      if (err) { console.log(err) }
-      if (file) {
-        Holon
-          .update({ coverImagePath: file.location }, { where: { id: query.holonId }})
-          .then(res.send('success'))
-      } else { res.json({ message: 'failed' }) }
-    })
+    }
+
+    if (imageURL) saveImage(type, imageURL)
+    else {
+        multer({
+            storage: multerS3({
+                s3: s3,
+                bucket: `weco-${process.env.NODE_ENV}-${type}-images`,
+                acl: 'public-read',
+                metadata: function (req, file, cb) {
+                    cb(null, { mimetype: file.mimetype })
+                },
+                key: function (req, file, cb) {
+                    const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
+                    const date = Date.now().toString()
+                    const extension = file.mimetype.split('/')[1]
+                    const fileName = `${type}-image-${id}-${accountId}-${name}-${date}.${extension}`
+                    cb(null, fileName)
+                }
+            })
+        }).single('image')(req, res, (err) => {
+            const { file } = req
+            if (file) saveImage(type, file.location)
+            else res.status(500).json({ message: 'Failed', error: err })
+        })
+    }
 })
 
 router.post('/audio-upload', (req, res) => {
