@@ -372,6 +372,9 @@ router.get('/glass-bead-game-data', (req, res) => {
         attributes: [
             'id',
             'topic',
+            'topicGroup',
+            'topicImage',
+            'backgroundImage',
             'locked',
             'numberOfTurns',
             'moveDuration',
@@ -417,27 +420,18 @@ router.post('/create-post', authenticateToken, (req, res) => {
     const accountId = req.user.id
     const {
         type,
-        // subType,
         text,
+        spaceHandles,
+        // url posts
         url,
         urlImage,
         urlDomain,
         urlTitle,
         urlDescription,
+        // gbg posts
         topic,
-        spaceHandles,
-        // pollAnswers,
-        // numberOfPrismPlayers,
-        // prismDuration,
-        // prismPrivacy,
-        // numberOfPlotGraphAxes,
-        // axis1Left,
-        // axis1Right,
-        // axis2Top,
-        // axis2Bottom,
-        // // createPostFromTurnData,
-        // GBGTopic,
-        // GBGCustomTopic,
+        topicGroup,
+        topicImage,
     } = req.body
 
     // console.log(req.body)
@@ -513,7 +507,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
     function createGlassBeadGame(post) {
         GlassBeadGame.create({
             postId: post.id,
-            topic: topic,
+            topic,
+            topicGroup,
+            topicImage,
             locked: false,
         })
     }
@@ -521,7 +517,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
     Promise.all([findHandleIds()]).then(() => {
         Post.create({
             type,
-            // subType,
             state: 'visible',
             creatorId: accountId,
             text,
@@ -535,9 +530,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
         .then(post => {
             createNewPostHolons(post)
             if (type === 'glass-bead-game') createGlassBeadGame(post)
+            // todo: only return postId and use existing data from front end
             res.send(post)
         })
-        // .then(res.send('success'))
     })
 })
 

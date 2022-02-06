@@ -350,7 +350,7 @@ router.get('/user-posts', (req, res) => {
                 },
                 {
                     model: GlassBeadGame,
-                    attributes: ['topic'],
+                    attributes: ['topic', 'topicGroup', 'topicImage'],
                     include: [{ 
                         model: GlassBead,
                         order: [['index', 'ASC']],
