@@ -375,11 +375,13 @@ router.get('/glass-bead-game-data', (req, res) => {
             'topicGroup',
             'topicImage',
             'backgroundImage',
-            'locked',
+            'backgroundVideo',
+            'backgroundVideoStartTime',
             'numberOfTurns',
             'moveDuration',
             'introDuration',
-            'intervalDuration'
+            'intervalDuration',
+            'locked'
         ],
         order: [
             [GlassBeadGameComment, 'createdAt', 'ASC'],
@@ -1073,7 +1075,6 @@ router.post('/save-glass-bead-game-settings', (req, res) => {
         intervalDuration,
     } = req.body
 
-    console.log('playerOrder: ', playerOrder)
     GlassBeadGame
         .update({
             playerOrder,
