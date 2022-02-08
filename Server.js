@@ -111,7 +111,6 @@ io.on('connection', socket => {
     socket.on('sending-stop-game', data => {
         const { userSignaling, roomId, gameId } = data
         io.in(roomId).emit('returning-stop-game', data)
-        // todo: investigate why not working in production
         const comment = { gameId, text: `${userSignaling.name} stopped the game` }
         axios
             .post(`${config.apiUrl}/glass-bead-game-comment`, comment)
@@ -119,12 +118,15 @@ io.on('connection', socket => {
     })
 
     socket.on('sending-save-game', data => {
-        const { roomId } = data
-        io.in(roomId).emit('returning-save-game', data)
+        io.in(data.roomId).emit('returning-save-game', data)
     })
 
     socket.on('sending-audio-bead', data => {
         io.in(data.roomId).emit('returning-audio-bead', data)
+    })
+
+    socket.on('outgoing-new-background', data => {
+        io.in(data.roomId).emit('incoming-new-background', data)
     })
 
     socket.on('stream-disconnected', data => {
