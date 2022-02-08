@@ -6,6 +6,8 @@ module.exports = (sequelize, DataTypes) => {
     topicGroup: DataTypes.STRING,
     topicImage: DataTypes.TEXT,
     backgroundImage: DataTypes.TEXT,
+    backgroundVideo: DataTypes.TEXT,
+    backgroundVideoStartTime: DataTypes.INTEGER,
     numberOfTurns: DataTypes.INTEGER,
     moveDuration: DataTypes.INTEGER,
     introDuration: DataTypes.INTEGER,

@@ -23,6 +23,12 @@ module.exports = {
             backgroundImage: {
                 type: Sequelize.TEXT
             },
+            backgroundVideo: {
+                type: Sequelize.TEXT
+            },
+            backgroundVideoStartTime: {
+                type: Sequelize.INTEGER
+            },
             playerOrder: {
                 type: Sequelize.TEXT
             },
