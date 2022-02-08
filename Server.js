@@ -73,9 +73,9 @@ io.on('connection', socket => {
         // connect to room
         socket.join(roomId)
         // notify room of new user
-        io.in(roomId).emit('user-joined', user)
+        socket.to(roomId).emit('user-joined', user)
         // send room data back to new user
-        const usersInRoom = rooms[roomId] //.filter(users => users.socketId !== socket.id)
+        const usersInRoom = rooms[roomId].filter(user => user.socketId !== socket.id)
         socket.emit('room-joined', { socketId: socket.id, usersInRoom })
     })
 
