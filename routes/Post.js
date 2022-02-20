@@ -381,6 +381,7 @@ router.get('/glass-bead-game-data', (req, res) => {
             'moveDuration',
             'introDuration',
             'intervalDuration',
+            'outroDuration',
             'locked'
         ],
         order: [
@@ -1073,6 +1074,7 @@ router.post('/save-glass-bead-game-settings', (req, res) => {
         numberOfTurns,
         moveDuration,
         intervalDuration,
+        outroDuration,
     } = req.body
 
     GlassBeadGame
@@ -1082,6 +1084,7 @@ router.post('/save-glass-bead-game-settings', (req, res) => {
             numberOfTurns,
             moveDuration,
             intervalDuration,
+            outroDuration,
         }, { where: { id: gameId }})
         .then(res.status(200).send({ message: 'Success' }))
         .catch(error => console.log(error))

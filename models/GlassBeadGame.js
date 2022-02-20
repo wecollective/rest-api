@@ -12,6 +12,7 @@ module.exports = (sequelize, DataTypes) => {
     moveDuration: DataTypes.INTEGER,
     introDuration: DataTypes.INTEGER,
     intervalDuration: DataTypes.INTEGER,
+    outroDuration: DataTypes.INTEGER,
     playerOrder: DataTypes.TEXT,
     locked: DataTypes.BOOLEAN
   }, {});

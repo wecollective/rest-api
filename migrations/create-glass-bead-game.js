@@ -44,6 +44,9 @@ module.exports = {
             intervalDuration: {
                 type: Sequelize.INTEGER
             },
+            outroDuration: {
+                type: Sequelize.INTEGER
+            },
             locked: {
                 type: Sequelize.BOOLEAN
             },
