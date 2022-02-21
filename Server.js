@@ -123,6 +123,10 @@ io.on('connection', socket => {
         io.in(data.roomId).emit('incoming-audio-bead', data)
     })
 
+    socket.on('outgoing-new-topic-text', data => {
+        io.in(data.roomId).emit('incoming-new-topic-text', data)
+    })
+
     socket.on('outgoing-new-topic-image', data => {
         io.in(data.roomId).emit('incoming-new-topic-image', data)
     })

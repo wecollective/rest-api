@@ -1090,6 +1090,18 @@ router.post('/save-glass-bead-game-settings', (req, res) => {
         .catch(error => console.log(error))
 })
 
+router.post('/save-gbg-topic', (req, res) => {
+    const {
+        gameId,
+        newTopic,
+    } = req.body
+
+    GlassBeadGame
+        .update({ topic: newTopic, topicGroup: null }, { where: { id: gameId }})
+        .then(res.status(200).send({ message: 'Success' }))
+        .catch(error => console.log(error))
+})
+
 router.post('/viable-post-spaces', (req, res) => {
     const { query, blacklist } = req.body
     Holon.findAll({
