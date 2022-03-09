@@ -147,7 +147,7 @@ router.get('/user-posts', (req, res) => {
 
     function findType() {
         let type
-        if (postType === 'All Types') { type = ['text', 'url', 'glass-bead-game', 'prism'] } //'poll','decision-tree',  'prism', 'plot-graph']
+        if (postType === 'All Types') { type = ['text', 'url', 'audio', 'glass-bead-game', 'prism'] } //'poll','decision-tree',  'prism', 'plot-graph']
         if (postType !== 'All Types') { type = postType.replace(/\s+/g, '-').toLowerCase() }
         return type
     }

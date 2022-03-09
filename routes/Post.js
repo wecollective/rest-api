@@ -7,6 +7,19 @@ const Op = sequelize.Op
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const puppeteer = require('puppeteer')
+const aws = require('aws-sdk')
+const multer = require('multer')
+const multerS3 = require('multer-s3')
+aws.config.update({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    region: 'eu-west-1'
+})
+const s3 = new aws.S3({})
+const fs = require('fs')
+const ffmpeg = require('fluent-ffmpeg')
+const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
+ffmpeg.setFfmpegPath(ffmpegPath)
 const authenticateToken = require('../middleware/authenticateToken')
 const { postAttributes } = require('../GlobalConstants')
 const {
@@ -420,27 +433,11 @@ router.get('/glass-bead-game-data', (req, res) => {
 // POST
 // todo: add authenticateToken to all endpoints below
 router.post('/create-post', authenticateToken, (req, res) => {
+    // todo: spaceHandles approach needs revisting
     const accountId = req.user.id
-    const {
-        type,
-        text,
-        spaceHandles,
-        // url posts
-        url,
-        urlImage,
-        urlDomain,
-        urlTitle,
-        urlDescription,
-        // gbg posts
-        topic,
-        topicGroup,
-        topicImage,
-    } = req.body
-
-    // console.log(req.body)
-
-    let directHandleIds = []
-    let indirectHandleIds = []
+    const { type } = req.query
+    const audioMBLimit = 5
+    const bucket = `weco-${process.env.NODE_ENV}-post-audio`
 
     // todo: pull in from global constants
     async function asyncForEach(array, callback) {
@@ -449,94 +446,207 @@ router.post('/create-post', authenticateToken, (req, res) => {
         }
     }
 
-    // todo, use ids from request instead
-    function findDirectHandleIds() {
-        Holon.findAll({
-            where: { handle: spaceHandles, state: 'active' },
-            attributes: ['id']
-        })
-        .then(holons => {
-            directHandleIds.push(...holons.map(holon => holon.id))
-        })
-    }
+    function createPost(postData, fileLocation) {
+        console.log('postData: ', postData)
+        console.log('fileLocation: ', fileLocation)
 
-    async function findIndirectHandleIds(handle) {
-        await Holon.findOne({
-            where: { handle: handle, state: 'active' },
-            include: [{
-                model: Holon,
-                as: 'HolonHandles',
-                attributes: ['id'],
-                through: { where: { state: 'open' }, attributes: [] }
-            }]
-        })
-        .then(holon => {
-            indirectHandleIds.push(...holon.HolonHandles.map(holon => holon.id))
-        })
-    }
-
-    async function findHandleIds() {
-        findDirectHandleIds()
-        await asyncForEach(spaceHandles, async(handle) => {
-            await findIndirectHandleIds(handle)
-        })
-        // remove duplicates from indirect handle ids
-        indirectHandleIds = [...new Set(indirectHandleIds)]
-        // remove ids already included in direct handle ids from indirect handle ids
-        indirectHandleIds = indirectHandleIds.filter(id => !directHandleIds.includes(id))
-    }
-
-    function createNewPostHolons(post) {
-        directHandleIds.forEach(id => {
-            PostHolon.create({
-                type: 'post',
-                relationship: 'direct',
-                creatorId: accountId,
-                postId: post.id,
-                holonId: id
-            })
-        })
-        indirectHandleIds.forEach(id => {
-            PostHolon.create({
-                type: 'post',
-                relationship: 'indirect',
-                creatorId: accountId,
-                postId: post.id,
-                holonId: id
-            })
-        })
-    }
-
-    function createGlassBeadGame(post) {
-        GlassBeadGame.create({
-            postId: post.id,
-            topic,
-            topicGroup,
-            topicImage,
-            locked: false,
-        })
-    }
-
-    Promise.all([findHandleIds()]).then(() => {
-        Post.create({
+        const {
             type,
-            state: 'visible',
-            creatorId: accountId,
             text,
+            spaceHandles,
             url,
             urlImage,
             urlDomain,
             urlTitle,
             urlDescription,
-            state: 'visible'
+            topic,
+            topicGroup,
+            topicImage,
+        } = postData
+
+        let directHandleIds = []
+        let indirectHandleIds = []
+
+        // todo, use ids from request instead
+        function findDirectHandleIds() {
+            Holon.findAll({
+                where: { handle: spaceHandles, state: 'active' },
+                attributes: ['id']
+            })
+            .then(holons => {
+                directHandleIds.push(...holons.map(holon => holon.id))
+            })
+        }
+
+        async function findIndirectHandleIds(handle) {
+            await Holon.findOne({
+                where: { handle: handle, state: 'active' },
+                include: [{
+                    model: Holon,
+                    as: 'HolonHandles',
+                    attributes: ['id'],
+                    through: { where: { state: 'open' }, attributes: [] }
+                }]
+            })
+            .then(holon => {
+                indirectHandleIds.push(...holon.HolonHandles.map(holon => holon.id))
+            })
+        }
+
+        async function findHandleIds() {
+            findDirectHandleIds()
+            await asyncForEach(spaceHandles, async(handle) => {
+                await findIndirectHandleIds(handle)
+            })
+            // remove duplicates from indirect handle ids
+            indirectHandleIds = [...new Set(indirectHandleIds)]
+            // remove ids already included in direct handle ids from indirect handle ids
+            indirectHandleIds = indirectHandleIds.filter(id => !directHandleIds.includes(id))
+        }
+
+        function createNewPostHolons(post) {
+            directHandleIds.forEach(id => {
+                PostHolon.create({
+                    type: 'post',
+                    relationship: 'direct',
+                    creatorId: accountId,
+                    postId: post.id,
+                    holonId: id
+                })
+            })
+            indirectHandleIds.forEach(id => {
+                PostHolon.create({
+                    type: 'post',
+                    relationship: 'indirect',
+                    creatorId: accountId,
+                    postId: post.id,
+                    holonId: id
+                })
+            })
+        }
+
+        function createGlassBeadGame(post) {
+            GlassBeadGame.create({
+                postId: post.id,
+                topic,
+                topicGroup,
+                topicImage,
+                locked: false,
+            })
+        }
+
+        Promise.all([findHandleIds()]).then(() => {
+            Post.create({
+                type,
+                state: 'visible',
+                creatorId: accountId,
+                text,
+                url: fileLocation || url,
+                urlImage,
+                urlDomain,
+                urlTitle,
+                urlDescription,
+                state: 'visible'
+            })
+            .then(post => {
+                createNewPostHolons(post)
+                if (type === 'glass-bead-game') createGlassBeadGame(post)
+                // todo: only return postId and use existing data from front end
+                res.send(post)
+            })
         })
-        .then(post => {
-            createNewPostHolons(post)
-            if (type === 'glass-bead-game') createGlassBeadGame(post)
-            // todo: only return postId and use existing data from front end
-            res.send(post)
+    }
+    
+    if (type === 'audio-file') {
+        multer({
+            limits: { fileSize: audioMBLimit * 1024 * 1024 },
+            storage: multerS3({
+                s3: s3,
+                bucket,
+                acl: 'public-read',
+                metadata: function (req, file, cb) {
+                    cb(null, { mimetype: file.mimetype })
+                },
+                key: function (req, file, cb) {
+                    const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
+                    const date = Date.now().toString()
+                    const fileName = `post-audio-upload-${accountId}-${name}-${date}.mp3`
+                    console.log('fileName: ', fileName)
+                    cb(null, fileName)
+                }
+            })
+        }).single('file')(req, res, (error) => {
+            const { file, body } = req
+            if (error instanceof multer.MulterError) {
+                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                else res.status(500).send(error)
+            } else if (error) {
+                res.status(500).send(error)
+            } else {
+                if (file) createPost(JSON.parse(body.postData), file.location)
+                else res.status(500).json({ message: 'Failed', error: err })
+            }
         })
-    })
+    } else if (type === 'audio-blob') {
+        multer({
+            fileFilter: (req, file, cb) => {
+                if (file.mimetype === 'audio/mpeg-3') cb(null, true)
+                else {
+                    cb(null, false)
+                    cb(new Error('Only audio/mpeg-3 files allowed'))
+                }
+            },
+            limits: { fileSize: audioMBLimit * 1024 * 1024 },
+            dest: './audio/raw',
+        }).single('file')(req, res, (error) => {
+            const { file, body } = req
+            // handle errors
+            if (error instanceof multer.MulterError) {
+                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                else res.status(500).send(error)
+            } else if (error) {
+                res.status(500).send(error)
+            } else {
+                // convert raw audio to mp3
+                ffmpeg(file.path)
+                    .output(`audio/mp3/${file.filename}.mp3`)
+                    .on('end', function() {
+                        // upload new mp3 file to s3 bucket
+                        fs.readFile(`audio/mp3/${file.filename}.mp3`, function (err, data) {
+                            if (!err) {
+                                const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
+                                const date = Date.now().toString()
+                                const fileName = `post-audio-recording-${accountId}-${name}-${date}.mp3`
+                                console.log('fileName: ', fileName)
+                                s3.putObject({
+                                    Bucket: bucket,
+                                    ACL: 'public-read',
+                                    Key: fileName,
+                                    Body: data,
+                                    Metadata: { mimetype: file.mimetype }
+                                }, (err) => {
+                                    if (err) console.log(err)
+                                    else {
+                                        // delete old files
+                                        fs.unlink(`audio/raw/${file.filename}`, (err => {
+                                            if (err) console.log(err)
+                                        }))
+                                        fs.unlink(`audio/mp3/${file.filename}.mp3`, (err => {
+                                            if (err) console.log(err)
+                                        }))
+                                        // create post
+                                        createPost(JSON.parse(body.postData), `https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
+                                    }
+                                })
+                            }
+                        })
+                    })
+                    .run()
+            }
+        })
+    } else {
+        createPost(req.body)
+    }
 })
 
 router.post('/repost-post', authenticateToken, async (req, res) => {

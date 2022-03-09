@@ -408,7 +408,7 @@ router.get('/space-posts', (req, res) => {
 
     function findType() {
         return postType === 'All Types'
-            ? ['text', 'url', 'glass-bead-game', 'prism']
+            ? ['text', 'url', 'audio', 'glass-bead-game', 'prism']
             : postType.replace(/\s+/g, '-').toLowerCase()
     }
 
