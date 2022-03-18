@@ -29,6 +29,7 @@ const {
     Post,
     Comment,
     Reaction,
+    Event,
     PollAnswer,
     Prism,
     PrismUser,
@@ -453,7 +454,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
         const {
             type,
             text,
-            spaceHandles,
+            title,
+            eventStartTime,
+            eventEndTime,
             url,
             urlImage,
             urlDomain,
@@ -462,6 +465,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             topic,
             topicGroup,
             topicImage,
+            spaceHandles,
         } = postData
 
         let directHandleIds = []
@@ -525,6 +529,18 @@ router.post('/create-post', authenticateToken, (req, res) => {
             })
         }
 
+        function createEvent(post) {
+            Event.create({
+                postId: post.id,
+                state: 'active',
+                // type: 'post-event',
+                title,
+                eventStartTime,
+                eventEndTime,
+                // location,
+            })
+        }
+
         function createGlassBeadGame(post) {
             GlassBeadGame.create({
                 postId: post.id,
@@ -550,6 +566,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             })
             .then(post => {
                 createNewPostHolons(post)
+                if (type === 'event') createEvent(post)
                 if (type === 'glass-bead-game') createGlassBeadGame(post)
                 // todo: only return postId and use existing data from front end
                 res.send(post)
