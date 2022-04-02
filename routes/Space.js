@@ -14,13 +14,15 @@ const {
     HolonHandle, // InheritedSpaceId
     HolonUser, // SpaceUserRelationship
     User,
+    UserEvent,
     Post,
     Reaction,
     Link,
     Notification,
     SpaceNotification,
     GlassBeadGame,
-    GlassBead
+    GlassBead,
+    Event
 } = require('../models')
 const {
     postAttributes,
@@ -572,7 +574,16 @@ router.get('/space-posts', (req, res) => {
                 AND Link.creatorId = ${accountId}
                 AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
                 )`),'accountLink'
-            ]
+            ],
+            // [sequelize.literal(`(
+            //     SELECT COUNT(*) > 0
+            //     FROM UserEvents
+            //     AS UE
+            //     WHERE UE.state = 'active'
+            //     AND UE.userId = ${accountId}
+            //     AND UE.eventId = Post.Event.id
+            //     )`),'accountFollowingEvent'
+            // ]
         ]
         return Post.findAll({ 
             where: { id: posts.map(post => post.id) },
@@ -595,6 +606,24 @@ router.get('/space-posts', (req, res) => {
                     as: 'IndirectSpaces',
                     attributes: ['id', 'handle', 'state'],
                     through: { where: { relationship: 'indirect' }, attributes: ['type'] },
+                },
+                {
+                    model: Event,
+                    // as: 'IndirectSpaces',
+                    // attributes: ['id', 'handle', 'state'],
+                    // through: { where: { relationship: 'indirect' }, attributes: ['type'] },
+                    include: [
+                        {
+                            model: User,
+                            as: 'Going',
+                            through: { where: { relationship: 'going' } },
+                        },
+                        {
+                            model: User,
+                            as: 'Interested',
+                            through: { where: { relationship: 'interested' } },
+                        }
+                    ]
                 },
                 { 
                     model: Reaction,
@@ -698,6 +727,7 @@ router.get('/space-posts', (req, res) => {
                 post.setDataValue('accountRating', !!post.dataValues.accountRating)
                 post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
                 post.setDataValue('accountLink', !!post.dataValues.accountLink)
+                post.setDataValue('accountFollowingEvent', !!post.dataValues.accountFollowingEvent)
             })
             let holonPosts = {
                 totalMatchingPosts,

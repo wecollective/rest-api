@@ -64,6 +64,10 @@ module.exports = (sequelize, DataTypes) => {
     Post.hasOne(models.GlassBeadGame, {
         foreignKey: 'postId'
     })
+
+    Post.hasOne(models.Event, {
+        foreignKey: 'postId'
+    })
     
     Post.hasMany(models.PollAnswer)
   }

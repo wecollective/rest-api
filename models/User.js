@@ -50,6 +50,11 @@ module.exports = (sequelize, DataTypes) => {
       //as: 'ModeratedHolons',
       foreignKey: 'userId'
     })
+    User.belongsToMany(models.Event, { 
+        through: models.UserEvent,
+        // as: 'UserEvent',
+        foreignKey: 'userId'
+    })
   };
   return User;
 };

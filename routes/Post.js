@@ -30,6 +30,7 @@ const {
     Comment,
     Reaction,
     Event,
+    UserEvent,
     PollAnswer,
     Prism,
     PrismUser,
@@ -536,7 +537,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 // type: 'post-event',
                 title,
                 eventStartTime,
-                eventEndTime,
+                eventEndTime: eventEndTime || null,
                 // location,
             })
         }
@@ -1160,6 +1161,19 @@ router.post('/submit-reply', async (req, res) => {
                     console.error(error)
                 })
         })
+})
+
+router.post('/respond-to-event', authenticateToken, (req, res) => {
+    const accountId = req.user.id
+    const { eventId, response } = req.body
+    console.log('respond-to-event: ', accountId, eventId, response)
+
+    UserEvent.create({
+        userId: accountId,
+        eventId: eventId,
+        relationship: response,
+        state: 'active',
+    }).then(() => res.status(200).send({ message: 'Success' }))
 })
 
 router.post('/save-glass-bead-game', (req, res) => {
