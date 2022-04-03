@@ -1168,12 +1168,37 @@ router.post('/respond-to-event', authenticateToken, (req, res) => {
     const { eventId, response } = req.body
     console.log('respond-to-event: ', accountId, eventId, response)
 
-    UserEvent.create({
-        userId: accountId,
-        eventId: eventId,
-        relationship: response,
-        state: 'active',
-    }).then(() => res.status(200).send({ message: 'Success' }))
+    UserEvent.findOne({
+        where: {
+            userId: accountId,
+            eventId,
+            relationship: response,
+            state: 'active',
+        },
+        attributes: ['id']
+    }).then((userEvent) => {
+        if (userEvent) {
+            UserEvent
+                .update({ state: 'removed' }, { where: { id: userEvent.id } })
+                .then(() => res.status(200).send({ message: 'UserEvent removed' }))
+        } else {
+            UserEvent
+                .update({ state: 'removed' }, { where: {
+                    userId: accountId,
+                    eventId,
+                    relationship: response === 'going' ? 'interested' : 'going',
+                    state: 'active',
+                }})
+                .then(() => {
+                    UserEvent.create({
+                        userId: accountId,
+                        eventId: eventId,
+                        relationship: response,
+                        state: 'active',
+                    }).then(() => res.status(200).send({ message: 'UserEvent added' }))
+                })
+        }
+    })
 })
 
 router.post('/save-glass-bead-game', (req, res) => {

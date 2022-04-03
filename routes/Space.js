@@ -616,12 +616,12 @@ router.get('/space-posts', (req, res) => {
                         {
                             model: User,
                             as: 'Going',
-                            through: { where: { relationship: 'going' } },
+                            through: { where: { relationship: 'going', state: 'active' } },
                         },
                         {
                             model: User,
                             as: 'Interested',
-                            through: { where: { relationship: 'interested' } },
+                            through: { where: { relationship: 'interested', state: 'active' } },
                         }
                     ]
                 },
