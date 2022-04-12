@@ -21,7 +21,7 @@ const ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 ffmpeg.setFfmpegPath(ffmpegPath)
 const authenticateToken = require('../middleware/authenticateToken')
-const { postAttributes } = require('../GlobalConstants')
+const { postAttributes, asyncForEach } = require('../GlobalConstants')
 const {
     Holon,
     PostHolon,
@@ -55,7 +55,7 @@ router.get('/post-data', (req, res) => {
             AND Reaction.userId = ${accountId}
             AND Reaction.type = 'like'
             AND Reaction.state = 'active'
-            )`),'account_like'
+            )`),'accountLike'
         ],
         [sequelize.literal(`(
             SELECT COUNT(*)
@@ -65,7 +65,7 @@ router.get('/post-data', (req, res) => {
             AND Reaction.userId = ${accountId}
             AND Reaction.type = 'rating'
             AND Reaction.state = 'active'
-            )`),'account_rating'
+            )`),'accountRating'
         ],
         [sequelize.literal(`(
             SELECT COUNT(*)
@@ -75,7 +75,7 @@ router.get('/post-data', (req, res) => {
             AND PostHolon.creatorId = ${accountId}
             AND PostHolon.type = 'repost'
             AND PostHolon.relationship = 'direct'
-            )`),'account_repost'
+            )`),'accountRepost'
         ],
         [sequelize.literal(`(
             SELECT COUNT(*)
@@ -84,7 +84,7 @@ router.get('/post-data', (req, res) => {
             WHERE Link.itemAId = Post.id
             AND Link.state = 'visible'
             AND Link.creatorId = ${accountId}
-            )`),'account_link'
+            )`),'accountLink'
         ]
     ]
     Post.findOne({ 
@@ -193,6 +193,20 @@ router.get('/post-data', (req, res) => {
                     }
                 ]
             },
+            {
+                model: GlassBeadGame,
+                attributes: ['topic', 'topicGroup', 'topicImage'],
+                include: [{ 
+                    model: GlassBead,
+                    where: { state: 'visible' },
+                    required: false,
+                    include: [{
+                        model: User,
+                        as: 'user',
+                        attributes: ['handle', 'name', 'flagImagePath']
+                    }]
+                }]
+            }
         ]
     })
     .then(post => {
@@ -428,25 +442,13 @@ router.get('/glass-bead-game-data', (req, res) => {
 
 
 // POST
-// todo: add authenticateToken to all endpoints below
 router.post('/create-post', authenticateToken, (req, res) => {
-    // todo: spaceHandles approach needs revisting
     const accountId = req.user.id
     const { type } = req.query
     const audioMBLimit = 5
     const bucket = `weco-${process.env.NODE_ENV}-post-audio`
 
-    // todo: pull in from global constants
-    async function asyncForEach(array, callback) {
-        for (let index = 0; index < array.length; index++) {
-            await callback(array[index], index, array)
-        }
-    }
-
     function createPost(postData, fileLocation) {
-        console.log('postData: ', postData)
-        console.log('fileLocation: ', fileLocation)
-
         const {
             type,
             text,
@@ -461,51 +463,43 @@ router.post('/create-post', authenticateToken, (req, res) => {
             topic,
             topicGroup,
             topicImage,
-            spaceHandles,
+            spaceIds,
         } = postData
 
-        let directHandleIds = []
-        let indirectHandleIds = []
-
-        // todo, use ids from request instead
-        function findDirectHandleIds() {
-            Holon.findAll({
-                where: { handle: spaceHandles, state: 'active' },
-                attributes: ['id']
+        async function findIndirectSpaceIds() {
+            const indirectSpaceIds = []
+            // find inherited space ids for each space
+            await asyncForEach(spaceIds, async(id) => {
+                await Holon.findOne({
+                    where: { id, state: 'active' },
+                    attributes: [],
+                    include: [{
+                        model: Holon,
+                        as: 'HolonHandles',
+                        attributes: ['id'],
+                        through: { where: { state: 'open' }, attributes: [] }
+                    }]
+                })
+                .then(holon => indirectSpaceIds.push(...holon.HolonHandles.map(holon => holon.id)))
             })
-            .then(holons => {
-                directHandleIds.push(...holons.map(holon => holon.id))
-            })
+            // remove duplicates and filter out direct space ids
+            return [...new Set(indirectSpaceIds)].filter(id => !spaceIds.includes(id))
         }
 
-        async function findIndirectHandleIds(handle) {
-            await Holon.findOne({
-                where: { handle: handle, state: 'active' },
-                include: [{
-                    model: Holon,
-                    as: 'HolonHandles',
-                    attributes: ['id'],
-                    through: { where: { state: 'open' }, attributes: [] }
-                }]
-            })
-            .then(holon => {
-                indirectHandleIds.push(...holon.HolonHandles.map(holon => holon.id))
-            })
-        }
-
-        async function findHandleIds() {
-            findDirectHandleIds()
-            await asyncForEach(spaceHandles, async(handle) => {
-                await findIndirectHandleIds(handle)
-            })
-            // remove duplicates from indirect handle ids
-            indirectHandleIds = [...new Set(indirectHandleIds)]
-            // remove ids already included in direct handle ids from indirect handle ids
-            indirectHandleIds = indirectHandleIds.filter(id => !directHandleIds.includes(id))
-        }
-
-        function createNewPostHolons(post) {
-            directHandleIds.forEach(id => {
+        Post.create({
+            type,
+            state: 'visible',
+            creatorId: accountId,
+            text,
+            url: fileLocation || url,
+            urlImage,
+            urlDomain,
+            urlTitle,
+            urlDescription,
+            state: 'visible'
+        }).then(async post => {
+            // create direct post-space relationships
+            spaceIds.forEach(id => {
                 PostHolon.create({
                     type: 'post',
                     relationship: 'direct',
@@ -514,7 +508,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     holonId: id
                 })
             })
-            indirectHandleIds.forEach(id => {
+            // create indirect post-space relationships
+            const indirectSpaceIds = await findIndirectSpaceIds()
+            indirectSpaceIds.forEach(id => {
                 PostHolon.create({
                     type: 'post',
                     relationship: 'indirect',
@@ -523,50 +519,28 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     holonId: id
                 })
             })
-        }
-
-        function createEvent(post) {
-            Event.create({
-                postId: post.id,
-                state: 'active',
-                // type: 'post-event',
-                title,
-                eventStartTime,
-                eventEndTime: eventEndTime || null,
-                // location,
-            })
-        }
-
-        function createGlassBeadGame(post) {
-            GlassBeadGame.create({
-                postId: post.id,
-                topic,
-                topicGroup,
-                topicImage,
-                locked: false,
-            })
-        }
-
-        Promise.all([findHandleIds()]).then(() => {
-            Post.create({
-                type,
-                state: 'visible',
-                creatorId: accountId,
-                text,
-                url: fileLocation || url,
-                urlImage,
-                urlDomain,
-                urlTitle,
-                urlDescription,
-                state: 'visible'
-            })
-            .then(post => {
-                createNewPostHolons(post)
-                if (type === 'event' || (type === 'glass-bead-game' && eventStartTime)) createEvent(post)
-                if (type === 'glass-bead-game') createGlassBeadGame(post)
-                // todo: only return postId and use existing data from front end
-                res.send(post)
-            })
+            // create event (if required)
+            if (type === 'event' || (type === 'glass-bead-game' && eventStartTime)) {
+                Event.create({
+                    postId: post.id,
+                    state: 'active',
+                    title,
+                    eventStartTime,
+                    eventEndTime: eventEndTime || null,
+                })
+            }
+            // create glass bead game (if required)
+            if (type === 'glass-bead-game') {
+                GlassBeadGame.create({
+                    postId: post.id,
+                    topic,
+                    topicGroup,
+                    topicImage,
+                    locked: false,
+                })
+            }
+            // todo: only return postId and use existing data from front end
+            res.send(post)
         })
     }
     
@@ -989,6 +963,7 @@ router.post('/remove-link', authenticateToken, (req, res) => {
         .catch(() => res.status(500).json({ message: 'Error' }))
 })
 
+// todo: add authenticateToken to all endpoints below
 router.post('/submit-comment', (req, res) => {
     const { accountId, accountHandle, accountName, holonId, postId, text } = req.body
 
