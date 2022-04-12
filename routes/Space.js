@@ -609,9 +609,6 @@ router.get('/space-posts', (req, res) => {
                 },
                 {
                     model: Event,
-                    // as: 'IndirectSpaces',
-                    // attributes: ['id', 'handle', 'state'],
-                    // through: { where: { relationship: 'indirect' }, attributes: ['type'] },
                     include: [
                         {
                             model: User,
@@ -812,6 +809,169 @@ router.get('/space-users', (req, res) => {
             order: findOrder(sortOrder, sortBy),
             attributes: userAttributes,
         }).then(data => { res.json(data) })
+    })
+    .catch(err => console.log(err))
+})
+
+router.get('/space-events', (req, res) => {
+    const { accountId, spaceHandle, year, month } = req.query
+
+    const start = new Date(`${year}-${month < 10 ? '0' : ''}${month}-01`)
+    const end = new Date(`${year}-${+month + 1 < 10 ? '0' : ''}${+month + 1}-01`)
+
+    Post.findAll({
+        subQuery: false,
+        where: { 
+            '$DirectSpaces.handle$': spaceHandle,
+            '$Event.eventStartTime$': { [Op.between]: [start, end] },
+            state: 'visible',
+            type: 'event'
+        },
+        attributes: [
+            ...postAttributes,
+            [sequelize.literal(`(
+                SELECT COUNT(*) > 0
+                FROM Reactions
+                AS Reaction
+                WHERE Reaction.postId = Post.id
+                AND Reaction.userId = ${accountId}
+                AND Reaction.type = 'like'
+                AND Reaction.state = 'active'
+                )`),'accountLike'
+            ],
+            [sequelize.literal(`(
+                SELECT COUNT(*) > 0
+                FROM Reactions
+                AS Reaction
+                WHERE Reaction.postId = Post.id
+                AND Reaction.userId = ${accountId}
+                AND Reaction.type = 'rating'
+                AND Reaction.state = 'active'
+                )`),'accountRating'
+            ],
+            [sequelize.literal(`(
+                SELECT COUNT(*) > 0
+                FROM Reactions
+                AS Reaction
+                WHERE Reaction.postId = Post.id
+                AND Reaction.userId = ${accountId}
+                AND Reaction.type = 'repost'
+                AND Reaction.state = 'active'
+                )`),'accountRepost'
+            ],
+            [sequelize.literal(`(
+                SELECT COUNT(*) > 0
+                FROM Links
+                AS Link
+                WHERE Link.state = 'visible'
+                AND Link.creatorId = ${accountId}
+                AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
+                )`),'accountLink'
+            ],
+        ],
+        include: [
+            { 
+                model: Holon,
+                as: 'DirectSpaces',
+                // where: { state: 'active' },
+                // attributes: [],
+                // through,
+            },
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            },
+            { 
+                model: Event,
+                include: [
+                    {
+                        model: User,
+                        as: 'Going',
+                        through: { where: { relationship: 'going', state: 'active' } },
+                    },
+                    {
+                        model: User,
+                        as: 'Interested',
+                        through: { where: { relationship: 'interested', state: 'active' } },
+                    }
+                ]
+            },
+            { 
+                model: Reaction,
+                where: { state: 'active' },
+                required: false,
+                attributes: ['id', 'type', 'value'],
+                include: [
+                    {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath']
+                    },
+                    {
+                        model: Holon,
+                        as: 'Space',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath']
+                    },
+                ]
+            },
+            {
+                model: Link,
+                as: 'OutgoingLinks',
+                where: { state: 'visible' },
+                required: false,
+                attributes: ['id'],
+                include: [
+                    { 
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                    },
+                    { 
+                        model: Post,
+                        as: 'PostB',
+                        attributes: ['id'],
+                        include: [
+                            { 
+                                model: User,
+                                as: 'Creator',
+                                attributes: ['handle', 'name', 'flagImagePath'],
+                            }
+                        ]
+                    },
+                ]
+            },
+            {
+                model: Link,
+                as: 'IncomingLinks',
+                where: { state: 'visible' },
+                required: false,
+                attributes: ['id'],
+                include: [
+                    { 
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                    },
+                    { 
+                        model: Post,
+                        as: 'PostA',
+                        attributes: ['id'],
+                        include: [
+                            { 
+                                model: User,
+                                as: 'Creator',
+                                attributes: ['handle', 'name', 'flagImagePath'],
+                            }
+                        ]
+                    },
+                ]
+            },
+        ]
+    })
+    .then(data => {
+        console.log('data: ', data.length)
+        res.json(data)
     })
     .catch(err => console.log(err))
 })
@@ -1099,8 +1259,11 @@ router.post('/create-space', authenticateToken, (req, res) => {
                             }).then(() => {
                                 sgMail.send({
                                     to: moderator.email,
-                                    from: 'admin@weco.io',
-                                    subject: `${accountName} wants to make ${name} a child space of ${parentSpace.name} on weco`,
+                                    from: {
+                                        email: 'admin@weco.io',
+                                        name: 'we { collective }'
+                                    },
+                                    subject: 'New notification',
                                     text: `
                                         Hi ${moderator.name}, ${accountName} wants to make ${name} a child space of ${parentSpace.name} on weco.
                                     `,
@@ -1223,8 +1386,11 @@ router.post('/invite-space-moderator', authenticateToken, async (req, res) => {
                 // send mod-invite email
                 sgMail.send({
                     to: user.email,
-                    from: 'admin@weco.io',
-                    subject: 'Weco notification: Mod invite',
+                    from: {
+                        email: 'admin@weco.io',
+                        name: 'we { collective }'
+                    },
+                    subject: 'New notification',
                     text: `
                         Hi ${user.name}, ${accountName} just invited you to moderate ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
                         Log in and go to your notifications to accept the request.
@@ -1275,8 +1441,11 @@ router.post('/remove-space-moderator', authenticateToken, async (req, res) => {
                     // send mod-removed email
                     sgMail.send({
                         to: user.email,
-                        from: 'admin@weco.io',
-                        subject: `You've been removed from moderating ${spaceName} on Weco`,
+                        from: {
+                            email: 'admin@weco.io',
+                            name: 'we { collective }'
+                        },
+                        subject: 'New notification',
                         text: `
                             Hi ${user.name}, ${accountName} just removed you from moderating ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
                         `,
@@ -1400,8 +1569,11 @@ router.post('/send-parent-space-request', authenticateToken, async (req, res) =>
             }).then(() => {
                 sgMail.send({
                     to: moderator.email,
-                    from: 'admin@weco.io',
-                    subject: `${accountName} wants to make ${spaceName} a child space of ${parentSpace.name} on weco`,
+                    from: {
+                        email: 'admin@weco.io',
+                        name: 'we { collective }'
+                    },
+                    subject: 'New notification',
                     text: `
                         Hi ${moderator.name}, ${accountName} wants to make ${spaceName} a child space of ${parentSpace.name} on weco.
                     `,

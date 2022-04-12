@@ -178,24 +178,21 @@ router.get('/post-data', (req, res) => {
                     },
                 ]
             },
-            // {
-            //     model: GlassBeadGame,
-            //     attributes: ['topic']
-            // }
-            // {
-            //     model: PollAnswer,
-            //     attributes: [
-            //         'id', 'text',
-            //         [sequelize.literal(
-            //             `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.pollAnswerId = PollAnswers.id )`
-            //             ),'total_votes'
-            //         ],
-            //         [sequelize.literal(
-            //             `(SELECT ROUND(SUM(value), 2) FROM Reactions AS Reaction WHERE Reaction.pollAnswerId = PollAnswers.id)`
-            //             ),'total_score'
-            //         ],
-            //     ]
-            // }
+            {
+                model: Event,
+                include: [
+                    {
+                        model: User,
+                        as: 'Going',
+                        through: { where: { relationship: 'going', state: 'active' } },
+                    },
+                    {
+                        model: User,
+                        as: 'Interested',
+                        through: { where: { relationship: 'interested', state: 'active' } },
+                    }
+                ]
+            },
         ]
     })
     .then(post => {
@@ -207,10 +204,8 @@ router.get('/post-data', (req, res) => {
             space.setDataValue('type', space.dataValues.PostHolon.type)
             delete space.dataValues.PostHolon
         })
-        //return post
         res.json(post)
     })
-    //.then(post => { res.json(post) })
     .catch(err => console.log(err))
 })
 
@@ -567,7 +562,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             })
             .then(post => {
                 createNewPostHolons(post)
-                if (type === 'event') createEvent(post)
+                if (type === 'event' || (type === 'glass-bead-game' && eventStartTime)) createEvent(post)
                 if (type === 'glass-bead-game') createGlassBeadGame(post)
                 // todo: only return postId and use existing data from front end
                 res.send(post)
@@ -692,8 +687,11 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
 
     const sendEmail = await sgMail.send({
         to: post.Creator.email,
-        from: 'admin@weco.io',
-        subject: 'Weco - notification',
+        from: {
+            email: 'admin@weco.io',
+            name: 'we { collective }'
+        },
+        subject: 'New notification',
         text: `
             Hi ${post.Creator.name}, ${accountName} just reposted your post on weco:
             http://${config.appURL}/p/${postId}
@@ -800,8 +798,11 @@ router.post('/add-like', authenticateToken, async (req, res) => {
 
     const sendEmail = await sgMail.send({
         to: post.Creator.email,
-        from: 'admin@weco.io',
-        subject: 'Weco - notification',
+        from: {
+            email: 'admin@weco.io',
+            name: 'we { collective }'
+        },
+        subject: 'New notification',
         text: `
             Hi ${post.Creator.name}, ${accountName} just liked your post on weco:
             http://${config.appURL}/p/${postId}
@@ -872,8 +873,11 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
 
     const sendEmail = await sgMail.send({
         to: post.Creator.email,
-        from: 'admin@weco.io',
-        subject: 'Weco - notification',
+        from: {
+            email: 'admin@weco.io',
+            name: 'we { collective }'
+        },
+        subject: 'New notification',
         text: `
             Hi ${post.Creator.name}, ${accountName} just rated your post on weco:
             http://${config.appURL}/p/${postId}
@@ -949,8 +953,11 @@ router.post('/add-link', authenticateToken, async (req, res) => {
 
         const sendEmail = await sgMail.send({
             to: itemA.Creator.email,
-            from: 'admin@weco.io',
-            subject: 'Weco - notification',
+            from: {
+                email: 'admin@weco.io',
+                name: 'we { collective }'
+            },
+            subject: 'New notification',
             text: `
                 Hi ${itemA.Creator.name}, ${accountName} just linked your post to another post on weco:
                 http://${config.appURL}/p/${itemAId}
@@ -1022,8 +1029,11 @@ router.post('/submit-comment', (req, res) => {
             let url = process.env.NODE_ENV === 'dev' ? process.env.DEV_APP_URL : process.env.PROD_APP_URL
             let message = {
                 to: post.creator.email,
-                from: 'admin@weco.io',
-                subject: 'Weco - notification',
+                from: {
+                    email: 'admin@weco.io',
+                    name: 'we { collective }'
+                },
+                subject: 'New notification',
                 text: `
                     Hi ${post.creator.name}, ${accountName} just commented on your post on weco:
                     http://${url}/p/${postId}
@@ -1113,8 +1123,11 @@ router.post('/submit-reply', async (req, res) => {
             let url = process.env.NODE_ENV === 'dev' ? process.env.DEV_APP_URL : process.env.PROD_APP_URL
             let postOwnerMessage = {
                 to: post.creator.email,
-                from: 'admin@weco.io',
-                subject: 'Weco - notification',
+                from: {
+                    email: 'admin@weco.io',
+                    name: 'we { collective }'
+                },
+                subject: 'New notification',
                 text: `
                     Hi ${post.creator.name}, ${accountName} just commented on your post on weco:
                     http://${url}/p/${postId}
@@ -1132,8 +1145,11 @@ router.post('/submit-reply', async (req, res) => {
             }
             let parentCommentOwnerMessage = {
                 to: parentComment.creator.email,
-                from: 'admin@weco.io',
-                subject: 'Weco - notification',
+                from: {
+                    email: 'admin@weco.io',
+                    name: 'we { collective }'
+                },
+                subject: 'New notification',
                 text: `
                     Hi ${post.creator.name}, ${accountName} just replied to your comment on weco:
                     http://${url}/p/${postId}

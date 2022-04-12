@@ -83,8 +83,11 @@ router.post('/register', async (req, res) => {
             })
             const message = {
                 to: email,
-                from: 'admin@weco.io',
-                subject: 'Weco - verify your email',
+                from: {
+                    email: 'admin@weco.io',
+                    name: 'we { collective }'
+                },
+                subject: 'Verify your email',
                 text: `
                     Hi, thanks for creating an account on weco.
                     Please copy and paste the address below to verify your email address:
@@ -122,8 +125,11 @@ router.post('/reset-password-request', async (req, res) => {
                     // send email to user with password reset link
                     sgMail.send({
                         to: email,
-                        from: 'admin@weco.io',
-                        subject: 'Weco - reset your password',
+                        from: {
+                            email: 'admin@weco.io',
+                            name: 'we { collective }'
+                        },
+                        subject: 'Reset your password',
                         text: `
                             Hi, we recieved a request to reset your password.
                             If that's correct, copy and paste the address below to set a new password:
@@ -170,8 +176,11 @@ router.post('/resend-verification-email', async (req, res) => {
                 user.update({ emailToken: token })
                 let message = {
                     to: user.email,
-                    from: 'admin@weco.io',
-                    subject: 'Weco - verify your email',
+                    from: {
+                        email: 'admin@weco.io',
+                        name: 'we { collective }'
+                    },
+                    subject: 'Verify your email',
                     text: `
                         Hi, thanks for creating an account on weco.
                         Please copy and paste the address below to verify your email address:

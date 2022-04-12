@@ -7,7 +7,7 @@ const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 const { postAttributes } = require('../GlobalConstants')
-const { Holon, User, Post, Reaction, Link, GlassBeadGame, GlassBead } = require('../models')
+const { Holon, User, Post, Reaction, Link, Event, GlassBeadGame, GlassBead } = require('../models')
 
 // GET
 router.get('/all-users', (req, res) => {
@@ -346,6 +346,21 @@ router.get('/user-posts', (req, res) => {
                                 }
                             ]
                         },
+                    ]
+                },
+                {
+                    model: Event,
+                    include: [
+                        {
+                            model: User,
+                            as: 'Going',
+                            through: { where: { relationship: 'going', state: 'active' } },
+                        },
+                        {
+                            model: User,
+                            as: 'Interested',
+                            through: { where: { relationship: 'interested', state: 'active' } },
+                        }
                     ]
                 },
                 {
