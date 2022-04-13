@@ -539,7 +539,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     locked: false,
                 })
             }
-            // todo: only return postId and use existing data from front end
             res.send(post)
         })
     }

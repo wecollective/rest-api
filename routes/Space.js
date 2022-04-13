@@ -190,7 +190,7 @@ function findTotalSpaceResults(depth, searchQuery, timeRange) {
                     OR s.name LIKE '%${searchQuery}%'
                     OR s.description LIKE '%${searchQuery}%'
                 ) AND s.createdAt BETWEEN '${startDate}' AND '${now}'
-            )`), 'total_results'
+            )`), 'totalResults'
         ]
     } else {
         return [sequelize.literal(`(
@@ -207,7 +207,7 @@ function findTotalSpaceResults(depth, searchQuery, timeRange) {
                     OR s.name LIKE '%${searchQuery}%'
                     OR s.description LIKE '%${searchQuery}%'
                 ) AND s.createdAt BETWEEN '${startDate}' AND '${now}'
-            )`), 'total_results'
+            )`), 'totalResults'
         ]
     }
 }
@@ -410,7 +410,7 @@ router.get('/space-posts', (req, res) => {
 
     function findType() {
         return postType === 'All Types'
-            ? ['text', 'url', 'audio', 'event', 'glass-bead-game'] // 'prism'
+            ? ['text', 'url', 'audio', 'event', 'glass-bead-game', 'prism'] // 'prism'
             : postType.replace(/\s+/g, '-').toLowerCase()
     }
 
@@ -511,7 +511,7 @@ router.get('/space-posts', (req, res) => {
     Post.findAll({
         subQuery: false,
         where: { 
-            '$DirectSpaces.id$': spaceId,
+            '$AllIncludedSpaces.id$': spaceId,
             state: 'visible',
             createdAt: { [Op.between]: [startDate, Date.now()] },
             type,
@@ -524,10 +524,9 @@ router.get('/space-posts', (req, res) => {
         limit: Number(limit),
         offset: Number(offset),
         attributes: firstAttributes,
-        include: [{ 
+        include: [{
             model: Holon,
-            as: 'DirectSpaces',
-            // where: { state: 'active' },
+            as: 'AllIncludedSpaces',
             attributes: [],
             through,
         }]
@@ -609,6 +608,7 @@ router.get('/space-posts', (req, res) => {
                 },
                 {
                     model: Event,
+                    required: false,
                     include: [
                         {
                             model: User,
@@ -694,6 +694,7 @@ router.get('/space-posts', (req, res) => {
                 },
                 {
                     model: GlassBeadGame,
+                    required: false,
                     attributes: ['topic', 'topicGroup', 'topicImage'],
                     include: [{ 
                         model: GlassBead,
@@ -724,7 +725,7 @@ router.get('/space-posts', (req, res) => {
                 post.setDataValue('accountRating', !!post.dataValues.accountRating)
                 post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
                 post.setDataValue('accountLink', !!post.dataValues.accountLink)
-                post.setDataValue('accountFollowingEvent', !!post.dataValues.accountFollowingEvent)
+                // post.setDataValue('accountFollowingEvent', !!post.dataValues.accountFollowingEvent)
             })
             let holonPosts = {
                 totalMatchingPosts,
@@ -814,159 +815,34 @@ router.get('/space-users', (req, res) => {
 })
 
 router.get('/space-events', (req, res) => {
-    const { accountId, spaceHandle, year, month } = req.query
+    const { spaceHandle, year, month } = req.query
 
-    const start = new Date(`${year}-${month < 10 ? '0' : ''}${month}-01`)
-    const end = new Date(`${year}-${+month + 1 < 10 ? '0' : ''}${+month + 1}-01`)
+    const startTime = new Date(`${year}-${month < 10 ? '0' : ''}${month}-01`)
+    const endTime = new Date(`${year}-${+month + 1 < 10 ? '0' : ''}${+month + 1}-01`)
 
     Post.findAll({
         subQuery: false,
         where: { 
             '$DirectSpaces.handle$': spaceHandle,
-            '$Event.eventStartTime$': { [Op.between]: [start, end] },
+            '$Event.eventStartTime$': { [Op.between]: [startTime, endTime] },
             state: 'visible',
-            type: 'event'
+            type: ['event', 'glass-bead-game']
         },
-        attributes: [
-            ...postAttributes,
-            [sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Reactions
-                AS Reaction
-                WHERE Reaction.postId = Post.id
-                AND Reaction.userId = ${accountId}
-                AND Reaction.type = 'like'
-                AND Reaction.state = 'active'
-                )`),'accountLike'
-            ],
-            [sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Reactions
-                AS Reaction
-                WHERE Reaction.postId = Post.id
-                AND Reaction.userId = ${accountId}
-                AND Reaction.type = 'rating'
-                AND Reaction.state = 'active'
-                )`),'accountRating'
-            ],
-            [sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Reactions
-                AS Reaction
-                WHERE Reaction.postId = Post.id
-                AND Reaction.userId = ${accountId}
-                AND Reaction.type = 'repost'
-                AND Reaction.state = 'active'
-                )`),'accountRepost'
-            ],
-            [sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Links
-                AS Link
-                WHERE Link.state = 'visible'
-                AND Link.creatorId = ${accountId}
-                AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
-                )`),'accountLink'
-            ],
-        ],
+        attributes: ['id', 'type'],
         include: [
             { 
                 model: Holon,
                 as: 'DirectSpaces',
-                // where: { state: 'active' },
-                // attributes: [],
-                // through,
-            },
-            {
-                model: User,
-                as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                where: { state: 'active' },
             },
             { 
                 model: Event,
-                include: [
-                    {
-                        model: User,
-                        as: 'Going',
-                        through: { where: { relationship: 'going', state: 'active' } },
-                    },
-                    {
-                        model: User,
-                        as: 'Interested',
-                        through: { where: { relationship: 'interested', state: 'active' } },
-                    }
-                ]
-            },
-            { 
-                model: Reaction,
-                where: { state: 'active' },
-                required: false,
-                attributes: ['id', 'type', 'value'],
-                include: [
-                    {
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath']
-                    },
-                    {
-                        model: Holon,
-                        as: 'Space',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath']
-                    },
-                ]
+                attributes: ['id', 'title', 'eventStartTime']
             },
             {
-                model: Link,
-                as: 'OutgoingLinks',
-                where: { state: 'visible' },
-                required: false,
-                attributes: ['id'],
-                include: [
-                    { 
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    },
-                    { 
-                        model: Post,
-                        as: 'PostB',
-                        attributes: ['id'],
-                        include: [
-                            { 
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['handle', 'name', 'flagImagePath'],
-                            }
-                        ]
-                    },
-                ]
-            },
-            {
-                model: Link,
-                as: 'IncomingLinks',
-                where: { state: 'visible' },
-                required: false,
-                attributes: ['id'],
-                include: [
-                    { 
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    },
-                    { 
-                        model: Post,
-                        as: 'PostA',
-                        attributes: ['id'],
-                        include: [
-                            { 
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['handle', 'name', 'flagImagePath'],
-                            }
-                        ]
-                    },
-                ]
-            },
+                model: GlassBeadGame,
+                attributes: ['topic', 'topicGroup', 'topicImage'],
+            }
         ]
     })
     .then(data => {
@@ -1021,7 +897,7 @@ router.get('/space-map-data', async (req, res) => {
             findTotalSpaceResults(depth, searchQuery, timeRange)
         ]
         parent.children = []
-        if (!parent.isExpander && parent.total_results > 0) {
+        if (!parent.isExpander && parent.totalResults > 0) {
             const nextGeneration = await Holon.findAll({
                 where: findSpaceWhere(parent.id, depth, timeRange, searchQuery),
                 attributes: childAttributes,
@@ -1040,15 +916,15 @@ router.get('/space-map-data', async (req, res) => {
         // if hidden spaces, replace last space with expander
         if (parent.children.length) {
             if (generation === 1) {
-                if (parent.total_results > genOffset + parent.children.length) {
+                if (parent.totalResults > genOffset + parent.children.length) {
                     parent.children.splice(-1, 1)
-                    const remainingChildren = parent.total_results - parent.children.length - genOffset
+                    const remainingChildren = parent.totalResults - parent.children.length - genOffset
                     parent.children.push({ isExpander: true, id: uuidv4(), uuid: uuidv4(), name: `${remainingChildren} more spaces` })
                 }
             } else {
-                if (parent.total_results > limit) {
+                if (parent.totalResults > limit) {
                     parent.children.splice(-1, 1)
-                    const remainingChildren = parent.total_results - parent.children.length
+                    const remainingChildren = parent.totalResults - parent.children.length
                     parent.children.push({ isExpander: true, id: uuidv4(), uuid: uuidv4(), name: `${remainingChildren} more spaces` })
                 }
             }

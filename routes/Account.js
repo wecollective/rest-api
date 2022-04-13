@@ -16,7 +16,7 @@ router.get('/account-data', authenticateToken, (req, res) => {
         'id', 'name', 'handle', 'bio', 'flagImagePath',
         [sequelize.literal(
           `(SELECT COUNT(*) FROM Notifications AS Notification WHERE Notification.ownerId = User.id AND Notification.seen = false)`
-          ),'unseen_notifications'
+          ),'unseenNotifications'
         ]
       ],
       include: [
