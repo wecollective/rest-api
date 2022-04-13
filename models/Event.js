@@ -4,8 +4,8 @@ module.exports = (sequelize, DataTypes) => {
     postId: DataTypes.INTEGER,
     state: DataTypes.STRING,
     title: DataTypes.TEXT,
-    eventStartTime: DataTypes.DATE,
-    eventEndTime: DataTypes.DATE,
+    startTime: DataTypes.DATE,
+    endTime: DataTypes.DATE,
     // location: DataTypes.STRING,
   }, {});
   Event.associate = function(models) {
@@ -22,11 +22,6 @@ module.exports = (sequelize, DataTypes) => {
         as: 'Going',
         foreignKey: 'eventId',
     })
-    // Event.belongsToMany(models.User, { 
-    //     through: models.UserEvent,
-    //     as: 'EventFollower',
-    //     foreignKey: 'eventId'
-    // })
   };
   return Event;
 };

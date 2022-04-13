@@ -453,8 +453,8 @@ router.post('/create-post', authenticateToken, (req, res) => {
             type,
             text,
             title,
-            eventStartTime,
-            eventEndTime,
+            startTime,
+            endTime,
             url,
             urlImage,
             urlDomain,
@@ -520,13 +520,13 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 })
             })
             // create event (if required)
-            if (type === 'event' || (type === 'glass-bead-game' && eventStartTime)) {
+            if (type === 'event' || (type === 'glass-bead-game' && startTime)) {
                 Event.create({
                     postId: post.id,
                     state: 'active',
                     title,
-                    eventStartTime,
-                    eventEndTime: eventEndTime || null,
+                    startTime,
+                    endTime,
                 })
             }
             // create glass bead game (if required)

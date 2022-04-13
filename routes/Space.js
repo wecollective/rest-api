@@ -824,7 +824,7 @@ router.get('/space-events', (req, res) => {
         subQuery: false,
         where: { 
             '$DirectSpaces.handle$': spaceHandle,
-            '$Event.eventStartTime$': { [Op.between]: [startTime, endTime] },
+            '$Event.startTime$': { [Op.between]: [startTime, endTime] },
             state: 'visible',
             type: ['event', 'glass-bead-game']
         },
@@ -837,7 +837,7 @@ router.get('/space-events', (req, res) => {
             },
             { 
                 model: Event,
-                attributes: ['id', 'title', 'eventStartTime']
+                attributes: ['id', 'title', 'startTime']
             },
             {
                 model: GlassBeadGame,

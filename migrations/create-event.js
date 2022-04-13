@@ -17,10 +17,10 @@ module.exports = {
             title: {
                 type: Sequelize.TEXT
             },
-            eventStartTime: {
+            startTime: {
                 type: Sequelize.DATE
             },
-            eventEndTime: {
+            endTime: {
                 type: Sequelize.DATE
             },
             createdAt: {
