@@ -105,7 +105,6 @@ router.post('/update-account-bio', authenticateToken, async (req, res) => {
 router.post('/mark-notifications-seen', authenticateToken, (req, res) => {
     const accountId = req.user.id
     const ids = req.body
-    console.log('ids: ', ids)
     Notification
         .update({ seen: true }, { where: { id: ids, ownerId: accountId } })
         .then(res.send('success'))

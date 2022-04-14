@@ -845,10 +845,7 @@ router.get('/space-events', (req, res) => {
             }
         ]
     })
-    .then(data => {
-        console.log('data: ', data.length)
-        res.json(data)
-    })
+    .then(data => res.json(data))
     .catch(err => console.log(err))
 })
 

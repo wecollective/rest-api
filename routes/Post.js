@@ -224,48 +224,16 @@ router.get('/post-data', (req, res) => {
 })
 
 router.get('/post-comments', (req, res) => {
-    const { accountId, postId, timeRange, postType, sortBy, sortOrder, searchQuery, limit, offset } = req.query
-    console.log('req.query: ', req.query)
-
-    function findStartDate() {
-        let offset = undefined
-        if (timeRange === 'Last Year') { offset = (24*60*60*1000) * 365 }
-        if (timeRange === 'Last Month') { offset = (24*60*60*1000) * 30 }
-        if (timeRange === 'Last Week') { offset = (24*60*60*1000) * 7 }
-        if (timeRange === 'Last 24 Hours') { offset = 24*60*60*1000 }
-        if (timeRange === 'Last Hour') { offset = 60*60*1000 }
-        var startDate = new Date()
-        startDate.setTime(startDate.getTime() - offset)
-        return startDate
-    }
-
-    function findOrder() {
-        let direction, order
-        if (sortOrder === 'Ascending') { direction = 'ASC' } else { direction = 'DESC' }
-        if (sortBy === 'Date') { order = [['createdAt', direction]] }
-        //else { order = [[sequelize.literal(`total_${sortBy.toLowerCase()}`), direction]] }
-        return order
-    }
-
-    let startDate = findStartDate()
-    let order = findOrder()
+    const { postId } = req.query
 
     Comment.findAll({ 
         where: {
             postId,
             state: 'visible',
             parentCommentId: null,
-            text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` },
-            createdAt: { [Op.between]: [startDate, Date.now()] },
-            // [Op.or]: [
-            //     { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            //     { creator: { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } } }
-            // ]
         },
-        order,
-        limit: Number(limit),
-        offset: Number(offset),
-        attributes: ['id', 'creatorId', 'parentCommentId', 'postId', 'text', 'createdAt'],
+        order: [['createdAt', 'ASC']],
+        attributes: ['id', 'parentCommentId', 'text', 'createdAt'],
         include: [
             {
                 model: User,
@@ -277,7 +245,7 @@ router.get('/post-comments', (req, res) => {
                 as: 'Replies',
                 separate: true,
                 where: { state: 'visible' },
-                order,
+                order: [['createdAt', 'ASC']],
                 attributes: ['id', 'creatorId', 'parentCommentId', 'postId', 'text', 'createdAt'],
                 include: [
                     {
@@ -962,81 +930,9 @@ router.post('/remove-link', authenticateToken, (req, res) => {
         .catch(() => res.status(500).json({ message: 'Error' }))
 })
 
-// todo: add authenticateToken to all endpoints below
-router.post('/submit-comment', (req, res) => {
-    const { accountId, accountHandle, accountName, holonId, postId, text } = req.body
-
-    // find post owner
-    Post.findOne({
-        where: { id: postId },
-        attributes: [],
-        include: [
-            { 
-                model: User,
-                as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email']
-            },
-        ]
-    })
-    .then(post => {
-        // create comment
-        Comment.create({
-            state: 'visible',
-            creatorId: accountId,
-            holonId,
-            postId,
-            text
-        })
-        .then(comment => {
-            // create notificaton for post owner
-            Notification.create({
-                ownerId: post.creator.id,
-                type: 'post-comment',
-                seen: false,
-                holonAId: holonId,
-                userId: accountId,
-                postId,
-                commentId: comment.id
-            })
-
-            // send email to post owner
-            let url = process.env.NODE_ENV === 'dev' ? process.env.DEV_APP_URL : process.env.PROD_APP_URL
-            let message = {
-                to: post.creator.email,
-                from: {
-                    email: 'admin@weco.io',
-                    name: 'we { collective }'
-                },
-                subject: 'New notification',
-                text: `
-                    Hi ${post.creator.name}, ${accountName} just commented on your post on weco:
-                    http://${url}/p/${postId}
-                `,
-                html: `
-                    <p>
-                        Hi ${post.creator.name},
-                        <br/>
-                        <a href='${url}/u/${accountHandle}'>${accountName}</a>
-                        just commented on your
-                        <a href='${url}/p/${postId}'>post</a>
-                        on weco
-                    </p>
-                `,
-            }
-            sgMail.send(message)
-            .then(() => {
-                console.log('Email sent')
-                res.send('success')
-            })
-            .catch((error) => {
-                console.error(error)
-            })
-        })
-    })
-})
-
-router.post('/submit-reply', async (req, res) => {
-    const { accountId, accountHandle, accountName, holonId, postId, parentCommentId, text } = req.body
+router.post('/submit-comment', authenticateToken, async (req, res) => {
+    const accountId = req.user.id
+    const { text, postId, parentCommentId, spaceId, accountHandle, accountName } = req.body
 
     // find post owner
     const post = await Post.findOne({
@@ -1048,109 +944,96 @@ router.post('/submit-reply', async (req, res) => {
             attributes: ['id', 'handle', 'name', 'flagImagePath', 'email']
         }]
     })
-
-    // find parent comment owner
-    const parentComment = await Comment.findOne({
-        where: { id: parentCommentId },
-        attributes: [],
-        include: [{ 
-            model: User,
-            as: 'Creator',
-            attributes: ['id', 'handle', 'name', 'flagImagePath', 'email']
-        }]
-    })
-
-    //create reply
-    Comment
-        .create({
-            state: 'visible',
-            creatorId: accountId,
-            holonId,
-            postId,
-            parentCommentId,
-            text
-        })
-        .then(comment => {
-            // create notificaton for post owner
-            Notification.create({
-                ownerId: post.creator.id,
-                type: 'post-comment',
-                seen: false,
-                holonAId: holonId,
-                userId: accountId,
-                postId,
-                commentId: comment.id
+    // create comment
+    Comment.create({
+        state: 'visible',
+        creatorId: accountId,
+        holonId: spaceId,
+        postId,
+        parentCommentId,
+        text
+    }).then(async comment => {
+        if (parentCommentId) {
+            // find parent comment owner
+            const parentComment = await Comment.findOne({
+                where: { id: parentCommentId },
+                attributes: [],
+                include: [{ 
+                    model: User,
+                    as: 'Creator',
+                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'email']
+                }]
             })
-
-            // create notificaton for parent comment owner
+            // create notfication for parent comment owner
             Notification.create({
-                ownerId: parentComment.creator.id,
+                ownerId: parentComment.Creator.id,
                 type: 'comment-reply',
                 seen: false,
-                holonAId: holonId,
+                holonAId: spaceId,
                 userId: accountId,
                 postId,
                 commentId: comment.id
             })
-
-            // send email to post owner
-            let url = process.env.NODE_ENV === 'dev' ? process.env.DEV_APP_URL : process.env.PROD_APP_URL
-            let postOwnerMessage = {
-                to: post.creator.email,
+            // send email to parent comment owner
+            sgMail.send({
+                to: parentComment.Creator.email,
                 from: {
                     email: 'admin@weco.io',
                     name: 'we { collective }'
                 },
                 subject: 'New notification',
                 text: `
-                    Hi ${post.creator.name}, ${accountName} just commented on your post on weco:
-                    http://${url}/p/${postId}
+                    Hi ${parentComment.Creator.name}, ${accountName} just replied to your comment on weco:
+                    http://${config.appURL}/p/${postId}
                 `,
                 html: `
                     <p>
-                        Hi ${post.creator.name},
+                        Hi ${parentComment.Creator.name},
                         <br/>
-                        <a href='${url}/u/${accountHandle}'>${accountName}</a>
-                        just commented on your
-                        <a href='${url}/p/${postId}'>post</a>
-                        on weco
-                    </p>
-                `,
-            }
-            let parentCommentOwnerMessage = {
-                to: parentComment.creator.email,
-                from: {
-                    email: 'admin@weco.io',
-                    name: 'we { collective }'
-                },
-                subject: 'New notification',
-                text: `
-                    Hi ${post.creator.name}, ${accountName} just replied to your comment on weco:
-                    http://${url}/p/${postId}
-                `,
-                html: `
-                    <p>
-                        Hi ${post.creator.name},
-                        <br/>
-                        <a href='${url}/u/${accountHandle}'>${accountName}</a>
+                        <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
                         just replied to your
-                        <a href='${url}/p/${postId}'>comment</a>
+                        <a href='${config.appURL}/p/${postId}'>comment</a>
                         on weco
                     </p>
                 `,
-            }
-            let sendPostOwnerMessage = sgMail.send(postOwnerMessage)
-            let sendParentCommentOwnerMessage = sgMail.send(parentCommentOwnerMessage)
-            Promise
-                .all([sendPostOwnerMessage, sendParentCommentOwnerMessage])
-                .then(() => {
-                    console.log('Emails sent')
-                    res.send('success')
-                })
-                .catch((error) => {
-                    console.error(error)
-                })
+            })
+        }
+        // create notificaton for post owner
+        Notification.create({
+            ownerId: post.Creator.id,
+            type: 'post-comment',
+            seen: false,
+            holonAId: spaceId,
+            userId: accountId,
+            postId,
+            commentId: comment.id
         })
+        // send email to post owner
+        sgMail.send({
+            to: post.Creator.email,
+            from: {
+                email: 'admin@weco.io',
+                name: 'we { collective }'
+            },
+            subject: 'New notification',
+            text: `
+                Hi ${post.Creator.name}, ${accountName} just commented on your post on weco:
+                http://${config.appURL}/p/${postId}
+            `,
+            html: `
+                <p>
+                    Hi ${post.Creator.name},
+                    <br/>
+                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                    just commented on your
+                    <a href='${config.appURL}/p/${postId}'>post</a>
+                    on weco
+                </p>
+            `,
+        })
+        .then(() => res.status(200).json(comment))
+        .catch(() => res.status(500).json({ message: 'Error' }))
+    })
 })
 
 router.post('/respond-to-event', authenticateToken, (req, res) => {
@@ -1191,6 +1074,7 @@ router.post('/respond-to-event', authenticateToken, (req, res) => {
     })
 })
 
+// todo: add authenticateToken to all endpoints below
 router.post('/save-glass-bead-game', (req, res) => {
     const {
         gameId,
@@ -1284,17 +1168,13 @@ router.post('/delete-post', authenticateToken, (req, res) => {
         .catch(error => console.log(error))
 })
 
-// DELETE
-router.delete('/delete-comment', (req, res) => {
-    // TODO: endpoints like this are currently unsafe/open to anyone. include authenticate middleware.
-    const { itemId } = req.body
-
+router.post('/delete-comment', authenticateToken, (req, res) => {
+    const accountId = req.user.id
+    const { commentId } = req.body
     Comment
-        .update({ state: 'hidden' }, { where: { id: itemId } })
-        .then(res.send('success'))
-        .catch((error) => {
-            console.error(error)
-        })
+        .update({ state: 'deleted' }, { where: { id: commentId, creatorId: accountId } })
+        .then(res.status(200).json({ message: 'Comment deleted' }))
+        .catch(error => console.log(error))
 })
 
 module.exports = router
