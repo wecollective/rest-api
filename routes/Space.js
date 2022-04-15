@@ -72,8 +72,6 @@ const secondGenLimit = 3
 const thirdGenLimit = 3
 const fourthGenLimit = 3
 
-// res.status(400).json({"status":"Failed", "reason":"wrong input"})
-
 function findStartDate(timeRange) {
     let timeOffset = Date.now()
     if (timeRange === 'Last Year') { timeOffset = (24*60*60*1000) * 365 }
@@ -349,7 +347,6 @@ router.get('/space-data', (req, res) => {
                 through: { where: { state: 'active' }, attributes: [] },
                 // todo: add limit
             },
-            // todo: include all users if root space
         ],
     })
     .then(space => {
@@ -383,11 +380,8 @@ router.get('/space-data', (req, res) => {
                     space.setDataValue('HolonUsers', users)
                     res.send(space)
                 })
-                
             }
         })
-        
-        // res.send(holon)
     })
     .catch(err => console.log(err))
 })
@@ -475,35 +469,6 @@ router.get('/space-posts', (req, res) => {
     let order = findOrder()
     let firstAttributes = findFirstAttributes()
     let through = findThrough()
-
-    // Find totalMatchingPosts
-    // todo: use .count() function instead
-    let totalMatchingPosts
-    Post.findAll({
-        subQuery: false,
-        where: { 
-            '$DirectSpaces.id$': spaceId,
-            state: 'visible',
-            createdAt: { [Op.between]: [startDate, Date.now()] },
-            type,
-            [Op.or]: [
-                { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { text: null }
-            ]
-        },
-        order,
-        attributes: firstAttributes,
-        include: [{ 
-            model: Holon,
-            as: 'DirectSpaces',
-            attributes: [],
-            // where: { state: 'active' },
-            through,
-        }]
-    })
-    .then(posts => {
-        totalMatchingPosts = posts.length
-    })
 
     // Double query required to to prevent results and pagination being effected by top level where clause.
     // Intial query used to find correct posts with calculated stats and pagination applied.
@@ -720,6 +685,238 @@ router.get('/space-posts', (req, res) => {
                     space.setDataValue('type', space.dataValues.PostHolon.type)
                     delete space.dataValues.PostHolon
                 })
+                // convert SQL numeric booleans to JS booleans
+                post.setDataValue('accountLike', !!post.dataValues.accountLike)
+                post.setDataValue('accountRating', !!post.dataValues.accountRating)
+                post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
+                post.setDataValue('accountLink', !!post.dataValues.accountLink)
+                // post.setDataValue('accountFollowingEvent', !!post.dataValues.accountFollowingEvent)
+            })
+            let holonPosts = {
+                // totalMatchingPosts,
+                posts
+            }
+            return holonPosts
+        })
+    })
+    .then(data => { res.json(data) })
+    .catch(err => console.log(err))
+})
+
+router.get('/posts-map-data', async (req, res) => {
+    const { accountId, spaceId, timeRange, postType, sortBy, sortOrder, depth, searchQuery, limit, offset } = req.query
+
+    function findStartDate() {
+        let offset = undefined
+        if (timeRange === 'Last Year') { offset = (24*60*60*1000) * 365 }
+        if (timeRange === 'Last Month') { offset = (24*60*60*1000) * 30 }
+        if (timeRange === 'Last Week') { offset = (24*60*60*1000) * 7 }
+        if (timeRange === 'Last 24 Hours') { offset = 24*60*60*1000 }
+        if (timeRange === 'Last Hour') { offset = 60*60*1000 }
+        var startDate = new Date()
+        startDate.setTime(startDate.getTime() - offset)
+        return startDate
+    }
+
+    function findType() {
+        return postType === 'All Types'
+            ? ['text', 'url', 'audio', 'event', 'glass-bead-game', 'prism'] // 'prism'
+            : postType.replace(/\s+/g, '-').toLowerCase()
+    }
+
+    function findOrder() {
+        let direction, order
+        if (sortOrder === 'Ascending') { direction = 'ASC' } else { direction = 'DESC' }
+        if (sortBy === 'Date') { order = [['createdAt', direction]] }
+        if (sortBy === 'Reactions') { order = [[sequelize.literal(`totalReactions`), direction], ['createdAt', 'DESC']] }
+        if (sortBy !== 'Reactions' && sortBy !== 'Date') { order = [[sequelize.literal(`total${sortBy}`), direction], ['createdAt', 'DESC']] }
+        return order
+    }
+
+    function findFirstAttributes() {
+        let firstAttributes = ['id']
+        if (sortBy === 'Comments') { firstAttributes.push([sequelize.literal(
+            `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = Post.id)`
+            ),'totalComments'
+        ])}
+        if (sortBy === 'Reactions') { firstAttributes.push([sequelize.literal(
+            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type != 'vote' AND Reaction.state = 'active')`
+            ),'totalReactions'
+        ])}
+        if (sortBy === 'Likes') { firstAttributes.push([sequelize.literal(
+            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'like' AND Reaction.state = 'active')`
+            ),'totalLikes'
+        ])}
+        if (sortBy === 'Ratings') { firstAttributes.push([sequelize.literal(
+            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'rating' AND Reaction.state = 'active')`
+            ),'totalRatings'
+        ])}
+        if (sortBy === 'Reposts') { firstAttributes.push([sequelize.literal(
+            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'repost' AND Reaction.state = 'active')`
+            ),'totalReposts'
+        ])}
+        return firstAttributes
+    }
+
+    function findThrough() {
+        let through
+        if (depth === 'All Contained Posts') {
+            through = {
+                where: {
+                    [Op.or]: [
+                        { relationship: 'direct' },
+                        { relationship: 'indirect' },
+                    ]
+                },
+                attributes: []
+            }
+        }
+        if (depth === 'Only Direct Posts') {
+            through = {
+                where: { relationship: 'direct' },
+                attributes: []
+            }
+        }
+        return through
+    }
+
+    let startDate = findStartDate()
+    let type = findType()
+    let order = findOrder()
+    let firstAttributes = findFirstAttributes()
+    let through = findThrough()
+
+    // Find totalMatchingPosts
+    const totalMatchingPosts = await Post.count({
+        subQuery: false,
+        where: { 
+            '$DirectSpaces.id$': spaceId,
+            state: 'visible',
+            createdAt: { [Op.between]: [startDate, Date.now()] },
+            type,
+            [Op.or]: [
+                { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { text: null }
+            ]
+        },
+        order,
+        attributes: firstAttributes,
+        include: [{ 
+            model: Holon,
+            as: 'DirectSpaces',
+            attributes: [],
+            // where: { state: 'active' },
+            through,
+        }]
+    })
+
+    // Double query required to to prevent results and pagination being effected by top level where clause.
+    // Intial query used to find correct posts with calculated stats and pagination applied.
+    // Second query used to return related models.
+    Post.findAll({
+        subQuery: false,
+        where: { 
+            '$AllIncludedSpaces.id$': spaceId,
+            state: 'visible',
+            createdAt: { [Op.between]: [startDate, Date.now()] },
+            type,
+            [Op.or]: [
+                { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { text: null }
+            ]
+        },
+        order,
+        limit: Number(limit),
+        offset: Number(offset),
+        attributes: firstAttributes,
+        include: [{
+            model: Holon,
+            as: 'AllIncludedSpaces',
+            attributes: [],
+            through,
+        }]
+    })
+    .then(posts => {
+        // Add account reaction data to post attributes
+        let mainAttributes = [
+            ...postAttributes,
+            [sequelize.literal(`(
+                SELECT COUNT(*) > 0
+                FROM Reactions
+                AS Reaction
+                WHERE Reaction.postId = Post.id
+                AND Reaction.userId = ${accountId}
+                AND Reaction.type = 'like'
+                AND Reaction.state = 'active'
+                )`),'accountLike'
+            ],
+            [sequelize.literal(`(
+                SELECT COUNT(*) > 0
+                FROM Reactions
+                AS Reaction
+                WHERE Reaction.postId = Post.id
+                AND Reaction.userId = ${accountId}
+                AND Reaction.type = 'rating'
+                AND Reaction.state = 'active'
+                )`),'accountRating'
+            ],
+            [sequelize.literal(`(
+                SELECT COUNT(*) > 0
+                FROM Reactions
+                AS Reaction
+                WHERE Reaction.postId = Post.id
+                AND Reaction.userId = ${accountId}
+                AND Reaction.type = 'repost'
+                AND Reaction.state = 'active'
+                )`),'accountRepost'
+            ],
+            [sequelize.literal(`(
+                SELECT COUNT(*) > 0
+                FROM Links
+                AS Link
+                WHERE Link.state = 'visible'
+                AND Link.creatorId = ${accountId}
+                AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
+                )`),'accountLink'
+            ],
+        ]
+        return Post.findAll({ 
+            where: { id: posts.map(post => post.id) },
+            attributes: mainAttributes,
+            order,
+            include: [
+                {
+                    model: Link,
+                    as: 'OutgoingLinks',
+                    where: { state: 'visible' },
+                    required: false,
+                    attributes: ['id'],
+                    include: [
+                        { 
+                            model: Post,
+                            as: 'PostB',
+                            attributes: ['id'],
+                        },
+                    ]
+                },
+                {
+                    model: Link,
+                    as: 'IncomingLinks',
+                    where: { state: 'visible' },
+                    required: false,
+                    attributes: ['id'],
+                    include: [
+                        { 
+                            model: Post,
+                            as: 'PostA',
+                            attributes: ['id'],
+                        },
+                    ]
+                },
+            ]
+        })
+        .then(posts => {
+            posts.forEach(post => {
                 // convert SQL numeric booleans to JS booleans
                 post.setDataValue('accountLike', !!post.dataValues.accountLike)
                 post.setDataValue('accountRating', !!post.dataValues.accountRating)
@@ -1900,312 +2097,3 @@ router.post('/delete-space', authenticateToken, async (req, res) => {
 })
 
 module.exports = router
-
-// router.post('/update-holon-setting', async (req, res) => {
-//     let { accountId, holonId, setting, newValue } = req.body
-//     console.log('req.body: ', req.body)
-
-//     // if (setting === 'change-holon-handle') {
-//     //     Holon.update({ handle: newValue }, { where : { id: holonId } })
-//     //         .then(res.send('success'))
-//     //         .catch(err => console.log(err))
-//     // }
-//     // if (setting === 'change-holon-name') {
-//     //     Holon.update({ name: newValue }, { where : { id: holonId } })
-//     //         .then(res.send('success'))
-//     //         .catch(err => console.log(err))
-//     // }
-//     // if (setting === 'change-holon-description') {
-//     //     Holon.update({ description: newValue }, { where : { id: holonId } })
-//     //         .then(res.send('success'))
-//     //         .catch(err => console.log(err))
-//     // }
-//     // if (setting === 'add-new-holon-moderator') {
-//     //     // todo: send mod invitation first and wait for it to be accepted before implementing
-//     //     User.findOne({ where: { handle: newValue } })
-//     //         .then(user => {
-//     //             if (user) {
-//     //                 HolonUser.create({
-//     //                     relationship: 'moderator',
-//     //                     state: 'active',
-//     //                     holonId,
-//     //                     userId: user.id
-//     //                 })
-//     //                 .then(res.send('success'))
-//     //             }
-//     //             else { res.send('No user with that handle') }
-//     //         })
-//     // }
-//     // if (setting === 'add-parent-holon') {
-//     //     // work out if user is moderator of parent space. If so: connect automatically, otherwise send request to parent space moderators
-//     //     Holon
-//     //         .findOne({
-//     //             where: { handle: newValue },
-//     //             include: [
-//     //                 { model: User, as: 'HolonUsers', through: { where: { relationship: 'moderator' } } },
-//     //                 { model: Holon, as: 'HolonHandles' }
-//     //             ]
-//     //         })
-//     //         .then(async holon => {
-//     //             // if user is moderator of parent space, attach space
-//     //             if (holon.HolonUsers.some(mod => mod.id === accountId)) {
-//     //                 // console.log('user is mod')
-//     //                 // // find all spaces below child space (effected spaces)
-//     //                 // // include each spaces holon handles (second query used to avoid where clause issues)
-//     //                 // // for each effected space: loop through parent spaces handles,
-//     //                 // // check each against the effected spaces handles,
-//     //                 // // if no match: add the handle, otherwise skip
-//     //                 // let effectedSpaces = await Holon.findAll({
-//     //                 //     where: { '$HolonHandles.id$': holonId },
-//     //                 //     include: [{ model: Holon, as: 'HolonHandles' }]
-//     //                 // })
-//     //                 // let effectedSpacesWithHolonHandles = await Holon.findAll({
-//     //                 //     where: { id: effectedSpaces.map(s => s.id) },
-//     //                 //     include: [{
-//     //                 //         model: Holon,
-//     //                 //         as: 'HolonHandles',
-//     //                 //         attributes: ['handle', 'id'],
-//     //                 //         through: { attributes: [] }
-//     //                 //     }]
-//     //                 // })
-//     //                 // let inheritHandles = await effectedSpacesWithHolonHandles.forEach(space => {
-//     //                 //     holon.HolonHandles.forEach(ph => {
-//     //                 //         let match = space.HolonHandles.some(sh => sh.handle === ph.handle)
-//     //                 //         if (!match) {
-//     //                 //             // posts to A appear within B
-//     //                 //             HolonHandle.create({
-//     //                 //                 state: 'open',
-//     //                 //                 holonAId: space.id,
-//     //                 //                 holonBId: ph.id,
-//     //                 //             })
-//     //                 //         }
-//     //                 //     })
-//     //                 // })
-//     //                 // // if only parent space is currently 'all', remove vertical relationshsip
-//     //                 // let removeVerticalRelationshipIfRequired = await VerticalHolonRelationship
-//     //                 //     .findAll({
-//     //                 //         where: { holonBId: holonId },
-//     //                 //         attributes: ['holonAId']
-//     //                 //     })
-//     //                 //     .then(async holons => {
-//     //                 //         // if child space was only connected to 'all', remove old connection
-//     //                 //         let holonIds = holons.map(h => h.holonAId)
-//     //                 //         console.log('holonIds: ', holonIds)
-//     //                 //         if (holonIds.length === 1 && holonIds[0] === 1) {
-//     //                 //             VerticalHolonRelationship.update({ state: 'closed' }, { where: { holonAId: 1, holonBId: holonId }})
-//     //                 //         }
-//     //                 //     })
-//     //                 // // create vertical relationship
-//     //                 // let createVericalRelationship = await VerticalHolonRelationship.create({
-//     //                 //     state: 'open',
-//     //                 //     holonAId: holon.id,
-//     //                 //     holonBId: holonId,
-//     //                 // })
-//     //                 // Promise
-//     //                 //     .all([inheritHandles, removeVerticalRelationshipIfRequired, createVericalRelationship])
-//     //                 //     .then(res.send('attached-by-mod'))
-//     //             } else {
-//     //                 console.log('user is not mod')
-//     //                 // if user not moderator of parent space
-//     //                 // create space notification
-//     //                 let createSpaceNotification = await SpaceNotification.create({
-//     //                     ownerId: holon.id,
-//     //                     seen: false,
-//     //                     type: 'parent-space-request',
-//     //                     state: 'pending',
-//     //                     holonAId: holonId,
-//     //                     userId: accountId
-//     //                 })
-//     //                 // create account notifications for each of the mods
-//     //                 let createAccountNotifications = await holon.HolonUsers.forEach(moderator => {
-//     //                     Notification.create({
-//     //                         ownerId: moderator.id,
-//     //                         seen: false,
-//     //                         type: 'parent-space-request',
-//     //                         holonAId: holonId,
-//     //                         holonBId: holon.id,
-//     //                         userId: accountId
-//     //                     })
-//     //                 })
-//     //                 Promise
-//     //                     .all([createSpaceNotification, createAccountNotifications])
-//     //                     .then(res.send('pending-acceptance'))
-//     //             }
-//     //         })
-//     // }
-//     if (setting === 'remove-parent-holon') {
-//         // 1. list current parent spaces on front end and allow user to select the parent space they want to remove
-//         // 2. detach space from parent space (VHRelationship)
-//         // 3. if no other parent spaces, re-attach to 'all'
-//         // 4. find parent spaces handles (parent handles)
-//         // 5. find all other parent spaces handles (other parent handles)
-//         // 6. compare 'parent handles' with 'other parent handles' and find any 'parent handles' not included in 'other parent handles' (redundant handles)
-//         // 7. if redundant handles, remove 'redundant handles' from space
-//         // 8. find all direct child spaces of space
-//         // 9. repeat stages 5-7 (compare all parent handles against passed down redundant handles), then run the same logic at each level below until no child spaces left
-
-//         // rename space handles to a better descriptor: space tags?, space inheritance, inherited space ids
-
-//         // check parent space exists
-//         Holon.findOne({
-//             where: { handle: newValue },
-//             include: [{ model: Holon, as: 'HolonHandles' }]
-//         })
-//         .then(holon => {
-//             if (holon) {
-//                 // 
-
-//                 // // if it exists, find all its own parent spaces
-//                 // VerticalHolonRelationship.findAll({
-//                 //     where: { holonBId: holon.id }
-//                 // })
-//                 // .then(holons => {
-//                 //     // TODO: ...
-//                 //     console.log('holons: ', holons)
-//                 // })
-//             }
-//             else { res.send('No space with that handle') }
-//         })
-//     }
-
-// })
-
-// router.post('/accept-parent-space-request', (req, res) => {
-//     let { notificationId, notificationType,  } = req.body
-
-//     SpaceNotification
-//         .findOne({
-//             where: { id: notificationId },
-//             include: [
-//                 {
-//                     model: User,
-//                     as: 'triggerUser',
-//                     attributes: ['id'],
-//                 },
-//                 {
-//                     model: Holon,
-//                     as: 'triggerSpace',
-//                     attributes: ['id'],
-//                 },
-//                 {
-//                     model: Holon,
-//                     as: 'owner',
-//                     attributes: ['id'],
-//                     include: [{ model: Holon, as: 'HolonHandles' }]
-//                 }
-//             ]
-//         })
-//         .then(notification => {
-//             VerticalHolonRelationship
-//                 .findAll({
-//                     where: { holonBId: notification.triggerSpace.id },
-//                     attributes: ['holonAId']
-//                 })
-//                 .then(async holons => {
-//                     // if parent space includes child spaces tag, reject connection and return message saying it would create a loop
-                    
-//                     // if child space was only connected to 'all', remove old connection
-//                     let holonIds = holons.map(h => h.holonAId)
-//                     if (holonIds.length === 1 && holonIds[0] === 1) {
-//                         VerticalHolonRelationship.update({ state: 'closed' }, { where: { holonAId: 1, holonBId: notification.triggerSpace.id }})
-//                     }
-//                     // attach child space to parent space
-//                     VerticalHolonRelationship.create({
-//                         state: 'open',
-//                         holonAId: notification.owner.id,
-//                         holonBId: notification.triggerSpace.id,
-//                     })
-//                     // find all spaces below child space (effected spaces)
-//                     // include each spaces holon handles (second query used to avoid where clause issues)
-//                     // for each effected space: loop through parent spaces handles,
-//                     // check each against the effected spaces handles,
-//                     // if no match: add the handle, otherwise skip
-//                     let effectedSpaces = await Holon.findAll({
-//                         where: { '$HolonHandles.id$': notification.triggerSpace.id },
-//                         include: [{ model: Holon, as: 'HolonHandles' }]
-//                     })
-//                     let effectedSpacesWithHolonHandles = await Holon.findAll({
-//                         where: { id: effectedSpaces.map(s => s.id) },
-//                         include: [{
-//                             model: Holon,
-//                             as: 'HolonHandles',
-//                             attributes: ['handle', 'id'],
-//                             through: { attributes: [] }
-//                         }]
-//                     })
-//                     effectedSpacesWithHolonHandles.forEach(space => {
-//                         notification.owner.HolonHandles.forEach(ph => {
-//                             let match = space.HolonHandles.some(sh => sh.handle === ph.handle)
-//                             if (!match) {
-//                                 // posts to A appear within B
-//                                 HolonHandle.create({
-//                                     state: 'open',
-//                                     holonAId: space.id,
-//                                     holonBId: ph.id,
-//                                 })
-//                             }
-//                         })
-//                     })
-//                     // mark space notification as accepted
-//                     notification.update({ state: 'accepted', seen: true })
-//                     // notify request creator
-//                     Notification.create({
-//                         ownerId: notification.triggerUser.id,
-//                         seen: false,
-//                         type: 'parent-space-request-accepted',
-//                         holonAId: notification.triggerSpace.id,
-//                         holonBId: notification.owner.id
-//                     })
-//                 })
-//                 .then(res.send('success'))
-//                 .catch(error => console.log(error))
-//         })
-// })
-
-// router.post('/reject-parent-space-request', async (req, res) => {
-//     let { notificationId } = req.body
-//     SpaceNotification
-//         .findOne({
-//             where: { id: notificationId },
-//             include: [
-//                 {
-//                     model: User,
-//                     as: 'triggerUser',
-//                     attributes: ['id'],
-//                 },
-//                 {
-//                     model: Holon,
-//                     as: 'triggerSpace',
-//                     attributes: ['id'],
-//                 },
-//                 {
-//                     model: Holon,
-//                     as: 'owner',
-//                     attributes: ['id'],
-//                 }
-//             ]
-//         })
-//         .then(notification => {
-//             SpaceNotification.update({ state: 'rejected', seen: true }, { where: { id: notificationId } })
-//             Notification.create({
-//                 ownerId: notification.triggerUser.id,
-//                 seen: false,
-//                 type: 'parent-space-request-rejected',
-//                 holonAId: notification.triggerSpace.id,
-//                 holonBId: notification.owner.id
-//             })
-//         })
-//         .then(res.send('success'))
-//     // let updateSpaceNotification = await SpaceNotification.update({ state: 'rejected', seen: true }, { where: { id: notificationId } })
-//     // let notifyRequestCreator = await Notification.create({
-//     //     ownerId: notification.triggerUser.id,
-//     //     seen: false,
-//     //     type: 'parent-space-request-accepted',
-//     //     holonAId: notification.triggerSpace.id,
-//     //     holonBId: notification.owner.id
-//     // })
-
-//     // Promise
-//     //     .all([updateSpaceNotification, notifyRequestCreator])
-//     //     .then(res.send('success'))
-// })
