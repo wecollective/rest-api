@@ -261,13 +261,11 @@ router.get('/homepage-highlights', async (req, res) => {
         }))
 })
 
-router.get('/space-data', (req, res) => {
+router.get('/space-data', async (req, res) => {
     const { handle } = req.query
-    let totalUsersQuery
-    if (handle === 'all') {
-        totalUsersQuery = [sequelize.literal(`(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true)`), 'totalUsers']
-    } else {
-        totalUsersQuery = [sequelize.literal(`(
+    const totalUsers = handle === 'all'
+        ? [sequelize.literal(`(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true)`), 'totalUsers']
+        : [sequelize.literal(`(
             SELECT COUNT(*)
                 FROM Users
                 WHERE Users.emailVerified = true
@@ -281,9 +279,7 @@ router.get('/space-data', (req, res) => {
                 )
             )`), 'totalUsers'
         ]
-        // AND HolonUsers.relationship = 'follower'
-    }
-    Holon.findOne({ 
+    const spaceData = await Holon.findOne({ 
         where: { handle: handle, state: 'active' },
         attributes: [
             'id', 'handle', 'name', 'description', 'flagImagePath', 'coverImagePath', 'createdAt',
@@ -314,7 +310,7 @@ router.get('/space-data', (req, res) => {
                     )
                 )`), 'totalPosts'
             ],
-            totalUsersQuery
+            totalUsers
         ],
         include: [
             {
@@ -326,7 +322,7 @@ router.get('/space-data', (req, res) => {
             {
                 model: Holon,
                 as: 'HolonHandles',
-                attributes: ['handle', 'name'],
+                attributes: ['handle'],
                 through: { attributes: [] }
             },
             {
@@ -340,50 +336,58 @@ router.get('/space-data', (req, res) => {
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] }
             },
-            {
-                model: User,
-                as: 'HolonUsers',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                through: { where: { state: 'active' }, attributes: [] },
-                // todo: add limit
-            },
         ],
     })
-    .then(space => {
-        Holon.findAll({
+
+    if (!spaceData) res.status(404).send({ message: 'Space not found' })
+    else {
+        // child spaces and latest users retrieved seperately so limit and order can be applied (not allowed for M:M includes in Sequelize)
+        const childSpaces = await Holon.findAll({
+            where: { '$DirectParentHolons.id$': spaceData.id, state: 'active' },
+            attributes: ['id', 'handle', 'name', 'flagImagePath', totalSpaceLikes, totalSpaceChildren],
+            order: [[ sequelize.literal(`totalLikes`), 'DESC'], ['createdAt', 'DESC']],
+            limit: 50,
+            subQuery: false,
             include: [{
                 model: Holon,
                 as: 'DirectParentHolons',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' }  }
             }],
-            where: { '$DirectParentHolons.id$': space.id, state: 'active' },
-            attributes: ['id', 'handle', 'name', 'flagImagePath', totalSpaceLikes, totalSpaceChildren],
-            order: [[ sequelize.literal(`totalLikes`), 'DESC'], ['createdAt', 'DESC']],
-            limit: 100,
-            offset: 0,
-            subQuery: false,
         })
-        .then(spaces => {
-            space.setDataValue('DirectChildHolons', spaces)
-            if (space.id !== 1) res.send(space)
-            else {
-                User.findAll({
-                    where: {
-                        emailVerified: true,
-                        flagImagePath: { [Op.ne]: null }
-                    },
-                    attributes: ['flagImagePath'],
-                    order: [['createdAt', 'DESC']],
-                    limit: 3
-                }).then(users => {
-                    space.setDataValue('HolonUsers', users)
-                    res.send(space)
-                })
-            }
-        })
-    })
-    .catch(err => console.log(err))
+        spaceData.setDataValue('DirectChildHolons', childSpaces)
+        if (spaceData.id === 1) {
+            // get latest 3 users for root space
+            const latestUsers = await User.findAll({
+                where: { emailVerified: true, flagImagePath: { [Op.ne]: null } },
+                attributes: ['flagImagePath'],
+                order: [['createdAt', 'DESC']],
+                limit: 3
+            })
+            spaceData.setDataValue('LatestUsers', latestUsers)
+        } else {
+            // get latest 3 users for other spaces
+            const latestUsers = await User.findAll({
+                where: {
+                    '$UserHolons.id$': spaceData.id,
+                    emailVerified: true
+                },
+                attributes: ['flagImagePath', 'createdAt'],
+                order: [['createdAt', 'DESC']],
+                // mods added to limit to prevent duplicate results causing issues (unable to get 'distinct' setting working)
+                limit: 3 + spaceData.Moderators.length,
+                subQuery: false,
+                include: [{ 
+                    model: Holon,
+                    as: 'UserHolons',
+                    attributes: ['id'],
+                    through: { where: { state: 'active' }, attributes: [] }
+                }],
+            })
+            spaceData.setDataValue('LatestUsers', latestUsers)
+        }
+        res.status(200).send(spaceData)
+    }
 })
 
 // todo: potentially merge with user posts: get('/posts')
@@ -404,7 +408,7 @@ router.get('/space-posts', (req, res) => {
 
     function findType() {
         return postType === 'All Types'
-            ? ['text', 'url', 'audio', 'event', 'glass-bead-game', 'prism'] // 'prism'
+            ? ['text', 'url', 'audio', 'event', 'glass-bead-game', 'prism']
             : postType.replace(/\s+/g, '-').toLowerCase()
     }
 
