@@ -8,6 +8,7 @@ var morgan = require('morgan')
 const express = require('express')
 const app = express()
 const axios = require('axios')
+const ScheduledTasks = require('./ScheduledTasks')
 
 // set up cors with url whitelist
 const cors = require('cors')
@@ -46,6 +47,9 @@ app.use('/', require('./routes/Post'))
 app.use('/', require('./routes/Space'))
 app.use('/', require('./routes/User'))
 app.use('/', require('./routes/Upload'))
+
+// set up scheduled tasks
+ScheduledTasks.initialize()
 
 const port = 5000
 app.listen(port, () => console.log(`Listening on port ${port}`))

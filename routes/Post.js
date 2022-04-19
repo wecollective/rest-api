@@ -6,6 +6,7 @@ const sequelize = require('sequelize')
 const Op = sequelize.Op
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
+const ScheduledTasks = require('../ScheduledTasks')
 const puppeteer = require('puppeteer')
 const aws = require('aws-sdk')
 const multer = require('multer')
@@ -488,26 +489,29 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 })
             })
             // create event (if required)
-            if (type === 'event' || (type === 'glass-bead-game' && startTime)) {
-                Event.create({
+            const createEvent = (type === 'event' || (type === 'glass-bead-game' && startTime))
+                ? await Event.create({
                     postId: post.id,
                     state: 'active',
                     title,
                     startTime,
                     endTime,
                 })
-            }
+                : null
             // create glass bead game (if required)
-            if (type === 'glass-bead-game') {
-                GlassBeadGame.create({
+            const createGBG = (type === 'glass-bead-game')
+                ? GlassBeadGame.create({
                     postId: post.id,
                     topic,
                     topicGroup,
                     topicImage,
                     locked: false,
                 })
-            }
-            res.send(post)
+                : null
+
+            Promise.all([createEvent, createGBG]).then((data) => {
+                res.status(200).json({ post, event: data[0] })
+            })
         })
     }
     
@@ -1038,9 +1042,9 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
 
 router.post('/respond-to-event', authenticateToken, (req, res) => {
     const accountId = req.user.id
-    const { eventId, response } = req.body
-    console.log('respond-to-event: ', accountId, eventId, response)
+    const { userName, userEmail, postId, eventId, startTime, response } = req.body
 
+    // check for matching user events
     UserEvent.findOne({
         where: {
             userId: accountId,
@@ -1051,10 +1055,12 @@ router.post('/respond-to-event', authenticateToken, (req, res) => {
         attributes: ['id']
     }).then((userEvent) => {
         if (userEvent) {
+            // if matching event, remove event
             UserEvent
                 .update({ state: 'removed' }, { where: { id: userEvent.id } })
                 .then(() => res.status(200).send({ message: 'UserEvent removed' }))
         } else {
+            // else remove other responses to event if present
             UserEvent
                 .update({ state: 'removed' }, { where: {
                     userId: accountId,
@@ -1063,12 +1069,24 @@ router.post('/respond-to-event', authenticateToken, (req, res) => {
                     state: 'active',
                 }})
                 .then(() => {
+                    // then create new user event
                     UserEvent.create({
                         userId: accountId,
                         eventId: eventId,
                         relationship: response,
                         state: 'active',
-                    }).then(() => res.status(200).send({ message: 'UserEvent added' }))
+                    }).then(() => {
+                        // schedule reminder notifications
+                        ScheduledTasks.scheduleNotification({
+                            type: response,
+                            startTime,
+                            postId,
+                            userId: accountId,
+                            userName,
+                            userEmail
+                        })
+                        res.status(200).send({ message: 'UserEvent added' })
+                    })
                 })
         }
     })
@@ -1159,13 +1177,24 @@ router.post('/viable-post-spaces', (req, res) => {
     .then(spaces => res.send(spaces))
 })
 
-router.post('/delete-post', authenticateToken, (req, res) => {
+router.post('/delete-post', authenticateToken, async (req, res) => {
     const accountId = req.user.id
     const { postId } = req.body
-    Post
-        .update({ state: 'deleted' }, { where: { id: postId, creatorId: accountId } })
-        .then(res.status(200).json({ message: 'Post deleted' }))
-        .catch(error => console.log(error))
+
+    const post = await Post.findOne({
+        where: { id: postId, creatorId: accountId },
+        include: [{
+            model: Event,
+            attributes: ['id'],
+            required: false,
+        }]
+    })
+    if (post) {
+        post.update({ state: 'deleted' }).then(() => {
+            if (post.Event) Event.update({ state: 'deleted' }, { where: { id: post.Event.id } })
+            res.status(200).json({ message: 'Post deleted' })
+        })
+    }
 })
 
 router.post('/delete-comment', authenticateToken, (req, res) => {

@@ -368,10 +368,7 @@ router.get('/space-data', async (req, res) => {
         } else {
             // get latest 3 users for other spaces
             const latestUsers = await User.findAll({
-                where: {
-                    '$UserHolons.id$': spaceData.id,
-                    emailVerified: true
-                },
+                where: { '$UserHolons.id$': spaceData.id, emailVerified: true },
                 attributes: ['flagImagePath', 'createdAt'],
                 order: [['createdAt', 'DESC']],
                 // mods added to limit to prevent duplicate results causing issues (unable to get 'distinct' setting working)
@@ -380,7 +377,7 @@ router.get('/space-data', async (req, res) => {
                 include: [{ 
                     model: Holon,
                     as: 'UserHolons',
-                    attributes: ['id'],
+                    attributes: [],
                     through: { where: { state: 'active' }, attributes: [] }
                 }],
             })
@@ -582,12 +579,14 @@ router.get('/space-posts', (req, res) => {
                         {
                             model: User,
                             as: 'Going',
-                            through: { where: { relationship: 'going', state: 'active' } },
+                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            through: { where: { relationship: 'going', state: 'active' }, attributes: [] },
                         },
                         {
                             model: User,
                             as: 'Interested',
-                            through: { where: { relationship: 'interested', state: 'active' } },
+                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            through: { where: { relationship: 'interested', state: 'active' }, attributes: [] },
                         }
                     ]
                 },

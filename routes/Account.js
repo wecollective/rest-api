@@ -13,7 +13,7 @@ router.get('/account-data', authenticateToken, (req, res) => {
     User.findOne({ 
       where: { id: accountId },
       attributes: [
-        'id', 'name', 'handle', 'bio', 'flagImagePath',
+        'id', 'name', 'handle', 'bio', 'email', 'flagImagePath',
         [sequelize.literal(
           `(SELECT COUNT(*) FROM Notifications AS Notification WHERE Notification.ownerId = User.id AND Notification.seen = false)`
           ),'unseenNotifications'
@@ -68,22 +68,6 @@ router.get('/account-notifications', authenticateToken, (req, res) => {
 })
 
 // POST
-// router.post('/update-account-setting', authenticateToken, async (req, res) => {
-//     const accountId = req.user.id
-//     const { setting, newValue } = req.body
-
-//     if (setting === 'change-user-name') {
-//         User.update({ name: newValue }, { where : { id: accountId } })
-//             .then(res.send('success'))
-//             .catch(err => console.log(err))
-//     }
-//     if (setting === 'change-user-bio') {
-//         User.update({ bio: newValue }, { where : { id: accountId } })
-//             .then(res.send('success'))
-//             .catch(err => console.log(err))
-//     }
-// })
-
 router.post('/update-account-name', authenticateToken, async (req, res) => {
     const accountId = req.user.id
     const { payload } = req.body
@@ -109,21 +93,6 @@ router.post('/mark-notifications-seen', authenticateToken, (req, res) => {
         .update({ seen: true }, { where: { id: ids, ownerId: accountId } })
         .then(res.send('success'))
 })
-
-// router.post('/toggle-notification-seen', authenticateToken, (req, res) => {
-//     const accountId = req.user.id
-//     const { notificationId, seen } = req.body
-//     Notification
-//         .update({ seen }, { where: { id: notificationId, ownerId: accountId } })
-//         .then(res.send('success'))
-// })
-
-// router.post('/mark-all-notifications-seen', authenticateToken , (req, res) => {
-//     const accountId = req.user.id
-//     Notification
-//         .update({ seen: true }, { where: { ownerId: accountId } })
-//         .then(res.send('success'))
-// })
 
 // move to Space routes?
 router.post('/respond-to-mod-invite', authenticateToken, async (req, res) => {

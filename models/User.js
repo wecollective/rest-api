@@ -36,6 +36,11 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'userId',
     })
     User.belongsToMany(models.Holon, { 
+        through: models.HolonUser,
+        as: 'UserHolons',
+        foreignKey: 'userId'
+      })
+    User.belongsToMany(models.Holon, { 
       through: models.HolonUser,
       as: 'FollowedHolons',
       foreignKey: 'userId'

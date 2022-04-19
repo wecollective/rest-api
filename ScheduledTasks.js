@@ -1,0 +1,84 @@
+const config = require('./Config')
+const schedule = require('node-schedule')
+const sequelize = require('sequelize')
+const { Op } = sequelize
+const { User, Notification, Event } = require('./models')
+const sgMail = require('@sendgrid/mail')
+sgMail.setApiKey(process.env.SENDGRID_API_KEY)
+
+function scheduleNotification(data) {
+    const { type, startTime, postId, userId, userName, userEmail } = data
+    // calculate reminder time
+    const offset = 1000 * 60 * 15 // 15 minutes
+    const reminderTime = new Date(new Date(startTime).getTime() - offset)
+    // schedule jobs
+    schedule.scheduleJob(reminderTime, () => {
+        // create notification
+        Notification.create({
+            ownerId: userId,
+            type: `event-${type}-reminder`,
+            seen: false,
+            postId,
+        })
+        // send email
+        const typeText = type === 'going' ? 'going to' : 'interested in'
+        sgMail.send({
+            to: userEmail,
+            from: { email: 'admin@weco.io', name: 'we { collective }' },
+            subject: 'New notification',
+            text: `
+                Hi ${userName}, an event you marked yourself as ${typeText} is starting in 15 minutes:
+                http://${config.appURL}/p/${postId}
+            `,
+            html: `
+                <p>
+                    Hi ${userName},
+                    <br/>
+                    <br/>
+                    An <a href='${config.appURL}/p/${postId}'>event</a> you marked yourself as ${typeText} is starting in 15 minutes.
+                </p>
+            `,
+        })
+    })
+}
+
+module.exports = {
+    initialize: async () => {
+        const upcomingEvents = await Event.findAll({
+            where: { startTime: { [Op.gte]: new Date() }, state: 'active' },
+            include: [
+                {
+                    model: User,
+                    as: 'Going',
+                    attributes: ['id', 'handle', 'name', 'email'],
+                    through: { where: { relationship: 'going', state: 'active' }, attributes: [] },
+                },
+                {
+                    model: User,
+                    as: 'Interested',
+                    attributes: ['id', 'handle', 'name', 'email'],
+                    through: { where: { relationship: 'interested', state: 'active' }, attributes: [] },
+                }
+            ]
+        })
+        upcomingEvents.forEach((event) => {
+            event.Going.forEach((user) => scheduleNotification({
+                type: 'going',
+                startTime: event.startTime,
+                postId: event.postId,
+                userId: user.id,
+                userName: user.name,
+                userEmail: user.email
+            }))
+            event.Interested.forEach((user) => scheduleNotification({
+                type: 'interested',
+                startTime: event.startTime,
+                postId: event.postId,
+                userId: user.id,
+                userName: user.name,
+                userEmail: user.email
+            }))
+        })
+    },
+    scheduleNotification,
+}

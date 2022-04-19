@@ -32,6 +32,7 @@
     "multer": "^1.4.2",
     "multer-s3": "^2.9.0",
     "mysql2": "^2.1.0",
+    "node-schedule": "^2.1.0",
     "nodemon": "^2.0.2",
     "passport": "^0.4.1",
     "passport-facebook": "^3.0.0",
