@@ -1072,15 +1072,16 @@ router.post('/respond-to-event', authenticateToken, (req, res) => {
                     // then create new user event
                     UserEvent.create({
                         userId: accountId,
-                        eventId: eventId,
+                        eventId,
                         relationship: response,
                         state: 'active',
                     }).then(() => {
                         // schedule reminder notifications
                         ScheduledTasks.scheduleNotification({
                             type: response,
-                            startTime,
                             postId,
+                            eventId,
+                            startTime,
                             userId: accountId,
                             userName,
                             userEmail
