@@ -1,6 +1,11 @@
 'use strict';
 module.exports = (sequelize, DataTypes) => {
   const Holon = sequelize.define('Holon', {
+    id: {
+        primaryKey: true,
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+    },
     state: DataTypes.STRING,
     creatorId: DataTypes.INTEGER,
     handle: DataTypes.STRING,

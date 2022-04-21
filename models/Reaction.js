@@ -1,6 +1,11 @@
 'use strict';
 module.exports = (sequelize, DataTypes) => {
   const Reaction = sequelize.define('Reaction', {
+    id: {
+        primaryKey: true,
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+    },
     type: DataTypes.STRING,
     value: DataTypes.STRING, // update to number
     state: DataTypes.STRING,

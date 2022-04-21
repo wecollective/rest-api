@@ -1,6 +1,11 @@
 'use strict';
 module.exports = (sequelize, DataTypes) => {
   const PrismUser = sequelize.define('PrismUser', {
+    id: {
+        primaryKey: true,
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+    },
     relationship: DataTypes.STRING,
     state: DataTypes.STRING,
     prismId: DataTypes.INTEGER,

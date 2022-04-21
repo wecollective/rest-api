@@ -1,6 +1,11 @@
 'use strict';
 module.exports = (sequelize, DataTypes) => {
   const Prism = sequelize.define('Prism', {
+    id: {
+        primaryKey: true,
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+    },
     postId: DataTypes.INTEGER,
     numberOfPlayers: DataTypes.INTEGER,
     duration: DataTypes.STRING,

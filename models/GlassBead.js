@@ -1,6 +1,11 @@
 'use strict';
 module.exports = (sequelize, DataTypes) => {
   const GlassBead = sequelize.define('GlassBead', {
+    id: {
+        primaryKey: true,
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+    },
     gameId: DataTypes.INTEGER,
     index: DataTypes.INTEGER,
     userId: DataTypes.INTEGER,

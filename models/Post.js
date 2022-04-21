@@ -1,6 +1,11 @@
 'use strict';
 module.exports = (sequelize, DataTypes) => {
     const Post = sequelize.define('Post', {
+        id: {
+            primaryKey: true,
+            type: DataTypes.INTEGER,
+            autoIncrement: true,
+        },
         type: DataTypes.STRING,
         subType: DataTypes.STRING,
         state: DataTypes.STRING,

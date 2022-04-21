@@ -1,6 +1,11 @@
 'use strict';
 module.exports = (sequelize, DataTypes) => {
   const Event = sequelize.define('Event', {
+    id: {
+        primaryKey: true,
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+    },
     postId: DataTypes.INTEGER,
     state: DataTypes.STRING,
     title: DataTypes.TEXT,

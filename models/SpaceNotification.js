@@ -1,6 +1,11 @@
 'use strict';
 module.exports = (sequelize, DataTypes) => {
   const SpaceNotification = sequelize.define('SpaceNotification', {
+    id: {
+        primaryKey: true,
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+    },
     ownerId: DataTypes.INTEGER,
     seen: DataTypes.BOOLEAN,
     type: DataTypes.STRING,

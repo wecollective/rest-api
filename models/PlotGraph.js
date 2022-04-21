@@ -1,6 +1,11 @@
 'use strict';
 module.exports = (sequelize, DataTypes) => {
   const PlotGraph = sequelize.define('PlotGraph', {
+    id: {
+        primaryKey: true,
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+    },
     numberOfPlotGraphAxes: DataTypes.INTEGER,
     axis1Left: DataTypes.STRING,
     axis1Right: DataTypes.STRING,
