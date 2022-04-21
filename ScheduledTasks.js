@@ -2,29 +2,21 @@ const config = require('./Config')
 const schedule = require('node-schedule')
 const sequelize = require('sequelize')
 const { Op } = sequelize
-const { User, Notification, Event } = require('./models')
+const { User, Event, UserEvent, Notification } = require('./models')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
 function scheduleNotification(data) {
-    const { type, postId, eventId, startTime, userId, userName, userEmail } = data
-    const capitalisedType = type.charAt(0).toUpperCase() + type.slice(1)
+    const { type, postId, eventId, userEventId, startTime, userId, userName, userEmail } = data
     // calculate reminder time
     const offset = 1000 * 60 * 15 // 15 minutes
     const reminderTime = new Date(new Date(startTime).getTime() - offset)
     // schedule jobs
     schedule.scheduleJob(reminderTime, async () => {
         // check event still exists and user still going or interested
-        const event = await Event.findOne({
-            where: { id: eventId, state: 'active' },
-            include: [{
-                model: User,
-                as: capitalisedType,
-                attributes: ['id', 'handle', 'name', 'email'],
-                through: { where: { relationship: type, state: 'active' }, attributes: [] },
-            }]
-        })
-        if (event && event[capitalisedType].find((user) => user.id === userId)) {
+        const event = await Event.findOne({ where: { id: eventId, state: 'active' } })
+        const userEvent = await UserEvent.findOne({ where: { id: userEventId, state: 'active' } })
+        if (event && userEvent) {
             // create notification
             Notification.create({
                 ownerId: userId,
@@ -64,13 +56,13 @@ module.exports = {
                     model: User,
                     as: 'Going',
                     attributes: ['id', 'handle', 'name', 'email'],
-                    through: { where: { relationship: 'going', state: 'active' }, attributes: [] },
+                    through: { where: { relationship: 'going', state: 'active' }, attributes: ['id'] },
                 },
                 {
                     model: User,
                     as: 'Interested',
                     attributes: ['id', 'handle', 'name', 'email'],
-                    through: { where: { relationship: 'interested', state: 'active' }, attributes: [] },
+                    through: { where: { relationship: 'interested', state: 'active' }, attributes: ['id'] },
                 }
             ]
         })
@@ -79,6 +71,7 @@ module.exports = {
                 type: 'going',
                 postId: event.postId,
                 eventId: event.id,
+                userEventId: user.UserEvent.id,
                 startTime: event.startTime,
                 userId: user.id,
                 userName: user.name,
@@ -88,6 +81,7 @@ module.exports = {
                 type: 'interested',
                 postId: event.postId,
                 eventId: event.id,
+                userEventId: user.UserEvent.id,
                 startTime: event.startTime,
                 userId: user.id,
                 userName: user.name,
