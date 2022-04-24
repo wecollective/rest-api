@@ -101,6 +101,9 @@ relationship: turn, text
 ### GlassBeadGameComment
 `npx sequelize-cli model:generate --name GlassBeadGameComment --attributes postId:integer,index:integer,userId:integer,text:text`
 
+### PostImage
+`npx sequelize-cli model:generate --name PostImage --attributes creatorId:integer,postId:integer,index:integer,url:string,caption:text`
+
 ## Generate Seeders
 `npx sequelize-cli seed:generate --name demo-holons`
 `npx sequelize-cli seed:generate --name demo-holon-tags`

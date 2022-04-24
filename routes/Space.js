@@ -22,7 +22,8 @@ const {
     SpaceNotification,
     GlassBeadGame,
     GlassBead,
-    Event
+    Event,
+    PostImage
 } = require('../models')
 const {
     postAttributes,
@@ -405,7 +406,7 @@ router.get('/space-posts', (req, res) => {
 
     function findType() {
         return postType === 'All Types'
-            ? ['text', 'url', 'audio', 'event', 'glass-bead-game', 'prism']
+            ? ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'prism']
             : postType.replace(/\s+/g, '-').toLowerCase()
     }
 
@@ -572,24 +573,6 @@ router.get('/space-posts', (req, res) => {
                     attributes: ['id', 'handle', 'state'],
                     through: { where: { relationship: 'indirect' }, attributes: ['type'] },
                 },
-                {
-                    model: Event,
-                    required: false,
-                    include: [
-                        {
-                            model: User,
-                            as: 'Going',
-                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                            through: { where: { relationship: 'going', state: 'active' }, attributes: [] },
-                        },
-                        {
-                            model: User,
-                            as: 'Interested',
-                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                            through: { where: { relationship: 'interested', state: 'active' }, attributes: [] },
-                        }
-                    ]
-                },
                 { 
                     model: Reaction,
                     where: { state: 'active' },
@@ -658,6 +641,28 @@ router.get('/space-posts', (req, res) => {
                                 }
                             ]
                         },
+                    ]
+                },
+                {
+                    model: PostImage,
+                    required: false,
+                },
+                {
+                    model: Event,
+                    required: false,
+                    include: [
+                        {
+                            model: User,
+                            as: 'Going',
+                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            through: { where: { relationship: 'going', state: 'active' }, attributes: [] },
+                        },
+                        {
+                            model: User,
+                            as: 'Interested',
+                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            through: { where: { relationship: 'interested', state: 'active' }, attributes: [] },
+                        }
                     ]
                 },
                 {
