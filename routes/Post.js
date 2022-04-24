@@ -40,7 +40,8 @@ const {
     Notification,
     GlassBeadGame,
     GlassBeadGameComment,
-    GlassBead
+    GlassBead,
+    PostImage
 } = require('../models')
 
 // GET
@@ -413,11 +414,11 @@ router.get('/glass-bead-game-data', (req, res) => {
 // POST
 router.post('/create-post', authenticateToken, (req, res) => {
     const accountId = req.user.id
-    const { type } = req.query
+    const { uploadType } = req.query
     const audioMBLimit = 5
-    const bucket = `weco-${process.env.NODE_ENV}-post-audio`
+    const imageMBLimit = 2
 
-    function createPost(postData, fileLocation) {
+    function createPost(postData, files, imageData) {
         const {
             type,
             text,
@@ -460,7 +461,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             state: 'visible',
             creatorId: accountId,
             text,
-            url: fileLocation || url,
+            url: type === 'Audio' ? files[0].location : url,
             urlImage,
             urlDomain,
             urlTitle,
@@ -488,7 +489,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     holonId: id
                 })
             })
-            // create event (if required)
+            // create event if required
             const createEvent = (type === 'event' || (type === 'glass-bead-game' && startTime))
                 ? await Event.create({
                     postId: post.id,
@@ -498,7 +499,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     endTime,
                 })
                 : null
-            // create glass bead game (if required)
+            // create glass bead game if required
             const createGBG = (type === 'glass-bead-game')
                 ? GlassBeadGame.create({
                     postId: post.id,
@@ -508,19 +509,67 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     locked: false,
                 })
                 : null
+            // create images if required
+            const createImages = (type === 'image')
+                ? await asyncForEach(imageData, (image, index) => {
+                    PostImage.create({
+                        postId: post.id,
+                        creatorId: accountId,
+                        index,
+                        url: image.url || files.find((file) => file.index === index).location,
+                        caption: image.caption,
+                    })
+                })
+                : null
 
-            Promise.all([createEvent, createGBG]).then((data) => {
-                res.status(200).json({ post, event: data[0] })
+            Promise.all([createEvent, createGBG, createImages]).then((data) => {
+                res.status(200).json({ post, event: data[0], data })
             })
         })
     }
     
-    if (type === 'audio-file') {
+    if (uploadType === 'image-files') {
+        console.log('image file upload')
+        multer({
+            limits: { fileSize: imageMBLimit * 1024 * 1024 },
+            storage: multerS3({
+                s3: s3,
+                bucket: `weco-${process.env.NODE_ENV}-post-images`,
+                acl: 'public-read',
+                metadata: function (req, file, cb) {
+                    cb(null, { mimetype: file.mimetype })
+                },
+                key: function (req, file, cb) {
+                    const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
+                    const date = Date.now().toString()
+                    const fileName = `post-image-upload-${accountId}-${name}-${date}`
+                    console.log('fileName: ', fileName)
+                    cb(null, fileName)
+                }
+            })
+        }).any('file')(req, res, (error) => {
+            const { files, body } = req
+            if (error instanceof multer.MulterError) {
+                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                else res.status(500).send(error)
+            } else if (error) {
+                res.status(500).send(error)
+            } else {
+                if (files.length)
+                    createPost(
+                        JSON.parse(body.postData),
+                        files.map((file) => { return { location: file.location, index: Number(file.originalname) } }),
+                        JSON.parse(body.imageData)
+                    )
+                else res.status(500).json({ message: 'Failed', error: err })
+            }
+        })
+    } else if (uploadType === 'audio-file') {
         multer({
             limits: { fileSize: audioMBLimit * 1024 * 1024 },
             storage: multerS3({
                 s3: s3,
-                bucket,
+                bucket: `weco-${process.env.NODE_ENV}-post-audio`,
                 acl: 'public-read',
                 metadata: function (req, file, cb) {
                     cb(null, { mimetype: file.mimetype })
@@ -541,11 +590,11 @@ router.post('/create-post', authenticateToken, (req, res) => {
             } else if (error) {
                 res.status(500).send(error)
             } else {
-                if (file) createPost(JSON.parse(body.postData), file.location)
+                if (file) createPost(JSON.parse(body.postData), [file])
                 else res.status(500).json({ message: 'Failed', error: err })
             }
         })
-    } else if (type === 'audio-blob') {
+    } else if (uploadType === 'audio-blob') {
         multer({
             fileFilter: (req, file, cb) => {
                 if (file.mimetype === 'audio/mpeg-3') cb(null, true)
@@ -577,7 +626,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                 const fileName = `post-audio-recording-${accountId}-${name}-${date}.mp3`
                                 console.log('fileName: ', fileName)
                                 s3.putObject({
-                                    Bucket: bucket,
+                                    Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
                                     ACL: 'public-read',
                                     Key: fileName,
                                     Body: data,
@@ -593,7 +642,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             if (err) console.log(err)
                                         }))
                                         // create post
-                                        createPost(JSON.parse(body.postData), `https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
+                                        createPost(JSON.parse(body.postData), [{ location: `https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}` }])
                                     }
                                 })
                             }
