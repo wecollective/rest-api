@@ -511,19 +511,17 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 : null
             // create images if required
             const createImages = (type === 'image')
-                ? await asyncForEach(imageData, (image, index) => {
-                    PostImage.create({
-                        postId: post.id,
-                        creatorId: accountId,
-                        index,
-                        url: image.url || files.find((file) => file.index === index).location,
-                        caption: image.caption,
-                    })
-                })
+                ? Promise.all(imageData.map((image, index) => PostImage.create({
+                    postId: post.id,
+                    creatorId: accountId,
+                    index,
+                    url: image.url || files.find((file) => file.index === index).location,
+                    caption: image.caption,
+                })))
                 : null
 
             Promise.all([createEvent, createGBG, createImages]).then((data) => {
-                res.status(200).json({ post, event: data[0], data })
+                res.status(200).json({ post, event: data[0], images: data[2] })
             })
         })
     }
