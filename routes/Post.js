@@ -465,7 +465,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             state: 'visible',
             creatorId: accountId,
             text,
-            url: type === 'Audio' ? files[0].location : url,
+            url: type === 'audio' ? files[0].location : url,
             urlImage,
             urlDomain,
             urlTitle,
@@ -640,7 +640,10 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             if (err) console.log(err)
                                         }))
                                         // create post
-                                        createPost(JSON.parse(body.postData), [{ location: `https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}` }])
+                                        createPost(
+                                            JSON.parse(body.postData),
+                                            [{ location: `https://weco-${process.env.NODE_ENV}-post-audio.s3.eu-west-1.amazonaws.com/${fileName}` }]
+                                        )
                                     }
                                 })
                             }
