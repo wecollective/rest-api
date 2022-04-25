@@ -181,6 +181,10 @@ router.get('/post-data', (req, res) => {
                 ]
             },
             {
+                model: PostImage,
+                required: false,
+            },
+            {
                 model: Event,
                 include: [
                     {
@@ -526,8 +530,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
         })
     }
     
-    if (uploadType === 'image-files') {
-        console.log('image file upload')
+    if (uploadType === 'image-post') {
         multer({
             limits: { fileSize: imageMBLimit * 1024 * 1024 },
             storage: multerS3({
@@ -541,7 +544,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
                     const date = Date.now().toString()
                     const fileName = `post-image-upload-${accountId}-${name}-${date}`
-                    console.log('fileName: ', fileName)
                     cb(null, fileName)
                 }
             })
@@ -553,13 +555,11 @@ router.post('/create-post', authenticateToken, (req, res) => {
             } else if (error) {
                 res.status(500).send(error)
             } else {
-                if (files.length)
-                    createPost(
-                        JSON.parse(body.postData),
-                        files.map((file) => { return { location: file.location, index: Number(file.originalname) } }),
-                        JSON.parse(body.imageData)
-                    )
-                else res.status(500).json({ message: 'Failed', error: err })
+                createPost(
+                    JSON.parse(body.postData),
+                    files.map((file) => { return { location: file.location, index: Number(file.originalname) } }),
+                    JSON.parse(body.imageData)
+                )
             }
         })
     } else if (uploadType === 'audio-file') {

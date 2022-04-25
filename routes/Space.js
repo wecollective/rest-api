@@ -728,7 +728,7 @@ router.get('/posts-map-data', async (req, res) => {
 
     function findType() {
         return postType === 'All Types'
-            ? ['text', 'url', 'audio', 'event', 'glass-bead-game', 'prism'] // 'prism'
+            ? ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'prism']
             : postType.replace(/\s+/g, '-').toLowerCase()
     }
 
@@ -920,6 +920,13 @@ router.get('/posts-map-data', async (req, res) => {
                             attributes: ['id'],
                         },
                     ]
+                },
+                {
+                    model: PostImage,
+                    required: false,
+                    attributes: ['url'],
+                    limit: 1,
+                    order: [['index', 'ASC']]
                 },
             ]
         })
