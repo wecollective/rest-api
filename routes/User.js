@@ -7,7 +7,7 @@ const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 const { postAttributes } = require('../GlobalConstants')
-const { Holon, User, Post, Reaction, Link, Event, GlassBeadGame, GlassBead } = require('../models')
+const { Holon, User, Post, Reaction, Link, PostImage, Event, GlassBeadGame, GlassBead } = require('../models')
 
 // GET
 router.get('/all-users', (req, res) => {
@@ -147,7 +147,7 @@ router.get('/user-posts', (req, res) => {
 
     function findType() {
         let type
-        if (postType === 'All Types') { type = ['text', 'url', 'audio', 'event', 'glass-bead-game'] } // 'prism', 'poll', 'decision-tree', 'prism', 'plot-graph'
+        if (postType === 'All Types') { type = ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'prism'] }
         if (postType !== 'All Types') { type = postType.replace(/\s+/g, '-').toLowerCase() }
         return type
     }
@@ -347,6 +347,10 @@ router.get('/user-posts', (req, res) => {
                             ]
                         },
                     ]
+                },
+                {
+                    model: PostImage,
+                    required: false,
                 },
                 {
                     model: Event,
