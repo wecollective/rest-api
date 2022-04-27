@@ -13,8 +13,6 @@ const { Holon, User, Post, Reaction, Link, PostImage, Event, GlassBeadGame, Glas
 router.get('/all-users', (req, res) => {
     const { accountId, timeRange, userType, sortBy, sortOrder, searchQuery, limit, offset } = req.query
 
-    console.log('req.query: ', req.query)
-
     function findStartDate() {
         let offset = undefined
         if (timeRange === 'Last Year') { offset = (24*60*60*1000) * 365 }
@@ -59,6 +57,7 @@ router.get('/all-users', (req, res) => {
 
     User.findAll({
         where: {
+            state: 'active',
             emailVerified: true,
             createdAt: { [Op.between]: [startDate, Date.now()] },
             [Op.or]: [
@@ -74,7 +73,6 @@ router.get('/all-users', (req, res) => {
         subQuery: false
     })
     .then(users => {
-        console.log('users: ', users)
         User.findAll({ 
             where: { id: users.map(user => user.id) },
             attributes: [

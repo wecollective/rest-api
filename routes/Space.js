@@ -218,7 +218,7 @@ router.get('/homepage-highlights', async (req, res) => {
         attributes: [
             [sequelize.literal(`(SELECT COUNT(*) FROM Posts WHERE Posts.state = 'visible')`), 'totalPosts'],
             [sequelize.literal(`(SELECT COUNT(*) FROM Holons WHERE Holons.state = 'active')`), 'totalSpaces'],
-            [sequelize.literal(`(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true)`), 'totalUsers'],
+            [sequelize.literal(`(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true AND Users.state = 'active')`), 'totalUsers'],
         ]
     })
 
@@ -244,6 +244,7 @@ router.get('/homepage-highlights', async (req, res) => {
 
     const users = User.findAll({
         where: {
+            state: 'active',
             emailVerified: true,
             flagImagePath: { [Op.ne]: null }
         },
@@ -265,11 +266,12 @@ router.get('/homepage-highlights', async (req, res) => {
 router.get('/space-data', async (req, res) => {
     const { handle } = req.query
     const totalUsers = handle === 'all'
-        ? [sequelize.literal(`(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true)`), 'totalUsers']
+        ? [sequelize.literal(`(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true AND Users.state = 'active')`), 'totalUsers']
         : [sequelize.literal(`(
             SELECT COUNT(*)
                 FROM Users
                 WHERE Users.emailVerified = true
+                AND Users.state = 'active'
                 AND Users.id IN (
                     SELECT HolonUsers.userId
                     FROM HolonUsers
@@ -360,7 +362,7 @@ router.get('/space-data', async (req, res) => {
         if (spaceData.id === 1) {
             // get latest 3 users for root space
             const latestUsers = await User.findAll({
-                where: { emailVerified: true, flagImagePath: { [Op.ne]: null } },
+                where: { state: 'active', emailVerified: true, flagImagePath: { [Op.ne]: null } },
                 attributes: ['flagImagePath'],
                 order: [['createdAt', 'DESC']],
                 limit: 3
@@ -369,7 +371,7 @@ router.get('/space-data', async (req, res) => {
         } else {
             // get latest 3 users for other spaces
             const latestUsers = await User.findAll({
-                where: { '$UserHolons.id$': spaceData.id, emailVerified: true },
+                where: { '$UserHolons.id$': spaceData.id, state: 'active', emailVerified: true },
                 attributes: ['flagImagePath', 'createdAt'],
                 order: [['createdAt', 'DESC']],
                 // mods added to limit to prevent duplicate results causing issues (unable to get 'distinct' setting working)
@@ -996,6 +998,7 @@ router.get('/space-users', (req, res) => {
     User.findAll({
         where: { 
             '$FollowedHolons.id$': spaceId,
+            state: 'active',
             emailVerified: true,
             createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
             [Op.or]: [
