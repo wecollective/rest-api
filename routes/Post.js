@@ -422,7 +422,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
     const audioMBLimit = 5
     const imageMBLimit = 2
 
-    function createPost(postData, files, imageData) {
+    function createPost(postData, files, imageData, stringData) {
         const {
             type,
             text,
@@ -440,26 +440,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
             spaceIds,
         } = postData
 
-        async function findIndirectSpaceIds() {
-            const indirectSpaceIds = []
-            // find inherited space ids for each space
-            await asyncForEach(spaceIds, async(id) => {
-                await Holon.findOne({
-                    where: { id, state: 'active' },
-                    attributes: [],
-                    include: [{
-                        model: Holon,
-                        as: 'HolonHandles',
-                        attributes: ['id'],
-                        through: { where: { state: 'open' }, attributes: [] }
-                    }]
-                })
-                .then(holon => indirectSpaceIds.push(...holon.HolonHandles.map(holon => holon.id)))
-            })
-            // remove duplicates and filter out direct space ids
-            return [...new Set(indirectSpaceIds)].filter(id => !spaceIds.includes(id))
-        }
-
         Post.create({
             type,
             state: 'visible',
@@ -472,30 +452,42 @@ router.post('/create-post', authenticateToken, (req, res) => {
             urlDescription,
             state: 'visible'
         }).then(async post => {
-            // create direct post-space relationships
-            spaceIds.forEach(id => {
-                PostHolon.create({
-                    type: 'post',
-                    relationship: 'direct',
-                    creatorId: accountId,
-                    postId: post.id,
-                    holonId: id
+            const indirectSpaceIds = await new Promise((resolve, reject) => {
+                Promise.all(spaceIds.map((id) => Holon.findOne({
+                    where: { id, state: 'active' },
+                    attributes: [],
+                    include: [{
+                        model: Holon,
+                        as: 'HolonHandles',
+                        attributes: ['id'],
+                        through: { where: { state: 'open' }, attributes: [] }
+                    }]
+                }))).then((spaces) => {
+                    const ids = []
+                    spaces.forEach((space) => ids.push(...space.HolonHandles.map(holon => holon.id)))
+                    const filteredIds = [...new Set(ids)].filter(id => !spaceIds.includes(id))
+                    resolve(filteredIds)
                 })
             })
-            // create indirect post-space relationships
-            const indirectSpaceIds = await findIndirectSpaceIds()
-            indirectSpaceIds.forEach(id => {
-                PostHolon.create({
-                    type: 'post',
-                    relationship: 'indirect',
-                    creatorId: accountId,
-                    postId: post.id,
-                    holonId: id
-                })
-            })
-            // create event if required
+
+            const createDirectRelationships = Promise.all(spaceIds.map((id) => PostHolon.create({
+                type: 'post',
+                relationship: 'direct',
+                creatorId: accountId,
+                postId: post.id,
+                holonId: id
+            })))
+
+            const createIndirectRelationships = Promise.all(indirectSpaceIds.map((id) => PostHolon.create({
+                type: 'post',
+                relationship: 'indirect',
+                creatorId: accountId,
+                postId: post.id,
+                holonId: id
+            })))
+
             const createEvent = (type === 'event' || (type === 'glass-bead-game' && startTime))
-                ? await Event.create({
+                ? Event.create({
                     postId: post.id,
                     state: 'active',
                     title,
@@ -503,7 +495,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     endTime,
                 })
                 : null
-            // create glass bead game if required
+
             const createGBG = (type === 'glass-bead-game')
                 ? GlassBeadGame.create({
                     postId: post.id,
@@ -513,7 +505,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     locked: false,
                 })
                 : null
-            // create images if required
+
             const createImages = (type === 'image')
                 ? Promise.all(imageData.map((image, index) => PostImage.create({
                     postId: post.id,
@@ -524,11 +516,46 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 })))
                 : null
 
-            Promise.all([createEvent, createGBG, createImages]).then((data) => {
-                res.status(200).json({ post, event: data[0], images: data[2] })
+
+            const createStringPosts = (type === 'string')
+                ? Promise.all(stringData.map((bead, index) => 
+                    new Promise((resolve, reject) => {
+                        Post.create({
+                            type: `string-${bead.type}`,
+                            state: 'visible',
+                            creatorId: accountId,
+                            text: bead.text,
+                            url: bead.type === 'audio' ? files.find((file) => file.beadIndex === index).location : url,
+                            urlImage: bead.type === 'url' ? bead.urlData.image : null,
+                            urlDomain: bead.type === 'url' ? bead.urlData.domain : null,
+                            urlTitle: bead.type === 'url' ? bead.urlData.title : null,
+                            urlDescription: bead.type === 'url' ? bead.urlData.description : null,
+                            state: 'visible'
+                        }).then((stringPost) => {
+                            if (bead.type === 'image') {
+                                // todo: create image posts
+                            }
+                            // todo: create string links
+                            // todo: resolve()
+                        })
+                    })
+                ))
+                : null
+
+            Promise.all([
+                createDirectRelationships,
+                createIndirectRelationships,
+                createEvent,
+                createGBG,
+                createImages,
+            ]).then((data) => {
+                res.status(200).json({ post, event: data[2], images: data[4] })
             })
         })
     }
+
+    const baseUrl = `https://weco-${process.env.NODE_ENV}-`
+    const s3Url = '.s3.eu-west-1.amazonaws.com'
     
     if (uploadType === 'image-post') {
         multer({
@@ -651,6 +678,85 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     })
                     .run()
             }
+        })
+    } else if (uploadType === 'string') {
+        multer({
+            limits: { fileSize: audioMBLimit * 1024 * 1024 },
+            dest: './stringData',
+        }).any()(req, res, (error) => {
+            const { files, body } = req
+            Promise.all(files.map((file) => new Promise((resolve, reject) => {
+                if (file.fieldname === 'audioFile') {
+                    fs.readFile(`stringData/${file.filename}`, function (err, data) {
+                        s3.putObject({
+                            Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
+                            ACL: 'public-read',
+                            Key: file.filename,
+                            Body: data,
+                            Metadata: { mimetype: file.mimetype }
+                        }, (err) => {
+                            if (err) console.log(err)
+                            else resolve({
+                                fieldname: file.fieldname,
+                                beadIndex: file.originalname,
+                                location: `${baseUrl}post-audio${s3Url}/${file.filename}`
+                            })
+                        })
+                    })
+                } else if (file.fieldname === 'audioRecording') {
+                    // convert audio blob to mp3
+                    ffmpeg(file.path)
+                        .output(`audio/mp3/${file.filename}.mp3`)
+                        .on('end', () => {
+                            // upload mp3 to s3 bucket
+                            fs.readFile(`audio/mp3/${file.filename}.mp3`, function (err, data) {
+                                if (!err) {
+                                    const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
+                                    const date = Date.now().toString()
+                                    const fileName = `post-audio-recording-${accountId}-${name}-${date}.mp3`
+                                    s3.putObject({
+                                        Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
+                                        ACL: 'public-read',
+                                        Key: fileName,
+                                        Body: data,
+                                        Metadata: { mimetype: file.mimetype }
+                                    }, (err) => {
+                                        if (err) console.log(err)
+                                        else resolve({
+                                            fieldname: file.fieldname,
+                                            beadIndex: file.originalname,
+                                            location: `${baseUrl}post-audio${s3Url}/${fileName}`
+                                        })
+                                    })
+                                }
+                            })
+                        })
+                        .run()
+                } else if (file.fieldname === 'image') {
+                    fs.readFile(`stringData/${file.filename}`, function (err, data) {
+                        s3.putObject({
+                            Bucket: `weco-${process.env.NODE_ENV}-post-images`,
+                            ACL: 'public-read',
+                            Key: file.filename,
+                            Body: data,
+                            Metadata: { mimetype: file.mimetype }
+                        }, (err, response) => {
+                            if (err) console.log(err)
+                            else {
+                                const indexes = file.originalname.split('-')
+                                resolve({
+                                    fieldname: file.fieldname,
+                                    beadIndex: indexes[0],
+                                    imageIndex: indexes[1],
+                                    location: `${baseUrl}post-images${s3Url}/${file.filename}`
+                                })
+                            }
+                        })
+                    })
+                } else resolve(null)
+            }))).then((data) => {
+                createPost(JSON.parse(body.postData), data, null, JSON.parse(body.stringData))
+            })
         })
     } else {
         createPost(req.body)

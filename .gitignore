@@ -4,6 +4,8 @@ audio/mp3/
 
 audio/raw/
 
+stringData/
+
 .env
 
 access.log
