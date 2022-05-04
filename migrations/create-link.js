@@ -17,6 +17,9 @@ module.exports = {
       type: {
         type: Sequelize.STRING
       },
+      index: {
+        type: Sequelize.INTEGER
+      },
       relationship: {
         type: Sequelize.STRING
       },

@@ -408,7 +408,7 @@ router.get('/space-posts', (req, res) => {
 
     function findType() {
         return postType === 'All Types'
-            ? ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'prism']
+            ? ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'string', 'prism']
             : postType.replace(/\s+/g, '-').toLowerCase()
     }
 
@@ -681,7 +681,17 @@ router.get('/space-posts', (req, res) => {
                             attributes: ['handle', 'name', 'flagImagePath']
                         }]
                     }]
-                }
+                },
+                {
+                    model: Post,
+                    as: 'StringPosts',
+                    through: { where: { state: 'visible' } },
+                    required: false,
+                    include: [{ 
+                        model: PostImage,
+                        required: false,
+                    }]
+                },
             ]
         })
         .then(posts => {
@@ -730,7 +740,7 @@ router.get('/posts-map-data', async (req, res) => {
 
     function findType() {
         return postType === 'All Types'
-            ? ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'prism']
+            ? ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'string', 'prism']
             : postType.replace(/\s+/g, '-').toLowerCase()
     }
 
@@ -929,6 +939,12 @@ router.get('/posts-map-data', async (req, res) => {
                     attributes: ['url'],
                     limit: 1,
                     order: [['index', 'ASC']]
+                },
+                {
+                    model: Post,
+                    as: 'StringPosts',
+                    through: { where: { state: 'visible' } },
+                    required: false,
                 },
             ]
         })

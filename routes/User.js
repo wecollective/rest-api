@@ -145,7 +145,7 @@ router.get('/user-posts', (req, res) => {
 
     function findType() {
         let type
-        if (postType === 'All Types') { type = ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'prism'] }
+        if (postType === 'All Types') { type = ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'string', 'prism'] }
         if (postType !== 'All Types') { type = postType.replace(/\s+/g, '-').toLowerCase() }
         return type
     }
@@ -379,7 +379,17 @@ router.get('/user-posts', (req, res) => {
                             }
                         ]
                     }]
-                }
+                },
+                {
+                    model: Post,
+                    as: 'StringPosts',
+                    through: { where: { state: 'visible' } },
+                    required: false,
+                    include: [{ 
+                        model: PostImage,
+                        required: false,
+                    }]
+                },
             ]
         })
         .then(posts => {

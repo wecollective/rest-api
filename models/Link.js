@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
     state: DataTypes.STRING,
     creatorId: DataTypes.INTEGER,
     type: DataTypes.STRING,
+    index: DataTypes.INTEGER,
     relationship: DataTypes.STRING,
     description: DataTypes.TEXT,
     itemAId: DataTypes.INTEGER,

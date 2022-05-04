@@ -212,7 +212,17 @@ router.get('/post-data', (req, res) => {
                         attributes: ['handle', 'name', 'flagImagePath']
                     }]
                 }]
-            }
+            },
+            {
+                model: Post,
+                as: 'StringPosts',
+                through: { where: { state: 'visible' } },
+                required: false,
+                include: [{ 
+                    model: PostImage,
+                    required: false,
+                }]
+            },
         ]
     })
     .then(post => {
@@ -525,18 +535,35 @@ router.post('/create-post', authenticateToken, (req, res) => {
                             state: 'visible',
                             creatorId: accountId,
                             text: bead.text,
-                            url: bead.type === 'audio' ? files.find((file) => file.beadIndex === index).location : url,
+                            url: bead.type === 'audio' ? files.find((file) => file.beadIndex === index).location : bead.url,
                             urlImage: bead.type === 'url' ? bead.urlData.image : null,
                             urlDomain: bead.type === 'url' ? bead.urlData.domain : null,
                             urlTitle: bead.type === 'url' ? bead.urlData.title : null,
                             urlDescription: bead.type === 'url' ? bead.urlData.description : null,
                             state: 'visible'
                         }).then((stringPost) => {
-                            if (bead.type === 'image') {
-                                // todo: create image posts
-                            }
-                            // todo: create string links
-                            // todo: resolve()
+                            const createPostImages = (bead.type === 'image')
+                                ? Promise.all(bead.images.map((image, i) => PostImage.create({
+                                    postId: stringPost.id,
+                                    creatorId: accountId,
+                                    index: i,
+                                    url: image.url || files.find((file) => file.beadIndex === index && file.imageIndex === i).location,
+                                    caption: image.caption,
+                                })))
+                                : null
+
+                            const createStringLink = Link.create({
+                                state: 'visible',
+                                type: 'string-post',
+                                index,
+                                creatorId: accountId,
+                                itemAId: post.id,
+                                itemBId: stringPost.id,
+                            })
+
+                            Promise
+                                .all([createPostImages, createStringLink])
+                                .then((data) => resolve({ stringPost, imageData: data[0], linkData: data[1] }))
                         })
                     })
                 ))
@@ -548,8 +575,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 createEvent,
                 createGBG,
                 createImages,
+                createStringPosts,
             ]).then((data) => {
-                res.status(200).json({ post, event: data[2], images: data[4] })
+                res.status(200).json({ post, event: data[2], images: data[4], string: data[5] })
             })
         })
     }
@@ -696,11 +724,16 @@ router.post('/create-post', authenticateToken, (req, res) => {
                             Metadata: { mimetype: file.mimetype }
                         }, (err) => {
                             if (err) console.log(err)
-                            else resolve({
-                                fieldname: file.fieldname,
-                                beadIndex: file.originalname,
-                                location: `${baseUrl}post-audio${s3Url}/${file.filename}`
-                            })
+                            else {
+                                resolve({
+                                    fieldname: file.fieldname,
+                                    beadIndex: +file.originalname,
+                                    location: `${baseUrl}post-audio${s3Url}/${file.filename}`
+                                })
+                                fs.unlink(`stringData/${file.filename}`, (err => {
+                                    if (err) console.log(err)
+                                }))
+                            }
                         })
                     })
                 } else if (file.fieldname === 'audioRecording') {
@@ -722,11 +755,20 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                         Metadata: { mimetype: file.mimetype }
                                     }, (err) => {
                                         if (err) console.log(err)
-                                        else resolve({
-                                            fieldname: file.fieldname,
-                                            beadIndex: file.originalname,
-                                            location: `${baseUrl}post-audio${s3Url}/${fileName}`
-                                        })
+                                        else {
+                                            resolve({
+                                                fieldname: file.fieldname,
+                                                beadIndex: +file.originalname,
+                                                location: `${baseUrl}post-audio${s3Url}/${fileName}`
+                                            })
+                                            console.log('delete files!!!!!!!')
+                                            fs.unlink(`stringData/${file.filename}`, (err => {
+                                                if (err) console.log(err)
+                                            }))
+                                            fs.unlink(`audio/mp3/${file.filename}.mp3`, (err => {
+                                                if (err) console.log(err)
+                                            }))
+                                        }
                                     })
                                 }
                             })
@@ -746,10 +788,13 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                 const indexes = file.originalname.split('-')
                                 resolve({
                                     fieldname: file.fieldname,
-                                    beadIndex: indexes[0],
-                                    imageIndex: indexes[1],
+                                    beadIndex: +indexes[0],
+                                    imageIndex: +indexes[1],
                                     location: `${baseUrl}post-images${s3Url}/${file.filename}`
                                 })
+                                fs.unlink(`stringData/${file.filename}`, (err => {
+                                    if (err) console.log(err)
+                                }))
                             }
                         })
                     })
@@ -1036,6 +1081,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
 
         const createLink = await Link.create({
             state: 'visible',
+            type: 'post-post',
             creatorId: accountId,
             description,
             itemAId,
