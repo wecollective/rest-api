@@ -44,6 +44,9 @@ module.exports = {
       passwordResetToken: {
         type: Sequelize.TEXT
       },
+      state: {
+        type: Sequelize.STRING
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE

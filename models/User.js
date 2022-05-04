@@ -17,7 +17,8 @@ module.exports = (sequelize, DataTypes) => {
     emailVerified: DataTypes.BOOLEAN,
     emailToken: DataTypes.TEXT,
     accountVerified: DataTypes.BOOLEAN,
-    passwordResetToken: DataTypes.TEXT
+    passwordResetToken: DataTypes.TEXT,
+    state: DataTypes.STRING,
   }, {});
   User.associate = function(models) {
     User.hasMany(models.Post, {

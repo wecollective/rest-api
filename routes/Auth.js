@@ -30,9 +30,10 @@ router.post('/log-in', async (req, res) => {
         // check user exists
         const matchingUser = await User.findOne({
             where: { [sequelize.Op.or]: [{ email: emailOrHandle }, { handle: emailOrHandle }] },
-            attributes: ['id', 'password', 'emailVerified']
+            attributes: ['id', 'password', 'emailVerified', 'state']
         })
         if (!matchingUser) res.status(404).send({ message: 'User not found' })
+        else if (matchingUser.state === 'spam') res.status(403).send({ message: 'Spam account' })
         else {
             // check password is correct
             bcrypt.compare(password, matchingUser.password, function(error, success) {
@@ -73,7 +74,8 @@ router.post('/register', async (req, res) => {
                 email,
                 password: hashedPassword,
                 emailVerified: false,
-                emailToken
+                emailToken,
+                state: 'active',
             }).then(user => {
                 Notification.create({
                     ownerId: user.id,
