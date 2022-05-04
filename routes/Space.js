@@ -539,19 +539,11 @@ router.get('/space-posts', (req, res) => {
                 FROM Links
                 AS Link
                 WHERE Link.state = 'visible'
+                AND Link.type != 'string-post'
                 AND Link.creatorId = ${accountId}
                 AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
                 )`),'accountLink'
             ],
-            // [sequelize.literal(`(
-            //     SELECT COUNT(*) > 0
-            //     FROM UserEvents
-            //     AS UE
-            //     WHERE UE.state = 'active'
-            //     AND UE.userId = ${accountId}
-            //     AND UE.eventId = Post.Event.id
-            //     )`),'accountFollowingEvent'
-            // ]
         ]
         return Post.findAll({ 
             where: { id: posts.map(post => post.id) },
@@ -596,7 +588,7 @@ router.get('/space-posts', (req, res) => {
                 {
                     model: Link,
                     as: 'OutgoingLinks',
-                    where: { state: 'visible' },
+                    where: { state: 'visible', type: { [Op.not]: 'string-post' } },
                     required: false,
                     attributes: ['id'],
                     include: [

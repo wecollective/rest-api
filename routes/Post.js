@@ -50,7 +50,7 @@ router.get('/post-data', (req, res) => {
     let attributes = [
         ...postAttributes,
         [sequelize.literal(`(
-            SELECT COUNT(*)
+            SELECT COUNT(*) > 0
             FROM Reactions
             AS Reaction
             WHERE Reaction.postId = Post.id
@@ -60,7 +60,7 @@ router.get('/post-data', (req, res) => {
             )`),'accountLike'
         ],
         [sequelize.literal(`(
-            SELECT COUNT(*)
+            SELECT COUNT(*) > 0
             FROM Reactions
             AS Reaction
             WHERE Reaction.postId = Post.id
@@ -70,7 +70,7 @@ router.get('/post-data', (req, res) => {
             )`),'accountRating'
         ],
         [sequelize.literal(`(
-            SELECT COUNT(*)
+            SELECT COUNT(*) > 0
             FROM PostHolons
             AS PostHolon
             WHERE  PostHolon.postId = Post.id
@@ -80,14 +80,15 @@ router.get('/post-data', (req, res) => {
             )`),'accountRepost'
         ],
         [sequelize.literal(`(
-            SELECT COUNT(*)
+            SELECT COUNT(*) > 0
             FROM Links
             AS Link
-            WHERE Link.itemAId = Post.id
-            AND Link.state = 'visible'
+            WHERE Link.state = 'visible'
+            AND Link.type != 'string-post'
             AND Link.creatorId = ${accountId}
+            AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
             )`),'accountLink'
-        ]
+        ],
     ]
     Post.findOne({ 
         where: { id: postId, state: 'visible' },
@@ -131,7 +132,7 @@ router.get('/post-data', (req, res) => {
             {
                 model: Link,
                 as: 'OutgoingLinks',
-                where: { state: 'visible' },
+                where: { state: 'visible', type: { [Op.not]: 'string-post' } },
                 required: false,
                 attributes: ['id'],
                 include: [
@@ -234,6 +235,11 @@ router.get('/post-data', (req, res) => {
             space.setDataValue('type', space.dataValues.PostHolon.type)
             delete space.dataValues.PostHolon
         })
+        // convert SQL numeric booleans to JS booleans
+        post.setDataValue('accountLike', !!post.dataValues.accountLike)
+        post.setDataValue('accountRating', !!post.dataValues.accountRating)
+        post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
+        post.setDataValue('accountLink', !!post.dataValues.accountLink)
         res.json(post)
     })
     .catch(err => console.log(err))

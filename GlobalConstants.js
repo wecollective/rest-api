@@ -28,7 +28,7 @@ const postAttributes = [
         ),'totalRatingPoints'
     ],
     [sequelize.literal(
-        `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND (Link.itemAId = Post.id OR Link.itemBId = Post.id))` // AND Link.type = 'post-post')` //AND Link.state = 'active'
+        `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND Link.type != 'string-post' AND (Link.itemAId = Post.id OR Link.itemBId = Post.id))`
         ),'totalLinks'
     ],
 ]
