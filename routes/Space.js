@@ -484,10 +484,7 @@ router.get('/space-posts', (req, res) => {
             state: 'visible',
             createdAt: { [Op.between]: [startDate, Date.now()] },
             type,
-            [Op.or]: [
-                { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { text: null }
-            ]
+            text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` }
         },
         order,
         limit: Number(limit),

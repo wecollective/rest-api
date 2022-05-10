@@ -27,6 +27,7 @@ app.use(cors({
 app.options('*', cors())
 
 // set up morgan access logs with unique ids
+app.enable('trust proxy')
 morgan.token('id', function getId(req) { return req.id })
 function assignId(req, res, next) { req.id = uuidv4(); next() }
 app.use(assignId)

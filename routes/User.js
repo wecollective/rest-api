@@ -81,6 +81,7 @@ router.get('/all-users', (req, res) => {
                     SELECT COUNT(*)
                         FROM Posts
                         WHERE Posts.state = 'visible'
+                        AND Posts.type IN ('text', 'url', 'images', 'audio', 'event', 'string', 'glass-bead-game', 'prism')
                         AND Posts.creatorId = User.id
                     )`), 'totalPosts'
                 ],

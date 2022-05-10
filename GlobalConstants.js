@@ -136,6 +136,7 @@ const totalUserPosts = [sequelize.literal(`(
     SELECT COUNT(*)
         FROM Posts
         WHERE Posts.state = 'visible'
+        AND Posts.type IN ('text', 'url', 'images', 'audio', 'event', 'string', 'glass-bead-game', 'prism')
         AND Posts.creatorId = User.id
     )`), 'totalPosts'
 ]
