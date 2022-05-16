@@ -1235,7 +1235,6 @@ router.get('/parent-space-blacklist', async (req, res) => {
 })
 
 // POST
-// todo: add authenticateToken to all endpoints below
 router.post('/create-space', authenticateToken, (req, res) => {
     const accountId = req.user.id
     const {
@@ -1561,6 +1560,7 @@ router.post('/remove-space-moderator', authenticateToken, async (req, res) => {
     }
 })
 
+// todo: add authenticateToken to all endpoints below
 router.post('/toggle-space-notification-seen', (req, res) => {
     let { notificationId, seen } = req.body
     SpaceNotification
@@ -1575,21 +1575,20 @@ router.post('/mark-all-space-notifications-seen', (req, res) => {
         .then(res.send('success'))
 })
 
-router.post('/follow-space', (req, res) => {
-    // needs auth token
-    const { holonId, userId } = req.body
-    HolonUser
-        .create({ relationship: 'follower', state: 'active', holonId, userId })
-        .then(res.send('success'))
-        .catch(err => console.log(err))
-})
-
-router.post('/unfollow-space', (req, res) => {
-    const { holonId, userId } = req.body
-    HolonUser
-        .update({ state: 'removed' }, { where: { relationship: 'follower', holonId, userId }})
-        .then(res.send('success'))
-        .catch(err => console.log(err))
+router.post('/toggle-join-space', authenticateToken, (req, res) => {
+    const accountId = req.user.id
+    const { spaceId, isFollowing } = req.body
+    if (isFollowing) {
+        HolonUser
+            .update({ state: 'removed' }, { where: { userId: accountId, holonId: spaceId, relationship: 'follower' }})
+            .then(res.status(200).json({ message: 'Success' }))
+            .catch(err => console.log(err))
+    } else {
+        HolonUser
+            .create({ userId: accountId, holonId: spaceId, relationship: 'follower', state: 'active' })
+            .then(res.status(200).json({ message: 'Success' }))
+            .catch(err => console.log(err))
+    }
 })
 
 router.post('/viable-parent-spaces', authenticateToken, async (req, res) => {
