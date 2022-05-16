@@ -860,40 +860,48 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
         `,
     })
 
-    const createReactionsAndPostSpaceRelationships = await Holon.findAll({
-        where: { id: selectedSpaceIds },
-        attributes: ['id'],
-        include: [{
-            model: Holon,
-            as: 'HolonHandles', // SpaceIds or SpaceDNA
-            attributes: ['id'],
-            through: { attributes: [] }
-        }]
-    }).then(spaces => {
-        spaces.forEach((space) => {
-            Reaction.create({
-                type: 'repost',
-                state: 'active',
-                holonId: space.id,
-                userId: accountId,
-                postId: postId
-            })
-            PostHolon.create({
-                type: 'repost',
-                relationship: 'direct',
-                creatorId: accountId,
-                postId: postId,
-                holonId: space.id
-            })
-            // loop through SpaceIds ('HolonHandles' for now) to create indirect post spaces ('PostSpaceRelationships' ?)
-            space.HolonHandles.map(item => item.id).forEach(spaceId => {
-                if (spaceId !== space.id) {
-                    // todo: check for 'active' state when set up in db
-                    PostHolon
-                        .findOne({ where: { postId: postId, holonId: spaceId } })
-                        .then(postHolon => {
-                            if (!postHolon) {
-                                PostHolon.create({
+    const createReactions = Promise.all(selectedSpaceIds.map((id) => Reaction.create({
+        type: 'repost',
+        state: 'active',
+        holonId: id,
+        userId: accountId,
+        postId: postId
+    })))
+
+    const createDirectRelationships = Promise.all(selectedSpaceIds.map((id) => PostHolon.create({
+        type: 'repost',
+        relationship: 'direct',
+        creatorId: accountId,
+        postId: postId,
+        holonId: id
+    })))
+
+    const indirectSpaceIds = await new Promise((resolve, reject) => {
+        Promise.all(selectedSpaceIds.map((id) => Holon.findOne({
+            where: { id, state: 'active' },
+            attributes: [],
+            include: [{
+                model: Holon,
+                as: 'HolonHandles',
+                attributes: ['id'],
+                through: { where: { state: 'open' }, attributes: [] }
+            }]
+        }))).then((spaces) => {
+            const ids = []
+            spaces.forEach((space) => ids.push(...space.HolonHandles.map(holon => holon.id)))
+            const filteredIds = [...new Set(ids)].filter(id => !selectedSpaceIds.includes(id))
+            resolve(filteredIds)
+        })
+    })
+
+    const createIndirectRelationships = Promise.all(indirectSpaceIds.map((id) => {
+            new Promise((resolve, reject) => {
+                PostHolon
+                    .findOne({ where: { postId: postId, holonId: id } })
+                    .then(postHolon => {
+                        if (!postHolon) {
+                            PostHolon
+                                .create({
                                     type: 'repost',
                                     relationship: 'indirect',
                                     // state: 'active',
@@ -901,15 +909,21 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                                     postId: postId,
                                     holonId: spaceId
                                 })
-                            }
-                        })
-                }
+                                .then(() => resolve())
+                        }
+                        else resolve()
+                    })
             })
-        })
-    })
+    }))
 
     Promise
-        .all([sendNotification, sendEmail, createReactionsAndPostSpaceRelationships])
+        .all([
+            sendNotification,
+            sendEmail,
+            createReactions,
+            createDirectRelationships,
+            createIndirectRelationships
+        ])
         .then(() => res.status(200).json({ message: 'Success' }))
         .catch(() => res.status(500).json({ message: 'Error' }))
 })
