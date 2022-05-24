@@ -1384,7 +1384,7 @@ router.post('/save-gbg-topic', (req, res) => {
         .catch(error => console.log(error))
 })
 
-router.post('/viable-post-spaces', (req, res) => {
+router.post('/find-spaces', (req, res) => {
     const { query, blacklist } = req.body
     Holon.findAll({
         limit: 20,

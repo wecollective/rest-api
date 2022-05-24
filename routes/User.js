@@ -420,13 +420,15 @@ router.get('/user-posts', (req, res) => {
 router.post('/find-user', (req, res) => {
     const { query, blacklist } = req.body
     User.findAll({
+        limit: 20,
         where: {
+            state: 'active',
             [Op.or]: [
                 { handle: { [Op.like]: `%${query}%` } },
                 { name: { [Op.like]: `%${query}%` } },
             ],
             [Op.not]: [
-                { handle: blacklist.map(user => user.handle) },
+                { handle: ['', ...blacklist.map(user => user.handle)] },
             ]
         }
     }).then(users => res.send(users))
