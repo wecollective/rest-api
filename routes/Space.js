@@ -1587,6 +1587,17 @@ router.post('/toggle-join-space', authenticateToken, (req, res) => {
     }
 })
 
+router.post('/join-spaces', authenticateToken, (req, res) => {
+    const accountId = req.user.id
+    const spaceIds = req.body
+    Promise
+        .all(spaceIds.map((spaceId =>
+            HolonUser.create({ userId: accountId, holonId: spaceId, relationship: 'follower', state: 'active' })
+        )))
+        .then(res.status(200).json({ message: 'Success' }))
+        .catch(err => console.log(err))
+})
+
 router.post('/viable-parent-spaces', authenticateToken, async (req, res) => {
     const accountId = req.user.id
     const { spaceId, query, blacklist } = req.body

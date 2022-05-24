@@ -1390,7 +1390,7 @@ router.post('/viable-post-spaces', (req, res) => {
         limit: 20,
         where: {
             state: 'active',
-            [Op.not]: [{ id: blacklist }],
+            [Op.not]: [{ id: [0, ...blacklist] }],
             [Op.or]: [
                 { handle: { [Op.like]: `%${query}%` } },
                 { name: { [Op.like]: `%${query}%` } },
