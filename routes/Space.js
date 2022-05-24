@@ -674,11 +674,13 @@ router.get('/space-posts', (req, res) => {
                 {
                     model: Post,
                     as: 'StringPosts',
-                    through: { where: { state: 'visible' } },
+                    attributes: ['id', 'type', 'text', 'url', 'urlTitle', 'urlImage', 'urlDomain', 'urlDescription'],
+                    through: { where: { state: 'visible' }, attributes: ['index'] },
                     required: false,
                     include: [{ 
                         model: PostImage,
                         required: false,
+                        attributes: ['caption', 'createdAt', 'id', 'index', 'url']
                     }]
                 },
             ]
@@ -712,7 +714,7 @@ router.get('/space-posts', (req, res) => {
     .catch(err => console.log(err))
 })
 
-router.get('/posts-map-data', async (req, res) => {
+router.get('/post-map-data', async (req, res) => {
     const { accountId, spaceId, timeRange, postType, sortBy, sortOrder, depth, searchQuery, limit, offset } = req.query
 
     function findStartDate() {
@@ -928,12 +930,6 @@ router.get('/posts-map-data', async (req, res) => {
                     attributes: ['url'],
                     limit: 1,
                     order: [['index', 'ASC']]
-                },
-                {
-                    model: Post,
-                    as: 'StringPosts',
-                    through: { where: { state: 'visible' } },
-                    required: false,
                 },
             ]
         })
