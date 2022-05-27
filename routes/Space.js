@@ -484,18 +484,28 @@ router.get('/space-posts', (req, res) => {
             state: 'visible',
             createdAt: { [Op.between]: [startDate, Date.now()] },
             type,
-            text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` }
+            [Op.or]: [
+                { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+            ],
         },
         order,
         limit: Number(limit),
         offset: Number(offset),
         attributes: firstAttributes,
-        include: [{
-            model: Holon,
-            as: 'AllIncludedSpaces',
-            attributes: [],
-            through,
-        }]
+        include: [
+            {
+                model: Holon,
+                as: 'AllIncludedSpaces',
+                attributes: [],
+                through,
+            },
+            {
+                model: GlassBeadGame,
+                required: false,
+                attributes: ['topic', 'topicGroup'],
+            },
+        ]
     })
     .then(posts => {
         // Add account reaction data to post attributes
