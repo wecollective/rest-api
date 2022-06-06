@@ -941,7 +941,8 @@ router.get('/post-map-data', async (req, res) => {
                     limit: 1,
                     order: [['index', 'ASC']]
                 },
-            ]
+            ],
+            required: false
         })
         .then(posts => {
             posts.forEach(post => {
@@ -952,11 +953,11 @@ router.get('/post-map-data', async (req, res) => {
                 post.setDataValue('accountLink', !!post.dataValues.accountLink)
                 // post.setDataValue('accountFollowingEvent', !!post.dataValues.accountFollowingEvent)
             })
-            let holonPosts = {
+            let postMapData = {
                 totalMatchingPosts,
                 posts
             }
-            return holonPosts
+            return postMapData
         })
     })
     .then(data => { res.json(data) })
