@@ -130,6 +130,8 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
 })
 
 router.post('/audio-upload', (req, res) => {
+    const { postId } = req.query
+    // Glass Bead Audio uploads only...
     // check file type and limits, then save raw audio in 'audio/raw' folder
     multer({
         fileFilter: (req, file, cb) => {
@@ -157,12 +159,13 @@ router.post('/audio-upload', (req, res) => {
                     // upload new mp3 file to s3 bucket
                     fs.readFile(`audio/mp3/${req.file.filename}.mp3`, function (err, data) {
                         if (!err) {
+                            const fileName = `glass-bead-${postId}-${Date.now().toString()}.mp3`
                             s3.putObject({
                                 Bucket: bucket,
                                 ACL: 'public-read',
-                                Key: `${req.file.filename}.mp3`,
+                                Key: fileName,
                                 Body: data,
-                                Metadata: { 'type': 'mp3', 'user': '...' }
+                                Metadata: { 'type': 'mp3', 'postId': postId }
                             }, (err) => {
                                 if (err) console.log(err)
                                 else {
@@ -174,7 +177,7 @@ router.post('/audio-upload', (req, res) => {
                                         if (err) console.log(err)
                                     }))
                                     // send back the mp3's url
-                                    res.send(`https://${bucket}.s3.eu-west-1.amazonaws.com/${req.file.filename}.mp3`)
+                                    res.send(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
                                 }
                             })
                         }
