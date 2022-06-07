@@ -336,7 +336,7 @@ router.get('/scrape-url', async (req, res) => {
     try {
         const browser = await puppeteer.launch() // { headless: false })
         const page = await browser.newPage()
-        await page.goto(url, { waitUntil: 'networkidle2' }) // { timeout: 60000 }, { waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2' }
+        await page.goto(url, { waitUntil: 'domcontentloaded' }) // { timeout: 60000 }, { waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2' }
         await page.evaluate(async() => {
             const youtubeCookieConsent = await document.querySelector('base[href="https://consent.youtube.com/"]')
             if (youtubeCookieConsent) {
@@ -372,7 +372,7 @@ router.get('/scrape-url', async (req, res) => {
             const metaImage = document.querySelector('meta[property="og:image"]')
             if (metaImage) data.image = metaImage.content
             else {
-                const firstImage = document.querySelector('img')
+                const firstImage = document.querySelector('body div img')
                 if (firstImage) data.image = firstImage.src
             }
 
