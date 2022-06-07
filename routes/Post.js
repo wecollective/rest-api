@@ -334,42 +334,55 @@ router.get('/scrape-url', async (req, res) => {
     const { url } = req.query
 
     try {
-        // title, description, domain, image
-        const browser = await puppeteer.launch() //{ headless: false })
+        const browser = await puppeteer.launch() // { headless: false })
         const page = await browser.newPage()
-        await page.goto(url, { waitUntil: 'networkidle0' }) // load, domcontentloaded, networkidle0, networkidle2
+        await page.goto(url, { waitUntil: 'networkidle2' }) // { timeout: 60000 }, { waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2' }
         await page.evaluate(async() => {
             const youtubeCookieConsent = await document.querySelector('base[href="https://consent.youtube.com/"]')
             if (youtubeCookieConsent) {
-                const acceptButton = await document.querySelector('button[aria-label="Agree to the use of cookies and other data for the purposes described"]')
-                acceptButton.click()
+                const rejectButton = await document.querySelector('button[aria-label="Reject all"]')
+                rejectButton.click()
                 return
             } else {
                 return
             }
         })
         await page.waitForSelector('title')
-        const data = await page.evaluate(async() => {
-            let title = await document.title
-            // let title = await document.querySelector('meta[property="og:title"]')
-            // if (!title) title = await document.querySelector('title').innerHTML
-            // else title = title.content
-
-            let description = await document.querySelector('meta[property="og:description"]')
-            if (description) description = description.content
-            // else description = await document.querySelector('p').innerHTML
-            const domain = await document.querySelector('meta[property="og:site_name"]') // site_name, url
-            const image = await document.querySelector('meta[property="og:image"]')
-            return {
-                title: title || null,
-                description: description || null,
-                domain: domain ? domain.content : null,
-                image: image ? image.content : null
+        const urlData = await page.evaluate(async() => {
+            let data = {
+                title: document.title || null,
+                description: null,
+                domain: null,
+                image: null,
             }
+
+            // description
+            const ogDescription = document.querySelector('meta[property="og:description"]')
+            if (ogDescription) data.description = ogDescription.content
+            else {
+                const nameDescription = document.querySelector('meta[name="description"]')
+                if (nameDescription) data.description = nameDescription.content
+            }
+
+            // domain
+            const ogSiteName = document.querySelector('meta[property="og:site_name"]')
+            if (ogSiteName) data.domain = ogSiteName.content
+
+            // image
+            const metaImage = document.querySelector('meta[property="og:image"]')
+            if (metaImage) data.image = metaImage.content
+            else {
+                const firstImage = document.querySelector('img')
+                if (firstImage) data.image = firstImage.src
+            }
+
+            return data
         })
-        res.send(data)
+        if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
+        res.send(urlData)
         await browser.close()
     } catch(e) {
+        console.log('error: ', e)
         res.send({
             title: null,
             description: null,
