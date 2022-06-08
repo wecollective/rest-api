@@ -596,7 +596,13 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 createImages,
                 createStringPosts,
             ]).then((data) => {
-                res.status(200).json({ post, event: data[2], images: data[4], string: data[5] })
+                res.status(200).json({
+                    post,
+                    indirectRelationships: data[1],
+                    event: data[2],
+                    images: data[4],
+                    string: data[5]
+                })
             })
         })
     }
@@ -908,7 +914,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
     })
 
     const createIndirectRelationships = Promise.all(indirectSpaceIds.map((id) => {
-            new Promise((resolve, reject) => {
+            return new Promise((resolve, reject) => {
                 PostHolon
                     .findOne({ where: { postId, holonId: id } })
                     .then(postHolon => {
@@ -922,7 +928,8 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                                     postId: postId,
                                     holonId: id
                                 })
-                                .then(() => resolve())
+                                .then(() => resolve(id))
+                                
                         }
                         else resolve()
                     })
@@ -937,7 +944,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
             createDirectRelationships,
             createIndirectRelationships
         ])
-        .then(() => res.status(200).json({ message: 'Success' }))
+        .then((data) => res.status(200).json({ message: 'Success', indirectRelationships: data[4] }))
         .catch(() => res.status(500).json({ message: 'Error' }))
 })
 
