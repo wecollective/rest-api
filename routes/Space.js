@@ -810,28 +810,36 @@ router.get('/post-map-data', async (req, res) => {
     let firstAttributes = findFirstAttributes()
     let through = findThrough()
 
-    // Find totalMatchingPosts
     const totalMatchingPosts = await Post.count({
         subQuery: false,
         where: { 
-            '$DirectSpaces.id$': spaceId,
+            '$AllIncludedSpaces.id$': spaceId,
             state: 'visible',
             createdAt: { [Op.between]: [startDate, Date.now()] },
             type,
             [Op.or]: [
                 { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { text: null }
-            ]
+                { urlTitle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { urlDescription: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { urlDomain: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+            ],
         },
         order,
         attributes: firstAttributes,
-        include: [{ 
-            model: Holon,
-            as: 'DirectSpaces',
-            attributes: [],
-            // where: { state: 'active' },
-            through,
-        }]
+        include: [
+            {
+                model: Holon,
+                as: 'AllIncludedSpaces',
+                attributes: [],
+                through,
+            },
+            {
+                model: GlassBeadGame,
+                required: false,
+                attributes: ['topic', 'topicGroup'],
+            },
+        ]
     })
 
     // Double query required to to prevent results and pagination being effected by top level where clause.
@@ -846,19 +854,29 @@ router.get('/post-map-data', async (req, res) => {
             type,
             [Op.or]: [
                 { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { text: null }
-            ]
+                { urlTitle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { urlDescription: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { urlDomain: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+            ],
         },
         order,
         limit: Number(limit),
         offset: Number(offset),
         attributes: firstAttributes,
-        include: [{
-            model: Holon,
-            as: 'AllIncludedSpaces',
-            attributes: [],
-            through,
-        }]
+        include: [
+            {
+                model: Holon,
+                as: 'AllIncludedSpaces',
+                attributes: [],
+                through,
+            },
+            {
+                model: GlassBeadGame,
+                required: false,
+                attributes: ['topic', 'topicGroup'],
+            },
+        ]
     })
     .then(posts => {
         // Add account reaction data to post attributes
@@ -914,7 +932,7 @@ router.get('/post-map-data', async (req, res) => {
                     as: 'OutgoingLinks',
                     where: { state: 'visible' },
                     required: false,
-                    attributes: ['id'],
+                    attributes: ['id', 'description'],
                     include: [
                         { 
                             model: Post,
