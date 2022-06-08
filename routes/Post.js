@@ -910,7 +910,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
     const createIndirectRelationships = Promise.all(indirectSpaceIds.map((id) => {
             new Promise((resolve, reject) => {
                 PostHolon
-                    .findOne({ where: { postId: postId, holonId: id } })
+                    .findOne({ where: { postId, holonId: id } })
                     .then(postHolon => {
                         if (!postHolon) {
                             PostHolon
@@ -920,7 +920,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                                     // state: 'active',
                                     creatorId: accountId,
                                     postId: postId,
-                                    holonId: spaceId
+                                    holonId: id
                                 })
                                 .then(() => resolve())
                         }
