@@ -486,6 +486,9 @@ router.get('/space-posts', (req, res) => {
             type,
             [Op.or]: [
                 { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { urlTitle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { urlDescription: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { urlDomain: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
                 { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
             ],
         },
