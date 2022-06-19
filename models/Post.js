@@ -55,6 +55,12 @@ module.exports = (sequelize, DataTypes) => {
             otherKey: 'itemBId'
         })
 
+        Post.belongsToMany(models.User, { 
+            through: models.UserPost,
+            as: 'StringPlayers',
+            foreignKey: 'postId'
+        })
+
         Post.hasMany(models.Reaction)
 
         Post.hasMany(models.Link, {
@@ -80,6 +86,10 @@ module.exports = (sequelize, DataTypes) => {
         })
 
         Post.hasOne(models.Event, {
+            foreignKey: 'postId'
+        })
+
+        Post.hasOne(models.MultiplayerString, {
             foreignKey: 'postId'
         })
         

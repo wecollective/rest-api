@@ -104,6 +104,12 @@ relationship: turn, text
 ### PostImage
 `npx sequelize-cli model:generate --name PostImage --attributes creatorId:integer,postId:integer,index:integer,url:string,caption:text`
 
+### UserPost
+`npx sequelize-cli model:generate --name UserPost --attributes userId:integer,postId:integer,type:string,relationship:string,index:integer,state:string`
+
+### MultiplayerString
+`npx sequelize-cli model:generate --name MultiplayerString --attributes postId:integer,numberOfTurns:integer,moveDuration:integer,allowedPostTypes:string,privacy:string`
+
 ## Generate Seeders
 `npx sequelize-cli seed:generate --name demo-holons`
 `npx sequelize-cli seed:generate --name demo-holon-tags`
