@@ -5,7 +5,8 @@ const sequelize = require('sequelize')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
-const { Holon, User, Notification, HolonUser } = require('../models')
+const { Holon, User, Notification, HolonUser, UserPost } = require('../models')
+const { totalUserPosts } = require('../GlobalConstants')
 
 // GET
 router.get('/account-data', authenticateToken, (req, res) => {
@@ -142,6 +143,16 @@ router.post('/respond-to-mod-invite', authenticateToken, async (req, res) => {
                 }).catch(() => res.status(500).send({ message: 'Failed to create mod-invite-response notification' }))
             }).catch(() => res.status(500).send({ message: 'Failed to update mod-invite notification' }))
     }
+})
+
+router.post('/respond-to-multiplayer-string-invite', authenticateToken, async (req, res) => {
+    const accountId = req.user.id
+    const { postId, notificationId, response } = req.body
+
+    const updateUserPostState = await UserPost.update({ state: response }, { where: { postId, userId: accountId } })
+    const updateNotification = await Notification.update({ state: response }, { where: { id: notificationId } })
+
+    Promise.all([updateUserPostState, updateNotification]).then(res.status(200).json({ message: 'Success' }))
 })
 
 module.exports = router
