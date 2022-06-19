@@ -41,7 +41,9 @@ const {
     GlassBeadGame,
     GlassBeadGameComment,
     GlassBead,
-    PostImage
+    PostImage,
+    MultiplayerString,
+    UserPost,
 } = require('../models')
 
 // GET
@@ -221,8 +223,20 @@ router.get('/post-data', (req, res) => {
                 required: false,
                 include: [{ 
                     model: PostImage,
-                    required: false,
+                    required: false
                 }]
+            },
+            {
+                model: MultiplayerString,
+                attributes: ['numberOfTurns', 'moveDuration', 'allowedPostTypes', 'privacy'],
+                required: false
+            },
+            {
+                model: User,
+                as: 'StringPlayers',
+                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                through: { where: { type: 'multiplayer-string' }, attributes: ['index', 'state'] },
+                required: false
             },
         ]
     })
@@ -455,18 +469,25 @@ router.post('/create-post', authenticateToken, (req, res) => {
         const {
             type,
             text,
-            title,
-            startTime,
-            endTime,
+            spaceIds,
             url,
+            // url posts
             urlImage,
             urlDomain,
             urlTitle,
             urlDescription,
+            // event posts
+            title,
+            startTime,
+            endTime,
+            // glass bead games
             topic,
             topicGroup,
             topicImage,
-            spaceIds,
+            // multiplayer strings
+            privacy,
+            userIds,
+            numberOfTurns
         } = postData
 
         Post.create({
@@ -588,6 +609,74 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 ))
                 : null
 
+            const createMultiplayerString = (type === 'multiplayer-string')
+                ? new Promise((resolve, reject) => {
+                    MultiplayerString.create({
+                        numberOfTurns,
+                        // moveDuration,
+                        // allowedPostTypes,
+                        privacy,
+                        postId: post.id
+                    }).then(async() => {
+                        if (privacy === 'all-users-allowed') resolve()
+                        else {
+                            const users = await User.findAll({
+                                where: { id: userIds },
+                                attributes: ['id', 'name', 'handle', 'email'],
+                                order: [['createdAt', 'DESC']],
+                                limit: 3
+                            })
+                            const accountUser = users.find((user) => user.id === accountId)
+                            Promise.all(users.map((user, index) => 
+                                UserPost.create({
+                                    userId: user.id,
+                                    postId: post.id,
+                                    type: 'multiplayer-string',
+                                    relationship: 'player',
+                                    index: index + 1,
+                                    state: user.id === accountId ? 'accepted' : 'pending'
+                                }).then(() => {
+                                    if (user.id !== accountId) {
+                                        // create notification
+                                        Notification.create({
+                                            type: 'multiplayer-string-invitation',
+                                            ownerId: user.id,
+                                            userId: accountId,
+                                            postId: post.id,
+                                            seen: false,
+                                            state: 'pending',
+                                        })
+                                        // send email
+                                        sgMail.send({
+                                            to: user.email,
+                                            from: {
+                                                email: 'admin@weco.io',
+                                                name: 'we { collective }'
+                                            },
+                                            subject: 'New notification',
+                                            text: `
+                                                Hi ${user.name}, ${accountUser.name} just invited you to join a multiplayer string game on weco.
+                                                Navigate here to accept or reject the invitation: https://${config.appURL}/p/${post.id}
+                                            `,
+                                            html: `
+                                                <p>
+                                                    Hi ${user.name},
+                                                    <br/>
+                                                    <a href='${config.appURL}/u/${accountUser.handle}'>${accountUser.name}</a>
+                                                    just invited you to join a multiplayer string game on weco.
+                                                    <br/>
+                                                    Navigate <a href='${config.appURL}/p/${post.id}'>here</a> to accept or reject the invitation.
+                                                </p>
+                                            `,
+                                        })
+                                    }
+                                })
+                            )).then(() => resolve(users))
+                        }
+                    })
+                })
+                : null
+
             Promise.all([
                 createDirectRelationships,
                 createIndirectRelationships,
@@ -595,13 +684,15 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 createGBG,
                 createImages,
                 createStringPosts,
+                createMultiplayerString
             ]).then((data) => {
                 res.status(200).json({
                     post,
                     indirectRelationships: data[1],
                     event: data[2],
                     images: data[4],
-                    string: data[5]
+                    string: data[5],
+                    multiplayerStringUsers: data[6]
                 })
             })
         })
