@@ -145,7 +145,7 @@ router.post('/respond-to-mod-invite', authenticateToken, async (req, res) => {
     }
 })
 
-router.post('/respond-to-multiplayer-string-invite', authenticateToken, async (req, res) => {
+router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
     const accountId = req.user.id
     const { postId, notificationId, response } = req.body
 

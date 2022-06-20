@@ -24,7 +24,7 @@ const {
     GlassBead,
     Event,
     PostImage,
-    MultiplayerString
+    Weave
 } = require('../models')
 const {
     postAttributes,
@@ -409,7 +409,7 @@ router.get('/space-posts', (req, res) => {
 
     function findType() {
         return postType === 'All Types'
-            ? ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'string', 'multiplayer-string', 'prism']
+            ? ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'string', 'weave', 'prism']
             : postType.replace(/\s+/g, '-').toLowerCase()
     }
 
@@ -698,7 +698,7 @@ router.get('/space-posts', (req, res) => {
                     }]
                 },
                 {
-                    model: MultiplayerString,
+                    model: Weave,
                     attributes: ['numberOfTurns', 'moveDuration', 'allowedPostTypes', 'privacy'],
                     required: false
                 },
@@ -706,7 +706,7 @@ router.get('/space-posts', (req, res) => {
                     model: User,
                     as: 'StringPlayers',
                     attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    through: { where: { type: 'multiplayer-string' }, attributes: ['index', 'state'] },
+                    through: { where: { type: 'weave' }, attributes: ['index', 'state'] },
                     required: false
                 },
             ]

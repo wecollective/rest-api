@@ -89,7 +89,7 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'postId'
         })
 
-        Post.hasOne(models.MultiplayerString, {
+        Post.hasOne(models.Weave, {
             foreignKey: 'postId'
         })
         

@@ -42,7 +42,7 @@ const {
     GlassBeadGameComment,
     GlassBead,
     PostImage,
-    MultiplayerString,
+    Weave,
     UserPost,
 } = require('../models')
 
@@ -227,7 +227,7 @@ router.get('/post-data', (req, res) => {
                 }]
             },
             {
-                model: MultiplayerString,
+                model: Weave,
                 attributes: ['numberOfTurns', 'moveDuration', 'allowedPostTypes', 'privacy'],
                 required: false
             },
@@ -235,7 +235,7 @@ router.get('/post-data', (req, res) => {
                 model: User,
                 as: 'StringPlayers',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                through: { where: { type: 'multiplayer-string' }, attributes: ['index', 'state'] },
+                through: { where: { type: 'weave' }, attributes: ['index', 'state'] },
                 required: false
             },
         ]
@@ -608,9 +608,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 ))
                 : null
 
-            const createMultiplayerString = (type === 'multiplayer-string')
+            const createMultiplayerString = (type === 'weave')
                 ? new Promise((resolve, reject) => {
-                    MultiplayerString.create({
+                    Weave.create({
                         numberOfTurns,
                         // moveDuration,
                         // allowedPostTypes,
@@ -630,7 +630,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                 UserPost.create({
                                     userId: user.id,
                                     postId: post.id,
-                                    type: 'multiplayer-string',
+                                    type: 'weave',
                                     relationship: 'player',
                                     index: index + 1,
                                     state: user.id === accountId ? 'accepted' : 'pending'
@@ -638,7 +638,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                     if (user.id !== accountId) {
                                         // send invite notification and email
                                         Notification.create({
-                                            type: 'multiplayer-string-invitation',
+                                            type: 'weave-invitation',
                                             ownerId: user.id,
                                             userId: accountId,
                                             postId: post.id,
@@ -653,7 +653,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             },
                                             subject: 'New notification',
                                             text: `
-                                                Hi ${user.name}, ${accountUser.name} just invited you to join a multiplayer string game on weco.
+                                                Hi ${user.name}, ${accountUser.name} just invited you to join a weave on weco.
                                                 Navigate here to accept or reject the invitation: https://${config.appURL}/p/${post.id}
                                             `,
                                             html: `
@@ -661,14 +661,14 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                     Hi ${user.name},
                                                     <br/>
                                                     <a href='${config.appURL}/u/${accountUser.handle}'>${accountUser.name}</a>
-                                                    just invited you to join a multiplayer string game on weco.
+                                                    just invited you to join a weave on weco.
                                                     <br/>
                                                     Navigate <a href='${config.appURL}/p/${post.id}'>here</a> to accept or reject the invitation.
                                                 </p>
                                             `,
                                         })
                                     }
-                                    if (index === 0) {
+                                    if (user.id === userIds[0]) {
                                         // send next move notification and email
                                         Notification.create({
                                             type: 'weave-move',
@@ -685,8 +685,8 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             },
                                             subject: 'New notification',
                                             text: `
-                                                Hi ${user.name}, it's your move (1/${numberOfTurns * users.length})!
-                                                Add a new bead to your weave on weco: https://${config.appURL}/p/${post.id}
+                                                Hi ${user.name}, it's your move!
+                                                Add a new bead to the weave on weco: https://${config.appURL}/p/${post.id}
                                             `,
                                             html: `
                                                 <p>
@@ -694,7 +694,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                     <br/>
                                                     It's your move!
                                                     <br/>
-                                                    Add a new bead to your <a href='${config.appURL}/p/${post.id}'>weave</a> on weco.
+                                                    Add a new bead to the <a href='${config.appURL}/p/${post.id}'>weave</a> on weco.
                                                 </p>
                                             `,
                                         })
@@ -1001,7 +1001,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                 itemBId: post.id,
             })
 
-            const notifyNextPlayer = (privacy === 'only-selected-users') ? new Promise(async (resolve, reject) => {
+            const notifyNextPlayer = (privacy === 'only-selected-users' && nextPlayerId) ? new Promise(async (resolve, reject) => {
                 const nextPlayer = await User.findOne({ where: { id: nextPlayerId }, attributes: ['name', 'email'], })
                 const createMoveNotification = await Notification.create({
                     type: 'weave-move',
@@ -1018,7 +1018,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                     subject: 'New notification',
                     text: `
                         Hi ${nextPlayer.name}, it's your move!
-                        Add a new bead to your weave on weco: https://${config.appURL}/p/${postId}
+                        Add a new bead to the weave on weco: https://${config.appURL}/p/${postId}
                     `,
                     html: `
                         <p>
@@ -1026,7 +1026,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                             <br/>
                             It's your move!
                             <br/>
-                            Add a new bead to your <a href='${config.appURL}/p/${postId}'>weave</a> on weco.
+                            Add a new bead to the <a href='${config.appURL}/p/${postId}'>weave</a> on weco.
                         </p>
                     `,
                 })

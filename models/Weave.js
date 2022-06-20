@@ -1,6 +1,6 @@
 'use strict';
 module.exports = (sequelize, DataTypes) => {
-    const MultiplayerString = sequelize.define('MultiplayerString', {
+    const Weave = sequelize.define('Weave', {
         id: {
             primaryKey: true,
             type: DataTypes.INTEGER,
@@ -11,10 +11,10 @@ module.exports = (sequelize, DataTypes) => {
         allowedPostTypes: DataTypes.STRING,
         privacy: DataTypes.STRING
     }, {});
-    MultiplayerString.associate = function(models) {
-        MultiplayerString.belongsTo(models.Post, {
+    Weave.associate = function(models) {
+        Weave.belongsTo(models.Post, {
             foreignKey: 'postId',
         })
     };
-    return MultiplayerString;
+    return Weave;
 };
