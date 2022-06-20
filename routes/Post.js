@@ -500,7 +500,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
             urlDomain,
             urlTitle,
             urlDescription,
-            state: 'visible'
         }).then(async post => {
             const indirectSpaceIds = await new Promise((resolve, reject) => {
                 Promise.all(spaceIds.map((id) => Holon.findOne({
@@ -760,7 +759,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 res.status(500).send(error)
             } else {
                 if (file) createPost(JSON.parse(body.postData), [file])
-                else res.status(500).json({ message: 'Failed', error: err })
+                else res.status(500).json({ message: 'Failed', error })
             }
         })
     } else if (uploadType === 'audio-blob') {
@@ -922,6 +921,185 @@ router.post('/create-post', authenticateToken, (req, res) => {
     } else {
         createPost(req.body)
     }
+})
+
+router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
+    const accountId = req.user.id
+    const { uploadType } = req.query
+    const audioMBLimit = 5
+    const imageMBLimit = 2
+
+    function createBead(beadData, files, imageData) {
+        const {
+            postId,
+            beadIndex,
+            type,
+            text,
+            url,
+            urlData,
+        } = beadData
+
+        Post.create({
+            type: `string-${type}`,
+            state: 'visible',
+            creatorId: accountId,
+            text,
+            url: type === 'audio' ? files[0].location : url,
+            urlImage: urlData ? urlData.image : null,
+            urlDomain: urlData ? urlData.domain : null,
+            urlTitle: urlData ? urlData.title : null,
+            urlDescription: urlData ? urlData.description : null,
+        }).then(async post => {
+            const createImages = (type === 'image')
+                ? Promise.all(imageData.map((image, index) => PostImage.create({
+                    postId: post.id,
+                    creatorId: accountId,
+                    index,
+                    url: image.url || files.find((file) => file.index === index).location,
+                    caption: image.caption,
+                })))
+                : null
+
+            const createStringLink = Link.create({
+                state: 'visible',
+                type: 'string-post',
+                index: beadIndex,
+                creatorId: accountId,
+                itemAId: postId,
+                itemBId: post.id,
+            })
+
+            Promise
+                .all([createImages, createStringLink])
+                .then((data) => res.status(200).json({ bead: post, imageData: data[0], linkData: data[1] }))
+                .catch((error) => console.log(error))
+        })
+
+    }
+
+    if (uploadType === 'image-post') {
+        multer({
+            limits: { fileSize: imageMBLimit * 1024 * 1024 },
+            storage: multerS3({
+                s3: s3,
+                bucket: `weco-${process.env.NODE_ENV}-post-images`,
+                acl: 'public-read',
+                metadata: function (req, file, cb) {
+                    cb(null, { mimetype: file.mimetype })
+                },
+                key: function (req, file, cb) {
+                    const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
+                    const date = Date.now().toString()
+                    const fileName = `post-image-upload-${accountId}-${name}-${date}`
+                    cb(null, fileName)
+                }
+            })
+        }).any('file')(req, res, (error) => {
+            const { files, body } = req
+            if (error instanceof multer.MulterError) {
+                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                else res.status(500).send(error)
+            } else if (error) {
+                res.status(500).send(error)
+            } else {
+                createBead(
+                    JSON.parse(body.beadData),
+                    files.map((file) => { return { location: file.location, index: Number(file.originalname) } }),
+                    JSON.parse(body.imageData)
+                )
+            }
+        })
+    } else if (uploadType === 'audio-file') {
+        multer({
+            limits: { fileSize: audioMBLimit * 1024 * 1024 },
+            storage: multerS3({
+                s3: s3,
+                bucket: `weco-${process.env.NODE_ENV}-post-audio`,
+                acl: 'public-read',
+                metadata: function (req, file, cb) {
+                    cb(null, { mimetype: file.mimetype })
+                },
+                key: function (req, file, cb) {
+                    const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
+                    const date = Date.now().toString()
+                    const fileName = `post-audio-upload-${accountId}-${name}-${date}.mp3`
+                    console.log('fileName: ', fileName)
+                    cb(null, fileName)
+                }
+            })
+        }).single('file')(req, res, (error) => {
+            const { file, body } = req
+            if (error instanceof multer.MulterError) {
+                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                else res.status(500).send(error)
+            } else if (error) {
+                res.status(500).send(error)
+            } else {
+                if (file) createBead(JSON.parse(body.beadData), [file])
+                else res.status(500).json({ message: 'Failed', error })
+            }
+        })
+    } else if (uploadType === 'audio-blob') {
+        multer({
+            fileFilter: (req, file, cb) => {
+                if (file.mimetype === 'audio/mpeg-3') cb(null, true)
+                else {
+                    cb(null, false)
+                    cb(new Error('Only audio/mpeg-3 files allowed'))
+                }
+            },
+            limits: { fileSize: audioMBLimit * 1024 * 1024 },
+            dest: './audio/raw',
+        }).single('file')(req, res, (error) => {
+            const { file, body } = req
+            // handle errors
+            if (error instanceof multer.MulterError) {
+                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                else res.status(500).send(error)
+            } else if (error) {
+                res.status(500).send(error)
+            } else {
+                // convert raw audio to mp3
+                ffmpeg(file.path)
+                    .output(`audio/mp3/${file.filename}.mp3`)
+                    .on('end', function() {
+                        // upload new mp3 file to s3 bucket
+                        fs.readFile(`audio/mp3/${file.filename}.mp3`, function (err, data) {
+                            if (!err) {
+                                const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
+                                const date = Date.now().toString()
+                                const fileName = `post-audio-recording-${accountId}-${name}-${date}.mp3`
+                                console.log('fileName: ', fileName)
+                                s3.putObject({
+                                    Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
+                                    ACL: 'public-read',
+                                    Key: fileName,
+                                    Body: data,
+                                    Metadata: { mimetype: file.mimetype }
+                                }, (err) => {
+                                    if (err) console.log(err)
+                                    else {
+                                        // delete old files
+                                        fs.unlink(`audio/raw/${file.filename}`, (err => {
+                                            if (err) console.log(err)
+                                        }))
+                                        fs.unlink(`audio/mp3/${file.filename}.mp3`, (err => {
+                                            if (err) console.log(err)
+                                        }))
+                                        // create post
+                                        createBead(
+                                            JSON.parse(body.beadData),
+                                            [{ location: `https://weco-${process.env.NODE_ENV}-post-audio.s3.eu-west-1.amazonaws.com/${fileName}` }]
+                                        )
+                                    }
+                                })
+                            }
+                        })
+                    })
+                    .run()
+            }
+        })
+    } else createBead(req.body)
 })
 
 router.post('/repost-post', authenticateToken, async (req, res) => {
