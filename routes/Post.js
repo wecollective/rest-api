@@ -636,7 +636,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                     state: user.id === accountId ? 'accepted' : 'pending'
                                 }).then(() => {
                                     if (user.id !== accountId) {
-                                        // create notification
+                                        // send invite notification and email
                                         Notification.create({
                                             type: 'multiplayer-string-invitation',
                                             ownerId: user.id,
@@ -645,7 +645,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             seen: false,
                                             state: 'pending',
                                         })
-                                        // send email
                                         sgMail.send({
                                             to: user.email,
                                             from: {
@@ -665,6 +664,37 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                     just invited you to join a multiplayer string game on weco.
                                                     <br/>
                                                     Navigate <a href='${config.appURL}/p/${post.id}'>here</a> to accept or reject the invitation.
+                                                </p>
+                                            `,
+                                        })
+                                    }
+                                    if (index === 0) {
+                                        // send next move notification and email
+                                        Notification.create({
+                                            type: 'weave-move',
+                                            ownerId: user.id,
+                                            postId: post.id,
+                                            seen: false,
+                                        })
+                                        // send email
+                                        sgMail.send({
+                                            to: user.email,
+                                            from: {
+                                                email: 'admin@weco.io',
+                                                name: 'we { collective }'
+                                            },
+                                            subject: 'New notification',
+                                            text: `
+                                                Hi ${user.name}, it's your move (1/${numberOfTurns * users.length})!
+                                                Add a new bead to your weave on weco: https://${config.appURL}/p/${post.id}
+                                            `,
+                                            html: `
+                                                <p>
+                                                    Hi ${user.name},
+                                                    <br/>
+                                                    It's your move!
+                                                    <br/>
+                                                    Add a new bead to your <a href='${config.appURL}/p/${post.id}'>weave</a> on weco.
                                                 </p>
                                             `,
                                         })
@@ -933,6 +963,8 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
         const {
             postId,
             beadIndex,
+            privacy,
+            nextPlayerId,
             type,
             text,
             url,
@@ -969,8 +1001,44 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                 itemBId: post.id,
             })
 
+            const notifyNextPlayer = (privacy === 'only-selected-users') ? new Promise(async (resolve, reject) => {
+                const nextPlayer = await User.findOne({ where: { id: nextPlayerId }, attributes: ['name', 'email'], })
+                const createMoveNotification = await Notification.create({
+                    type: 'weave-move',
+                    ownerId: nextPlayerId,
+                    postId: postId,
+                    seen: false,
+                })
+                const sendMoveEmail = await sgMail.send({
+                    to: nextPlayer.email,
+                    from: {
+                        email: 'admin@weco.io',
+                        name: 'we { collective }'
+                    },
+                    subject: 'New notification',
+                    text: `
+                        Hi ${nextPlayer.name}, it's your move!
+                        Add a new bead to your weave on weco: https://${config.appURL}/p/${postId}
+                    `,
+                    html: `
+                        <p>
+                            Hi ${nextPlayer.name},
+                            <br/>
+                            It's your move!
+                            <br/>
+                            Add a new bead to your <a href='${config.appURL}/p/${postId}'>weave</a> on weco.
+                        </p>
+                    `,
+                })
+                Promise
+                    .all([createMoveNotification, sendMoveEmail])
+                    .then(() => resolve())
+                    .catch((error) => console.log(error))
+            })
+            : null
+
             Promise
-                .all([createImages, createStringLink])
+                .all([createImages, createStringLink, notifyNextPlayer])
                 .then((data) => res.status(200).json({ bead: post, imageData: data[0], linkData: data[1] }))
                 .catch((error) => console.log(error))
         })
