@@ -691,11 +691,18 @@ router.get('/space-posts', (req, res) => {
                     attributes: ['id', 'type', 'text', 'url', 'urlTitle', 'urlImage', 'urlDomain', 'urlDescription'],
                     through: { where: { state: 'visible' }, attributes: ['index'] },
                     required: false,
-                    include: [{ 
-                        model: PostImage,
-                        required: false,
-                        attributes: ['caption', 'createdAt', 'id', 'index', 'url']
-                    }]
+                    include: [
+                        {
+                            model: User,
+                            as: 'Creator',
+                            attributes: ['handle', 'name', 'flagImagePath']
+                        },
+                        { 
+                            model: PostImage,
+                            required: false,
+                            attributes: ['caption', 'createdAt', 'id', 'index', 'url']
+                        }
+                    ]
                 },
                 {
                     model: Weave,

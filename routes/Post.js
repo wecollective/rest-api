@@ -221,10 +221,18 @@ router.get('/post-data', (req, res) => {
                 as: 'StringPosts',
                 through: { where: { state: 'visible' } },
                 required: false,
-                include: [{ 
-                    model: PostImage,
-                    required: false
-                }]
+                include: [
+                    {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['handle', 'name', 'flagImagePath']
+                    },
+                    { 
+                        model: PostImage,
+                        required: false,
+                        attributes: ['caption', 'createdAt', 'id', 'index', 'url']
+                    }
+                ]
             },
             {
                 model: Weave,
