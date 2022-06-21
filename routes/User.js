@@ -7,7 +7,7 @@ const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 const { postAttributes } = require('../GlobalConstants')
-const { Holon, User, Post, Reaction, Link, PostImage, Event, GlassBeadGame, GlassBead } = require('../models')
+const { Holon, User, Post, Reaction, Link, PostImage, Event, GlassBeadGame, GlassBead, Weave } = require('../models')
 
 // GET
 router.get('/all-users', (req, res) => {
@@ -146,7 +146,7 @@ router.get('/user-posts', (req, res) => {
 
     function findType() {
         let type
-        if (postType === 'All Types') { type = ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'string', 'prism'] }
+        if (postType === 'All Types') { type = ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'string', 'weave', 'prism'] }
         if (postType !== 'All Types') { type = postType.replace(/\s+/g, '-').toLowerCase() }
         return type
     }
@@ -386,10 +386,30 @@ router.get('/user-posts', (req, res) => {
                     as: 'StringPosts',
                     through: { where: { state: 'visible' } },
                     required: false,
-                    include: [{ 
-                        model: PostImage,
-                        required: false,
-                    }]
+                    include: [
+                        {
+                            model: User,
+                            as: 'Creator',
+                            attributes: ['handle', 'name', 'flagImagePath']
+                        },
+                        { 
+                            model: PostImage,
+                            required: false,
+                            attributes: ['caption', 'createdAt', 'id', 'index', 'url']
+                        }
+                    ]
+                },
+                {
+                    model: Weave,
+                    attributes: ['numberOfMoves', 'numberOfTurns', 'moveDuration', 'allowedPostTypes', 'privacy'],
+                    required: false
+                },
+                {
+                    model: User,
+                    as: 'StringPlayers',
+                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                    through: { where: { type: 'weave' }, attributes: ['index', 'state'] },
+                    required: false
                 },
             ]
         })
