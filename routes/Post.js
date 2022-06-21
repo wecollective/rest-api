@@ -487,6 +487,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             // multiplayer strings
             privacy,
             userIds,
+            numberOfMoves,
             numberOfTurns
         } = postData
 
@@ -611,6 +612,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             const createMultiplayerString = (type === 'weave')
                 ? new Promise((resolve, reject) => {
                     Weave.create({
+                        numberOfMoves,
                         numberOfTurns,
                         // moveDuration,
                         // allowedPostTypes,

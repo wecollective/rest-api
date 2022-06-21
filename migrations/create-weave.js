@@ -11,6 +11,9 @@ module.exports = {
             postId: {
                 type: Sequelize.INTEGER
             },
+            numberOfMoves: {
+                type: Sequelize.INTEGER
+            },
             numberOfTurns: {
                 type: Sequelize.INTEGER
             },

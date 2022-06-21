@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             autoIncrement: true,
         },
+        numberOfMoves: DataTypes.INTEGER,
         numberOfTurns: DataTypes.INTEGER,
         moveDuration: DataTypes.INTEGER,
         allowedPostTypes: DataTypes.STRING,
