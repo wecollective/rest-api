@@ -622,7 +622,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
                             const users = await User.findAll({
                                 where: { id: userIds },
                                 attributes: ['id', 'name', 'handle', 'email'],
-                                order: [['createdAt', 'DESC']],
                                 limit: 3
                             })
                             const accountUser = users.find((user) => user.id === accountId)
