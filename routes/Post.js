@@ -622,11 +622,11 @@ router.post('/create-post', authenticateToken, (req, res) => {
                             const users = await User.findAll({
                                 where: { id: userIds },
                                 attributes: ['id', 'name', 'handle', 'email'],
-                                limit: 3
                             })
                             const accountUser = users.find((user) => user.id === accountId)
-                            Promise.all(users.map((user, index) => 
-                                UserPost.create({
+                            Promise.all(userIds.map((userId, index) => {
+                                const user = users.find((u) => u.id === userId)
+                                return UserPost.create({
                                     userId: user.id,
                                     postId: post.id,
                                     type: 'weave',
@@ -668,7 +668,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                         })
                                     }
                                 })
-                            )).then(() => resolve(users))
+                            })).then(() => resolve(users))
                         }
                     })
                 })
