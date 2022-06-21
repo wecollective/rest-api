@@ -764,7 +764,7 @@ router.get('/post-map-data', async (req, res) => {
 
     function findType() {
         return postType === 'All Types'
-            ? ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'string', 'prism']
+            ? ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'string', 'weave', 'prism']
             : postType.replace(/\s+/g, '-').toLowerCase()
     }
 
