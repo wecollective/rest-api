@@ -667,37 +667,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             `,
                                         })
                                     }
-                                    if (user.id === userIds[0]) {
-                                        // send next move notification and email
-                                        Notification.create({
-                                            type: 'weave-move',
-                                            ownerId: user.id,
-                                            postId: post.id,
-                                            seen: false,
-                                        })
-                                        // send email
-                                        sgMail.send({
-                                            to: user.email,
-                                            from: {
-                                                email: 'admin@weco.io',
-                                                name: 'we { collective }'
-                                            },
-                                            subject: 'New notification',
-                                            text: `
-                                                Hi ${user.name}, it's your move!
-                                                Add a new bead to the weave on weco: https://${config.appURL}/p/${post.id}
-                                            `,
-                                            html: `
-                                                <p>
-                                                    Hi ${user.name},
-                                                    <br/>
-                                                    It's your move!
-                                                    <br/>
-                                                    Add a new bead to the <a href='${config.appURL}/p/${post.id}'>weave</a> on weco.
-                                                </p>
-                                            `,
-                                        })
-                                    }
                                 })
                             )).then(() => resolve(users))
                         }

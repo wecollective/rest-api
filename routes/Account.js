@@ -1,4 +1,5 @@
 require('dotenv').config()
+const config = require('../Config')
 const express = require('express')
 const router = express.Router()
 const sequelize = require('sequelize')
@@ -149,7 +150,49 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
     const accountId = req.user.id
     const { postId, notificationId, response } = req.body
 
-    const updateUserPostState = await UserPost.update({ state: response }, { where: { postId, userId: accountId } })
+    const updateUserPostState = new Promise((resolve) => {
+        UserPost
+            .update({ state: response }, { where: { postId, userId: accountId } })
+            .then(() => {
+                UserPost
+                    .findAll({ where: { postId, type: 'weave', relationship: 'player' }})
+                    .then(async (players) => {
+                        if (players.find((p) => p.state === 'pending')) resolve()
+                        else {
+                            const firstPlayerId = players.find((p) => p.index === 1).userId
+                            const firstPlayer = await User.findOne({ where: { id: firstPlayerId }, attributes: ['email', 'name'] })
+                            const createMoveNotification = Notification.create({
+                                type: 'weave-move',
+                                ownerId: firstPlayerId,
+                                postId: postId,
+                                seen: false,
+                            })
+                            const sendMoveEmail = sgMail.send({
+                                to: firstPlayer.email,
+                                from: {
+                                    email: 'admin@weco.io',
+                                    name: 'we { collective }'
+                                },
+                                subject: 'New notification',
+                                text: `
+                                    Hi ${firstPlayer.name}, it's your move!
+                                    Add a new bead to the weave on weco: https://${config.appURL}/p/${postId}
+                                `,
+                                html: `
+                                    <p>
+                                        Hi ${firstPlayer.name},
+                                        <br/>
+                                        It's your move!
+                                        <br/>
+                                        Add a new bead to the <a href='${config.appURL}/p/${postId}'>weave</a> on weco.
+                                    </p>
+                                `,
+                            })
+                            Promise.all([createMoveNotification, sendMoveEmail]).then(() => resolve())
+                        }
+                    })
+            })
+    })
     const updateNotification = await Notification.update({ state: response }, { where: { id: notificationId } })
 
     Promise.all([updateUserPostState, updateNotification]).then(res.status(200).json({ message: 'Success' }))
