@@ -662,17 +662,17 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             },
                                             subject: 'New notification',
                                             text: `
-                                                Hi ${user.name}, ${accountUser.name} just invited you to join a weave on weco.
-                                                Navigate here to accept or reject the invitation: https://${config.appURL}/p/${post.id}
+                                                Hi ${user.name}, ${accountUser.name} just invited you to join a Weave on weco: https://${config.appURL}/p/${post.id}
+                                                Log in and go to your notifications to accept or reject the invitation: https://${config.appURL}/u/${user.id}/notifications
                                             `,
                                             html: `
                                                 <p>
                                                     Hi ${user.name},
                                                     <br/>
                                                     <a href='${config.appURL}/u/${accountUser.handle}'>${accountUser.name}</a>
-                                                    just invited you to join a weave on weco.
+                                                    just invited you to join a <a href='${config.appURL}/p/${post.id}'>Weave</a> on weco.
                                                     <br/>
-                                                    Navigate <a href='${config.appURL}/p/${post.id}'>here</a> to accept or reject the invitation.
+                                                    Log in and go to your <a href='${config.appURL}/u/${user.id}/notifications'>notifications</a> to accept or reject the invitation.
                                                 </p>
                                             `,
                                         })
@@ -996,7 +996,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                     subject: 'New notification',
                     text: `
                         Hi ${nextPlayer.name}, it's your move!
-                        Add a new bead to the weave on weco: https://${config.appURL}/p/${postId}
+                        Add a new bead to the Weave on weco: https://${config.appURL}/p/${postId}
                     `,
                     html: `
                         <p>
@@ -1004,7 +1004,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                             <br/>
                             It's your move!
                             <br/>
-                            Add a new bead to the <a href='${config.appURL}/p/${postId}'>weave</a> on weco.
+                            Add a new bead to the <a href='${config.appURL}/p/${postId}'>Weave</a> on weco.
                         </p>
                     `,
                 })
