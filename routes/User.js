@@ -274,7 +274,7 @@ router.get('/user-posts', (req, res) => {
                 {
                     model: Holon,
                     as: 'IndirectSpaces',
-                    attributes: ['id', 'handle', 'state'],
+                    attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
                     through: { where: { relationship: 'indirect' }, attributes: ['type'] },
                 },
                 { 
