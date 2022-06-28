@@ -104,7 +104,7 @@ router.get('/post-data', (req, res) => {
             {
                 model: Holon,
                 as: 'DirectSpaces',
-                attributes: ['id', 'handle', 'state', 'flagImagePath'],
+                attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
                 through: { where: { relationship: 'direct' }, attributes: ['type'] },
             },
             {

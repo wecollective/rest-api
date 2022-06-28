@@ -569,7 +569,7 @@ router.get('/space-posts', (req, res) => {
                 {
                     model: Holon,
                     as: 'DirectSpaces',
-                    attributes: ['id', 'handle', 'state', 'flagImagePath'],
+                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
                     through: { where: { relationship: 'direct' }, attributes: ['type'] },
                 },
                 {
