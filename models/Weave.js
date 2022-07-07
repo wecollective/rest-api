@@ -8,7 +8,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         numberOfMoves: DataTypes.INTEGER,
         numberOfTurns: DataTypes.INTEGER,
-        allowedPostTypes: DataTypes.STRING,
+        allowedBeadTypes: DataTypes.STRING,
         moveTimeWindow: DataTypes.INTEGER,
         audioTimeLimit: DataTypes.INTEGER,
         characterLimit: DataTypes.INTEGER,

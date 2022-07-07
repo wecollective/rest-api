@@ -401,7 +401,7 @@ router.get('/user-posts', (req, res) => {
                 },
                 {
                     model: Weave,
-                    attributes: ['numberOfTurns', 'numberOfMoves', 'allowedPostTypes', 'moveTimeWindow', 'audioTimeLimit', 'characterLimit', 'fixedPlayerColors', 'privacy'],
+                    attributes: ['numberOfTurns', 'numberOfMoves', 'allowedBeadTypes', 'moveTimeWindow', 'audioTimeLimit', 'characterLimit', 'fixedPlayerColors', 'privacy'],
                     required: false
                 },
                 {

@@ -17,7 +17,7 @@ module.exports = {
             numberOfTurns: {
                 type: Sequelize.INTEGER
             },
-            allowedPostTypes: {
+            allowedBeadTypes: {
                 type: Sequelize.STRING
             },
             moveTimeWindow: {

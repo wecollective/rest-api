@@ -15,6 +15,7 @@ module.exports = {
                     type: Sequelize.DataTypes.BOOLEAN
                 }, { transaction: t }),
                 queryInterface.removeColumn('Weaves', 'moveDuration', { transaction: t }),
+                queryInterface.renameColumn('Weaves', 'allowedPostTypes', 'allowedBeadTypes'),
             ]);
         });
     },
@@ -28,7 +29,8 @@ module.exports = {
                 queryInterface.removeColumn('Weaves', 'fixedPlayerColors', { transaction: t }),
                 queryInterface.addColumn('Weaves', 'moveDuration', {
                     type: Sequelize.DataTypes.INTEGER
-                }, { transaction: t })
+                }, { transaction: t }),
+                queryInterface.renameColumn('Weaves', 'allowedBeadTypes', 'allowedPostTypes'),
             ]);
         });
     }

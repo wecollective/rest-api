@@ -236,7 +236,7 @@ router.get('/post-data', (req, res) => {
             },
             {
                 model: Weave,
-                attributes: ['numberOfMoves', 'numberOfTurns', 'allowedPostTypes', 'moveTimeWindow', 'audioTimeLimit', 'characterLimit', 'fixedPlayerColors', 'privacy'],
+                attributes: ['numberOfMoves', 'numberOfTurns', 'allowedBeadTypes', 'moveTimeWindow', 'audioTimeLimit', 'characterLimit', 'fixedPlayerColors', 'privacy'],
                 required: false
             },
             {
@@ -492,11 +492,12 @@ router.post('/create-post', authenticateToken, (req, res) => {
             topic,
             topicGroup,
             topicImage,
-            // multiplayer strings
+            // weaves
             privacy,
             userIds,
             numberOfMoves,
-            numberOfTurns
+            numberOfTurns,
+            allowedBeadTypes
         } = postData
 
         Post.create({
@@ -617,13 +618,13 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 ))
                 : null
 
-            const createMultiplayerString = (type === 'weave')
+            const createWeave = (type === 'weave')
                 ? new Promise((resolve, reject) => {
                     Weave.create({
                         numberOfMoves,
                         numberOfTurns,
                         // moveDuration,
-                        // allowedPostTypes,
+                        allowedBeadTypes,
                         privacy,
                         postId: post.id
                     }).then(async() => {
@@ -691,7 +692,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 createGBG,
                 createImages,
                 createStringPosts,
-                createMultiplayerString
+                createWeave
             ]).then((data) => {
                 res.status(200).json({
                     post,
