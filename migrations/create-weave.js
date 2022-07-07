@@ -17,11 +17,20 @@ module.exports = {
             numberOfTurns: {
                 type: Sequelize.INTEGER
             },
-            moveDuration: {
-                type: Sequelize.INTEGER
-            },
             allowedPostTypes: {
                 type: Sequelize.STRING
+            },
+            moveTimeWindow: {
+                type: Sequelize.INTEGER
+            },
+            audioTimeLimit: {
+                type: Sequelize.INTEGER
+            },
+            characterLimit: {
+                type: Sequelize.INTEGER
+            },
+            fixedPlayerColors: {
+                type: Sequelize.BOOLEAN
             },
             privacy: {
                 type: Sequelize.STRING

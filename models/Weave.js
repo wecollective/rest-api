@@ -8,8 +8,11 @@ module.exports = (sequelize, DataTypes) => {
         },
         numberOfMoves: DataTypes.INTEGER,
         numberOfTurns: DataTypes.INTEGER,
-        moveDuration: DataTypes.INTEGER,
         allowedPostTypes: DataTypes.STRING,
+        moveTimeWindow: DataTypes.INTEGER,
+        audioTimeLimit: DataTypes.INTEGER,
+        characterLimit: DataTypes.INTEGER,
+        fixedPlayerColors: DataTypes.BOOLEAN,
         privacy: DataTypes.STRING
     }, {});
     Weave.associate = function(models) {

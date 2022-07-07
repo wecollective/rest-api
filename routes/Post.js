@@ -236,7 +236,7 @@ router.get('/post-data', (req, res) => {
             },
             {
                 model: Weave,
-                attributes: ['numberOfMoves', 'numberOfTurns', 'moveDuration', 'allowedPostTypes', 'privacy'],
+                attributes: ['numberOfMoves', 'numberOfTurns', 'allowedPostTypes', 'moveTimeWindow', 'audioTimeLimit', 'characterLimit', 'fixedPlayerColors', 'privacy'],
                 required: false
             },
             {
