@@ -497,7 +497,8 @@ router.post('/create-post', authenticateToken, (req, res) => {
             userIds,
             numberOfMoves,
             numberOfTurns,
-            allowedBeadTypes
+            allowedBeadTypes,
+            audioTimeLimit,
         } = postData
 
         Post.create({
@@ -625,6 +626,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                         numberOfTurns,
                         // moveDuration,
                         allowedBeadTypes,
+                        audioTimeLimit,
                         privacy,
                         postId: post.id
                     }).then(async() => {
