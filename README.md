@@ -18,6 +18,8 @@ DEV_DB_PASSWORD=password
 ACCESS_TOKEN_SECRET=secret
 ```
 
+Generate [seeds](./docs/sequelize-commands.md)
+
 # Develop
 
 In separate terminals run:
