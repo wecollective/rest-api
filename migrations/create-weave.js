@@ -1,4 +1,4 @@
-'use strict';
+'use strict'
 module.exports = {
     up: (queryInterface, Sequelize) => {
         return queryInterface.createTable('Weaves', {
@@ -6,46 +6,46 @@ module.exports = {
                 allowNull: false,
                 autoIncrement: true,
                 primaryKey: true,
-                type: Sequelize.INTEGER
+                type: Sequelize.INTEGER,
             },
             postId: {
-                type: Sequelize.INTEGER
+                type: Sequelize.INTEGER,
             },
             numberOfMoves: {
-                type: Sequelize.INTEGER
+                type: Sequelize.INTEGER,
             },
             numberOfTurns: {
-                type: Sequelize.INTEGER
+                type: Sequelize.INTEGER,
             },
             allowedBeadTypes: {
-                type: Sequelize.STRING
+                type: Sequelize.STRING,
             },
             moveTimeWindow: {
-                type: Sequelize.INTEGER
+                type: Sequelize.INTEGER,
             },
             audioTimeLimit: {
-                type: Sequelize.INTEGER
+                type: Sequelize.INTEGER,
             },
             characterLimit: {
-                type: Sequelize.INTEGER
+                type: Sequelize.INTEGER,
             },
             fixedPlayerColors: {
-                type: Sequelize.BOOLEAN
+                type: Sequelize.BOOLEAN,
             },
             privacy: {
-                type: Sequelize.STRING
+                type: Sequelize.STRING,
             },
             createdAt: {
                 allowNull: false,
-                type: Sequelize.DATE
+                type: Sequelize.DATE,
             },
             updatedAt: {
                 allowNull: false,
-                type: Sequelize.DATE
-            }
-        });
+                type: Sequelize.DATE,
+            },
+        })
     },
     down: (queryInterface, Sequelize) => {
-        return queryInterface.dropTable('Weaves');
-    }
-};
+        return queryInterface.dropTable('Weaves')
+    },
+}

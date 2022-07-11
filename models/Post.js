@@ -1,98 +1,102 @@
-'use strict';
+'use strict'
 module.exports = (sequelize, DataTypes) => {
-    const Post = sequelize.define('Post', {
-        id: {
-            primaryKey: true,
-            type: DataTypes.INTEGER,
-            autoIncrement: true,
+    const Post = sequelize.define(
+        'Post',
+        {
+            id: {
+                primaryKey: true,
+                type: DataTypes.INTEGER,
+                autoIncrement: true,
+            },
+            type: DataTypes.STRING,
+            subType: DataTypes.STRING,
+            state: DataTypes.STRING,
+            creatorId: DataTypes.INTEGER,
+            text: DataTypes.TEXT,
+            url: DataTypes.TEXT,
+            urlImage: DataTypes.TEXT,
+            urlDomain: DataTypes.TEXT,
+            urlTitle: DataTypes.TEXT,
+            urlDescription: DataTypes.TEXT,
         },
-        type: DataTypes.STRING,
-        subType: DataTypes.STRING,
-        state: DataTypes.STRING,
-        creatorId: DataTypes.INTEGER,
-        text: DataTypes.TEXT,
-        url: DataTypes.TEXT,
-        urlImage: DataTypes.TEXT,
-        urlDomain: DataTypes.TEXT,
-        urlTitle: DataTypes.TEXT,
-        urlDescription: DataTypes.TEXT
-    }, {})
+        {}
+    )
 
-    Post.associate = function(models) {
+    Post.associate = function (models) {
         Post.belongsTo(models.User, {
             foreignKey: 'creatorId',
-            as: 'Creator'
+            as: 'Creator',
         })
 
-        Post.belongsToMany(models.Holon, { 
+        Post.belongsToMany(models.Holon, {
             through: models.PostHolon,
             as: 'AllIncludedSpaces',
-            foreignKey: 'postId'
+            foreignKey: 'postId',
         })
 
-        Post.belongsToMany(models.Holon, { 
+        Post.belongsToMany(models.Holon, {
             through: models.PostHolon,
             as: 'DirectSpaces',
-            foreignKey: 'postId'
+            foreignKey: 'postId',
         })
 
-        Post.belongsToMany(models.Holon, { 
+        Post.belongsToMany(models.Holon, {
             through: models.PostHolon,
             as: 'IndirectSpaces',
-            foreignKey: 'postId'
+            foreignKey: 'postId',
         })
 
-        Post.belongsToMany(models.Holon, { 
+        Post.belongsToMany(models.Holon, {
             through: models.PostHolon,
             as: 'Reposts',
-            foreignKey: 'postId'
+            foreignKey: 'postId',
         })
 
-        Post.belongsToMany(models.Post, { 
+        Post.belongsToMany(models.Post, {
             through: models.Link,
             as: 'StringPosts',
             foreignKey: 'itemAId',
-            otherKey: 'itemBId'
+            otherKey: 'itemBId',
         })
 
-        Post.belongsToMany(models.User, { 
+        Post.belongsToMany(models.User, {
             through: models.UserPost,
             as: 'StringPlayers',
-            foreignKey: 'postId'
+            foreignKey: 'postId',
         })
 
         Post.hasMany(models.Reaction)
 
         Post.hasMany(models.Link, {
             as: 'OutgoingLinks',
-            foreignKey: 'itemAId'
+            foreignKey: 'itemAId',
         })
-    
+
         Post.hasMany(models.Link, {
             as: 'IncomingLinks',
-            foreignKey: 'itemBId'
+            foreignKey: 'itemBId',
         })
 
         Post.hasMany(models.Comment, {
-            foreignKey: 'postId'
+            foreignKey: 'postId',
         })
 
         Post.hasMany(models.PostImage, {
-            foreignKey: 'postId'
+            foreignKey: 'postId',
         })
 
         Post.hasOne(models.GlassBeadGame, {
-            foreignKey: 'postId'
+            foreignKey: 'postId',
         })
 
         Post.hasOne(models.Event, {
-            foreignKey: 'postId'
+            foreignKey: 'postId',
         })
 
         Post.hasOne(models.Weave, {
-            foreignKey: 'postId'
+            foreignKey: 'postId',
         })
-        
+
         Post.hasMany(models.PollAnswer)
     }
     return Post

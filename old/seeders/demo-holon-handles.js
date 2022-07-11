@@ -1,15 +1,15 @@
-'use strict';
+'use strict'
 
 module.exports = {
     up: (queryInterface, Sequelize) => {
-        return queryInterface.bulkInsert('HolonHandles', [ 
+        return queryInterface.bulkInsert('HolonHandles', [
             // Posts to holon A appear within holon B
             {
                 state: 'open',
                 holonAId: 1,
                 holonBId: 1,
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
             },
             // {
             //     state: 'open',
@@ -200,10 +200,10 @@ module.exports = {
             //     createdAt: new Date(),
             //     updatedAt: new Date()
             // },
-        ]);
+        ])
     },
 
     down: (queryInterface, Sequelize) => {
-        return queryInterface.bulkDelete('HolonHandles', null, {});
-    }
-};
+        return queryInterface.bulkDelete('HolonHandles', null, {})
+    },
+}

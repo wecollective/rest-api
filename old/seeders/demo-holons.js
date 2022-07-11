@@ -1,4 +1,4 @@
-'use strict';
+'use strict'
 
 module.exports = {
     up: (queryInterface, Sequelize) => {
@@ -13,7 +13,7 @@ module.exports = {
                 flagImagePath: null,
                 coverImagePath: null,
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
             },
             //   {
             //     id: 2,
@@ -115,10 +115,10 @@ module.exports = {
             //     createdAt: new Date(),
             //     updatedAt: new Date()
             //   }
-        ]);
+        ])
     },
 
     down: (queryInterface, Sequelize) => {
-        return queryInterface.bulkDelete('Holons', null, {});
-    }
-};
+        return queryInterface.bulkDelete('Holons', null, {})
+    },
+}

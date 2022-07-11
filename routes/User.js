@@ -1,4 +1,4 @@
-require("dotenv").config()
+require('dotenv').config()
 const express = require('express')
 const router = express.Router()
 const sequelize = require('sequelize')
@@ -7,19 +7,41 @@ const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 const { postAttributes } = require('../GlobalConstants')
-const { Holon, User, Post, Reaction, Link, PostImage, Event, GlassBeadGame, GlassBead, Weave } = require('../models')
+const {
+    Holon,
+    User,
+    Post,
+    Reaction,
+    Link,
+    PostImage,
+    Event,
+    GlassBeadGame,
+    GlassBead,
+    Weave,
+} = require('../models')
 
 // GET
 router.get('/all-users', (req, res) => {
-    const { accountId, timeRange, userType, sortBy, sortOrder, searchQuery, limit, offset } = req.query
+    const { accountId, timeRange, userType, sortBy, sortOrder, searchQuery, limit, offset } =
+        req.query
 
     function findStartDate() {
         let offset = undefined
-        if (timeRange === 'Last Year') { offset = (24*60*60*1000) * 365 }
-        if (timeRange === 'Last Month') { offset = (24*60*60*1000) * 30 }
-        if (timeRange === 'Last Week') { offset = (24*60*60*1000) * 7 }
-        if (timeRange === 'Last 24 Hours') { offset = 24*60*60*1000 }
-        if (timeRange === 'Last Hour') { offset = 60*60*1000 }
+        if (timeRange === 'Last Year') {
+            offset = 24 * 60 * 60 * 1000 * 365
+        }
+        if (timeRange === 'Last Month') {
+            offset = 24 * 60 * 60 * 1000 * 30
+        }
+        if (timeRange === 'Last Week') {
+            offset = 24 * 60 * 60 * 1000 * 7
+        }
+        if (timeRange === 'Last 24 Hours') {
+            offset = 24 * 60 * 60 * 1000
+        }
+        if (timeRange === 'Last Hour') {
+            offset = 60 * 60 * 1000
+        }
         let startDate = new Date()
         startDate.setTime(startDate.getTime() - offset)
         return startDate
@@ -27,27 +49,42 @@ router.get('/all-users', (req, res) => {
 
     function findOrder() {
         let direction, order
-        if (sortOrder === 'Ascending') { direction = 'ASC' } else { direction = 'DESC' }
-        if (sortBy === 'Date') { order = [['createdAt', direction]] }
-        else { order = [[sequelize.literal(`total${sortBy}`), direction]] }
+        if (sortOrder === 'Ascending') {
+            direction = 'ASC'
+        } else {
+            direction = 'DESC'
+        }
+        if (sortBy === 'Date') {
+            order = [['createdAt', direction]]
+        } else {
+            order = [[sequelize.literal(`total${sortBy}`), direction]]
+        }
         return order
     }
 
     function findFirstAttributes() {
         let firstAttributes = ['id']
-        if (sortBy === 'Posts') { firstAttributes.push([sequelize.literal(`(
+        if (sortBy === 'Posts') {
+            firstAttributes.push([
+                sequelize.literal(`(
             SELECT COUNT(*)
                 FROM Posts
                 WHERE Posts.state = 'visible'
                 AND Posts.creatorId = User.id
-            )`), 'totalPosts'
-        ])}
-        if (sortBy === 'Comments') { firstAttributes.push([sequelize.literal(`(
+            )`),
+                'totalPosts',
+            ])
+        }
+        if (sortBy === 'Comments') {
+            firstAttributes.push([
+                sequelize.literal(`(
             SELECT COUNT(*)
                 FROM Comments
                 WHERE Comments.creatorId = User.id
-            )`), 'totalComments'
-        ])}
+            )`),
+                'totalComments',
+            ])
+        }
         return firstAttributes
     }
 
@@ -63,82 +100,116 @@ router.get('/all-users', (req, res) => {
             [Op.or]: [
                 { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
                 { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { bio: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } }
-            ]
+                { bio: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+            ],
         },
         order,
         limit: Number(limit),
         offset: Number(offset),
         attributes: firstAttributes,
-        subQuery: false
+        subQuery: false,
     })
-    .then(users => {
-        User.findAll({ 
-            where: { id: users.map(user => user.id) },
-            attributes: [
-                'id', 'handle', 'name', 'bio', 'flagImagePath', 'coverImagePath', 'createdAt',
-                [sequelize.literal(`(
+        .then((users) => {
+            User.findAll({
+                where: { id: users.map((user) => user.id) },
+                attributes: [
+                    'id',
+                    'handle',
+                    'name',
+                    'bio',
+                    'flagImagePath',
+                    'coverImagePath',
+                    'createdAt',
+                    [
+                        sequelize.literal(`(
                     SELECT COUNT(*)
                         FROM Posts
                         WHERE Posts.state = 'visible'
                         AND Posts.type IN ('text', 'url', 'images', 'audio', 'event', 'string', 'glass-bead-game', 'prism')
                         AND Posts.creatorId = User.id
-                    )`), 'totalPosts'
-                ],
-                [sequelize.literal(`(
+                    )`),
+                        'totalPosts',
+                    ],
+                    [
+                        sequelize.literal(`(
                     SELECT COUNT(*)
                         FROM Comments
                         WHERE Comments.creatorId = User.id
-                    )`), 'totalComments'
+                    )`),
+                        'totalComments',
+                    ],
                 ],
-            ],
-            order,
-            // include: []
-        }).then(data => { res.json(data) })
-    })
-    .catch(err => console.log(err))
+                order,
+                // include: []
+            }).then((data) => {
+                res.json(data)
+            })
+        })
+        .catch((err) => console.log(err))
 })
 
 router.get('/user-data', (req, res) => {
     const { userHandle } = req.query
-    User.findOne({ 
+    User.findOne({
         where: { handle: userHandle },
         attributes: ['id', 'handle', 'name', 'bio', 'flagImagePath', 'coverImagePath', 'createdAt'],
         include: [
-            { 
+            {
                 model: Holon,
                 as: 'FollowedHolons',
                 attributes: ['handle', 'name', 'flagImagePath'],
-                through: { where: { relationship: 'follower', state: 'active' }, attributes: [] }
+                through: { where: { relationship: 'follower', state: 'active' }, attributes: [] },
             },
-            { 
+            {
                 model: Holon,
                 as: 'ModeratedHolons',
                 attributes: ['handle', 'name', 'flagImagePath'],
-                through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] }
-            }
-            // { 
+                through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
+            },
+            // {
             //     model: Comment,
             //     //attributes: ['creator', 'text', 'createdAt']
             // }
-        ]
+        ],
     })
-    .then(user => { res.json(user) })
-    .catch(err => console.log(err))
+        .then((user) => {
+            res.json(user)
+        })
+        .catch((err) => console.log(err))
 })
 
 router.get('/user-posts', (req, res) => {
-    const { accountId, userId, timeRange, postType, sortBy, sortOrder, searchQuery, limit, offset } = req.query
+    const {
+        accountId,
+        userId,
+        timeRange,
+        postType,
+        sortBy,
+        sortOrder,
+        searchQuery,
+        limit,
+        offset,
+    } = req.query
 
     function findStartDate() {
-        const hour = 60*60*1000
+        const hour = 60 * 60 * 1000
         const day = hour * 24
         let offset = undefined
-        if (timeRange === 'Last Year') { offset = day * 365 }
-        if (timeRange === 'Last Month') { offset = day * 30 }
-        if (timeRange === 'Last Week') { offset = day * 7 }
-        if (timeRange === 'Last 24 Hours') { offset = day }
-        if (timeRange === 'Last Hour') { offset = hour }
+        if (timeRange === 'Last Year') {
+            offset = day * 365
+        }
+        if (timeRange === 'Last Month') {
+            offset = day * 30
+        }
+        if (timeRange === 'Last Week') {
+            offset = day * 7
+        }
+        if (timeRange === 'Last 24 Hours') {
+            offset = day
+        }
+        if (timeRange === 'Last Hour') {
+            offset = hour
+        }
         var startDate = new Date()
         startDate.setTime(startDate.getTime() - offset)
         return startDate
@@ -146,42 +217,86 @@ router.get('/user-posts', (req, res) => {
 
     function findType() {
         let type
-        if (postType === 'All Types') { type = ['text', 'url', 'image', 'audio', 'event', 'glass-bead-game', 'string', 'weave', 'prism'] }
-        if (postType !== 'All Types') { type = postType.replace(/\s+/g, '-').toLowerCase() }
+        if (postType === 'All Types') {
+            type = [
+                'text',
+                'url',
+                'image',
+                'audio',
+                'event',
+                'glass-bead-game',
+                'string',
+                'weave',
+                'prism',
+            ]
+        }
+        if (postType !== 'All Types') {
+            type = postType.replace(/\s+/g, '-').toLowerCase()
+        }
         return type
     }
 
     function findOrder() {
         let direction, order
-        if (sortOrder === 'Ascending') { direction = 'ASC' } else { direction = 'DESC' }
-        if (sortBy === 'Date') { order = [['createdAt', direction]] }
-        if (sortBy === 'Reactions') { order = [[sequelize.literal(`totalReactions`), direction]] }
-        if (sortBy !== 'Reactions' && sortBy !== 'Date') { order = [[sequelize.literal(`total${sortBy}`), direction]] }
+        if (sortOrder === 'Ascending') {
+            direction = 'ASC'
+        } else {
+            direction = 'DESC'
+        }
+        if (sortBy === 'Date') {
+            order = [['createdAt', direction]]
+        }
+        if (sortBy === 'Reactions') {
+            order = [[sequelize.literal(`totalReactions`), direction]]
+        }
+        if (sortBy !== 'Reactions' && sortBy !== 'Date') {
+            order = [[sequelize.literal(`total${sortBy}`), direction]]
+        }
         return order
     }
 
     function findFirstAttributes() {
         let firstAttributes = ['id']
-        if (sortBy === 'Comments') { firstAttributes.push([sequelize.literal(
-            `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = Post.id)`
-            ),'totalComments'
-        ])}
-        if (sortBy === 'Reactions') { firstAttributes.push([sequelize.literal(
-            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type != 'vote' AND Reaction.state = 'active')`
-            ),'totalReactions'
-        ])}
-        if (sortBy === 'Likes') { firstAttributes.push([sequelize.literal(
-            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'like' AND Reaction.state = 'active')`
-            ),'totalLikes'
-        ])}
-        if (sortBy === 'Ratings') { firstAttributes.push([sequelize.literal(
-            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'rating' AND Reaction.state = 'active')`
-            ),'totalRatings'
-        ])}
-        if (sortBy === 'Reposts') { firstAttributes.push([sequelize.literal(
-            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'repost' AND Reaction.state = 'active')`
-            ),'totalReposts'
-        ])}
+        if (sortBy === 'Comments') {
+            firstAttributes.push([
+                sequelize.literal(
+                    `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = Post.id)`
+                ),
+                'totalComments',
+            ])
+        }
+        if (sortBy === 'Reactions') {
+            firstAttributes.push([
+                sequelize.literal(
+                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type != 'vote' AND Reaction.state = 'active')`
+                ),
+                'totalReactions',
+            ])
+        }
+        if (sortBy === 'Likes') {
+            firstAttributes.push([
+                sequelize.literal(
+                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'like' AND Reaction.state = 'active')`
+                ),
+                'totalLikes',
+            ])
+        }
+        if (sortBy === 'Ratings') {
+            firstAttributes.push([
+                sequelize.literal(
+                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'rating' AND Reaction.state = 'active')`
+                ),
+                'totalRatings',
+            ])
+        }
+        if (sortBy === 'Reposts') {
+            firstAttributes.push([
+                sequelize.literal(
+                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'repost' AND Reaction.state = 'active')`
+                ),
+                'totalReposts',
+            ])
+        }
         return firstAttributes
     }
 
@@ -196,26 +311,27 @@ router.get('/user-posts', (req, res) => {
     // Final function used to replace PostHolons object with a simpler array.
     Post.findAll({
         subQuery: false,
-        where: { 
+        where: {
             creatorId: userId,
             state: 'visible',
             createdAt: { [Op.between]: [startDate, Date.now()] },
             type,
             [Op.or]: [
                 { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { text: null }
-            ]
+                { text: null },
+            ],
         },
         order,
         limit: Number(limit),
         offset: Number(offset),
-        attributes: firstAttributes
+        attributes: firstAttributes,
     })
-    .then(posts => {
-        // Add account reaction data to post attributes
-        let mainAttributes = [
-            ...postAttributes,
-            [sequelize.literal(`(
+        .then((posts) => {
+            // Add account reaction data to post attributes
+            let mainAttributes = [
+                ...postAttributes,
+                [
+                    sequelize.literal(`(
                 SELECT COUNT(*) > 0
                 FROM Reactions
                 AS Reaction
@@ -223,9 +339,11 @@ router.get('/user-posts', (req, res) => {
                 AND Reaction.userId = ${accountId}
                 AND Reaction.type = 'like'
                 AND Reaction.state = 'active'
-                )`),'accountLike'
-            ],
-            [sequelize.literal(`(
+                )`),
+                    'accountLike',
+                ],
+                [
+                    sequelize.literal(`(
                 SELECT COUNT(*) > 0
                 FROM Reactions
                 AS Reaction
@@ -233,9 +351,11 @@ router.get('/user-posts', (req, res) => {
                 AND Reaction.userId = ${accountId}
                 AND Reaction.type = 'rating'
                 AND Reaction.state = 'active'
-                )`),'accountRating'
-            ],
-            [sequelize.literal(`(
+                )`),
+                    'accountRating',
+                ],
+                [
+                    sequelize.literal(`(
                 SELECT COUNT(*) > 0
                 FROM Reactions
                 AS Reaction
@@ -243,197 +363,212 @@ router.get('/user-posts', (req, res) => {
                 AND Reaction.userId = ${accountId}
                 AND Reaction.type = 'repost'
                 AND Reaction.state = 'active'
-                )`),'accountRepost'
-            ],
-            [sequelize.literal(`(
+                )`),
+                    'accountRepost',
+                ],
+                [
+                    sequelize.literal(`(
                 SELECT COUNT(*) > 0
                 FROM Links
                 AS Link
                 WHERE Link.state = 'visible'
                 AND Link.creatorId = ${accountId}
                 AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
-                )`),'accountLink'
+                )`),
+                    'accountLink',
+                ],
             ]
-        ]
-        return Post.findAll({ 
-            where: { id: posts.map(post => post.id) },
-            attributes: mainAttributes,
-            order,
-            include: [
-                {
-                    model: User,
-                    as: 'Creator',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                },
-                {
-                    model: Holon,
-                    as: 'DirectSpaces',
-                    attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
-                    through: { where: { relationship: 'direct' }, attributes: ['type'] },
-                },
-                {
-                    model: Holon,
-                    as: 'IndirectSpaces',
-                    attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
-                    through: { where: { relationship: 'indirect' }, attributes: ['type'] },
-                },
-                { 
-                    model: Reaction,
-                    where: { state: 'active' },
-                    required: false,
-                    attributes: ['id', 'type', 'value'],
-                    include: [
-                        {
-                            model: User,
-                            as: 'Creator',
-                            attributes: ['id', 'handle', 'name', 'flagImagePath']
-                        },
-                        {
-                            model: Holon,
-                            as: 'Space',
-                            attributes: ['id', 'handle', 'name', 'flagImagePath']
-                        },
-                    ]
-                },
-                {
-                    model: Link,
-                    as: 'OutgoingLinks',
-                    where: { state: 'visible' },
-                    required: false,
-                    attributes: ['id'],
-                    include: [
-                        { 
-                            model: User,
-                            as: 'Creator',
-                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                        },
-                        { 
-                            model: Post,
-                            as: 'PostB',
-                            attributes: ['id'],
-                            include: [
-                                { 
-                                    model: User,
-                                    as: 'Creator',
-                                    attributes: ['handle', 'name', 'flagImagePath'],
-                                }
-                            ]
-                        },
-                    ]
-                },
-                {
-                    model: Link,
-                    as: 'IncomingLinks',
-                    where: { state: 'visible' },
-                    required: false,
-                    attributes: ['id'],
-                    include: [
-                        { 
-                            model: User,
-                            as: 'Creator',
-                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                        },
-                        { 
-                            model: Post,
-                            as: 'PostA',
-                            attributes: ['id'],
-                            include: [
-                                { 
-                                    model: User,
-                                    as: 'Creator',
-                                    attributes: ['handle', 'name', 'flagImagePath'],
-                                }
-                            ]
-                        },
-                    ]
-                },
-                {
-                    model: PostImage,
-                    required: false,
-                },
-                {
-                    model: Event,
-                    include: [
-                        {
-                            model: User,
-                            as: 'Going',
-                            through: { where: { relationship: 'going', state: 'active' } },
-                        },
-                        {
-                            model: User,
-                            as: 'Interested',
-                            through: { where: { relationship: 'interested', state: 'active' } },
-                        }
-                    ]
-                },
-                {
-                    model: GlassBeadGame,
-                    attributes: ['topic', 'topicGroup', 'topicImage'],
-                    include: [{ 
-                        model: GlassBead,
-                        order: [['index', 'ASC']],
+            return Post.findAll({
+                where: { id: posts.map((post) => post.id) },
+                attributes: mainAttributes,
+                order,
+                include: [
+                    {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                    },
+                    {
+                        model: Holon,
+                        as: 'DirectSpaces',
+                        attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
+                        through: { where: { relationship: 'direct' }, attributes: ['type'] },
+                    },
+                    {
+                        model: Holon,
+                        as: 'IndirectSpaces',
+                        attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
+                        through: { where: { relationship: 'indirect' }, attributes: ['type'] },
+                    },
+                    {
+                        model: Reaction,
+                        where: { state: 'active' },
+                        required: false,
+                        attributes: ['id', 'type', 'value'],
                         include: [
                             {
                                 model: User,
-                                as: 'user',
-                                attributes: ['handle', 'name', 'flagImagePath']
-                            }
-                        ]
-                    }]
-                },
-                {
-                    model: Post,
-                    as: 'StringPosts',
-                    through: { where: { state: 'visible' } },
-                    required: false,
-                    include: [
-                        {
-                            model: User,
-                            as: 'Creator',
-                            attributes: ['handle', 'name', 'flagImagePath']
-                        },
-                        { 
-                            model: PostImage,
-                            required: false,
-                            attributes: ['caption', 'createdAt', 'id', 'index', 'url']
-                        }
-                    ]
-                },
-                {
-                    model: Weave,
-                    attributes: ['numberOfTurns', 'numberOfMoves', 'allowedBeadTypes', 'moveTimeWindow', 'audioTimeLimit', 'characterLimit', 'fixedPlayerColors', 'privacy'],
-                    required: false
-                },
-                {
-                    model: User,
-                    as: 'StringPlayers',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    through: { where: { type: 'weave' }, attributes: ['index', 'state'] },
-                    required: false
-                },
-            ]
-        })
-        .then(posts => {
-            posts.forEach(post => {
-                post.DirectSpaces.forEach(space => {
-                    space.setDataValue('type', space.dataValues.PostHolon.type)
-                    delete space.dataValues.PostHolon
+                                as: 'Creator',
+                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            },
+                            {
+                                model: Holon,
+                                as: 'Space',
+                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            },
+                        ],
+                    },
+                    {
+                        model: Link,
+                        as: 'OutgoingLinks',
+                        where: { state: 'visible' },
+                        required: false,
+                        attributes: ['id'],
+                        include: [
+                            {
+                                model: User,
+                                as: 'Creator',
+                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            },
+                            {
+                                model: Post,
+                                as: 'PostB',
+                                attributes: ['id'],
+                                include: [
+                                    {
+                                        model: User,
+                                        as: 'Creator',
+                                        attributes: ['handle', 'name', 'flagImagePath'],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        model: Link,
+                        as: 'IncomingLinks',
+                        where: { state: 'visible' },
+                        required: false,
+                        attributes: ['id'],
+                        include: [
+                            {
+                                model: User,
+                                as: 'Creator',
+                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            },
+                            {
+                                model: Post,
+                                as: 'PostA',
+                                attributes: ['id'],
+                                include: [
+                                    {
+                                        model: User,
+                                        as: 'Creator',
+                                        attributes: ['handle', 'name', 'flagImagePath'],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        model: PostImage,
+                        required: false,
+                    },
+                    {
+                        model: Event,
+                        include: [
+                            {
+                                model: User,
+                                as: 'Going',
+                                through: { where: { relationship: 'going', state: 'active' } },
+                            },
+                            {
+                                model: User,
+                                as: 'Interested',
+                                through: { where: { relationship: 'interested', state: 'active' } },
+                            },
+                        ],
+                    },
+                    {
+                        model: GlassBeadGame,
+                        attributes: ['topic', 'topicGroup', 'topicImage'],
+                        include: [
+                            {
+                                model: GlassBead,
+                                order: [['index', 'ASC']],
+                                include: [
+                                    {
+                                        model: User,
+                                        as: 'user',
+                                        attributes: ['handle', 'name', 'flagImagePath'],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        model: Post,
+                        as: 'StringPosts',
+                        through: { where: { state: 'visible' } },
+                        required: false,
+                        include: [
+                            {
+                                model: User,
+                                as: 'Creator',
+                                attributes: ['handle', 'name', 'flagImagePath'],
+                            },
+                            {
+                                model: PostImage,
+                                required: false,
+                                attributes: ['caption', 'createdAt', 'id', 'index', 'url'],
+                            },
+                        ],
+                    },
+                    {
+                        model: Weave,
+                        attributes: [
+                            'numberOfTurns',
+                            'numberOfMoves',
+                            'allowedBeadTypes',
+                            'moveTimeWindow',
+                            'audioTimeLimit',
+                            'characterLimit',
+                            'fixedPlayerColors',
+                            'privacy',
+                        ],
+                        required: false,
+                    },
+                    {
+                        model: User,
+                        as: 'StringPlayers',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                        through: { where: { type: 'weave' }, attributes: ['index', 'state'] },
+                        required: false,
+                    },
+                ],
+            }).then((posts) => {
+                posts.forEach((post) => {
+                    post.DirectSpaces.forEach((space) => {
+                        space.setDataValue('type', space.dataValues.PostHolon.type)
+                        delete space.dataValues.PostHolon
+                    })
+                    post.IndirectSpaces.forEach((space) => {
+                        space.setDataValue('type', space.dataValues.PostHolon.type)
+                        delete space.dataValues.PostHolon
+                    })
+                    // convert SQL numeric booleans to JS booleans
+                    post.setDataValue('accountLike', !!post.dataValues.accountLike)
+                    post.setDataValue('accountRating', !!post.dataValues.accountRating)
+                    post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
+                    post.setDataValue('accountLink', !!post.dataValues.accountLink)
                 })
-                post.IndirectSpaces.forEach(space => {
-                    space.setDataValue('type', space.dataValues.PostHolon.type)
-                    delete space.dataValues.PostHolon
-                })
-                // convert SQL numeric booleans to JS booleans
-                post.setDataValue('accountLike', !!post.dataValues.accountLike)
-                post.setDataValue('accountRating', !!post.dataValues.accountRating)
-                post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
-                post.setDataValue('accountLink', !!post.dataValues.accountLink)
+                return posts
             })
-            return posts
         })
-    })
-    .then(data => { res.json(data) })
-    .catch(err => console.log(err))
+        .then((data) => {
+            res.json(data)
+        })
+        .catch((err) => console.log(err))
 })
 
 // POST
@@ -448,8 +583,8 @@ router.post('/find-users', (req, res) => {
                 { handle: { [Op.like]: `%${query}%` } },
                 { name: { [Op.like]: `%${query}%` } },
             ],
-        }
-    }).then(users => res.send(users))
+        },
+    }).then((users) => res.send(users))
 })
 
 module.exports = router

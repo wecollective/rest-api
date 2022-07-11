@@ -1,4 +1,4 @@
-require("dotenv").config()
+require('dotenv').config()
 const config = require('../Config')
 const express = require('express')
 const router = express.Router()
@@ -14,7 +14,7 @@ const multerS3 = require('multer-s3')
 aws.config.update({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    region: 'eu-west-1'
+    region: 'eu-west-1',
 })
 const s3 = new aws.S3({})
 const fs = require('fs')
@@ -51,7 +51,8 @@ router.get('/post-data', (req, res) => {
     const { accountId, postId } = req.query
     let attributes = [
         ...postAttributes,
-        [sequelize.literal(`(
+        [
+            sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM Reactions
             AS Reaction
@@ -59,9 +60,11 @@ router.get('/post-data', (req, res) => {
             AND Reaction.userId = ${accountId}
             AND Reaction.type = 'like'
             AND Reaction.state = 'active'
-            )`),'accountLike'
+            )`),
+            'accountLike',
         ],
-        [sequelize.literal(`(
+        [
+            sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM Reactions
             AS Reaction
@@ -69,9 +72,11 @@ router.get('/post-data', (req, res) => {
             AND Reaction.userId = ${accountId}
             AND Reaction.type = 'rating'
             AND Reaction.state = 'active'
-            )`),'accountRating'
+            )`),
+            'accountRating',
         ],
-        [sequelize.literal(`(
+        [
+            sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM PostHolons
             AS PostHolon
@@ -79,9 +84,11 @@ router.get('/post-data', (req, res) => {
             AND PostHolon.creatorId = ${accountId}
             AND PostHolon.type = 'repost'
             AND PostHolon.relationship = 'direct'
-            )`),'accountRepost'
+            )`),
+            'accountRepost',
         ],
-        [sequelize.literal(`(
+        [
+            sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM Links
             AS Link
@@ -89,10 +96,11 @@ router.get('/post-data', (req, res) => {
             AND Link.type != 'string-post'
             AND Link.creatorId = ${accountId}
             AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
-            )`),'accountLink'
+            )`),
+            'accountLink',
         ],
     ]
-    Post.findOne({ 
+    Post.findOne({
         where: { id: postId, state: 'visible' },
         attributes: attributes,
         include: [
@@ -113,7 +121,7 @@ router.get('/post-data', (req, res) => {
                 attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
                 through: { where: { relationship: 'indirect' }, attributes: ['type'] },
             },
-            { 
+            {
                 model: Reaction,
                 where: { state: 'active' },
                 required: false,
@@ -122,14 +130,14 @@ router.get('/post-data', (req, res) => {
                     {
                         model: User,
                         as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath']
+                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     },
                     {
                         model: Holon,
                         as: 'Space',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath']
+                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     },
-                ]
+                ],
             },
             {
                 model: Link,
@@ -138,24 +146,24 @@ router.get('/post-data', (req, res) => {
                 required: false,
                 attributes: ['id'],
                 include: [
-                    { 
+                    {
                         model: User,
                         as: 'Creator',
                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     },
-                    { 
+                    {
                         model: Post,
                         as: 'PostB',
                         attributes: ['id'],
                         include: [
-                            { 
+                            {
                                 model: User,
                                 as: 'Creator',
                                 attributes: ['handle', 'name', 'flagImagePath'],
-                            }
-                        ]
+                            },
+                        ],
                     },
-                ]
+                ],
             },
             {
                 model: Link,
@@ -164,24 +172,24 @@ router.get('/post-data', (req, res) => {
                 required: false,
                 attributes: ['id'],
                 include: [
-                    { 
+                    {
                         model: User,
                         as: 'Creator',
                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     },
-                    { 
+                    {
                         model: Post,
                         as: 'PostA',
                         attributes: ['id'],
                         include: [
-                            { 
+                            {
                                 model: User,
                                 as: 'Creator',
                                 attributes: ['handle', 'name', 'flagImagePath'],
-                            }
-                        ]
+                            },
+                        ],
                     },
-                ]
+                ],
             },
             {
                 model: PostImage,
@@ -199,22 +207,26 @@ router.get('/post-data', (req, res) => {
                         model: User,
                         as: 'Interested',
                         through: { where: { relationship: 'interested', state: 'active' } },
-                    }
-                ]
+                    },
+                ],
             },
             {
                 model: GlassBeadGame,
                 attributes: ['topic', 'topicGroup', 'topicImage'],
-                include: [{ 
-                    model: GlassBead,
-                    where: { state: 'visible' },
-                    required: false,
-                    include: [{
-                        model: User,
-                        as: 'user',
-                        attributes: ['handle', 'name', 'flagImagePath']
-                    }]
-                }]
+                include: [
+                    {
+                        model: GlassBead,
+                        where: { state: 'visible' },
+                        required: false,
+                        include: [
+                            {
+                                model: User,
+                                as: 'user',
+                                attributes: ['handle', 'name', 'flagImagePath'],
+                            },
+                        ],
+                    },
+                ],
             },
             {
                 model: Post,
@@ -225,52 +237,61 @@ router.get('/post-data', (req, res) => {
                     {
                         model: User,
                         as: 'Creator',
-                        attributes: ['handle', 'name', 'flagImagePath']
+                        attributes: ['handle', 'name', 'flagImagePath'],
                     },
-                    { 
+                    {
                         model: PostImage,
                         required: false,
-                        attributes: ['caption', 'createdAt', 'id', 'index', 'url']
-                    }
-                ]
+                        attributes: ['caption', 'createdAt', 'id', 'index', 'url'],
+                    },
+                ],
             },
             {
                 model: Weave,
-                attributes: ['numberOfMoves', 'numberOfTurns', 'allowedBeadTypes', 'moveTimeWindow', 'audioTimeLimit', 'characterLimit', 'fixedPlayerColors', 'privacy'],
-                required: false
+                attributes: [
+                    'numberOfMoves',
+                    'numberOfTurns',
+                    'allowedBeadTypes',
+                    'moveTimeWindow',
+                    'audioTimeLimit',
+                    'characterLimit',
+                    'fixedPlayerColors',
+                    'privacy',
+                ],
+                required: false,
             },
             {
                 model: User,
                 as: 'StringPlayers',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
                 through: { where: { type: 'weave' }, attributes: ['index', 'state'] },
-                required: false
+                required: false,
             },
-        ]
+        ],
     })
-    .then(post => {
-        post.DirectSpaces.forEach(space => {
-            space.setDataValue('type', space.dataValues.PostHolon.type)
-            delete space.dataValues.PostHolon
+        .then((post) => {
+            post.DirectSpaces.forEach((space) => {
+                space.setDataValue('type', space.dataValues.PostHolon.type)
+                delete space.dataValues.PostHolon
+            })
+            post.IndirectSpaces.forEach((space) => {
+                space.setDataValue('type', space.dataValues.PostHolon.type)
+                delete space.dataValues.PostHolon
+            })
+            // convert SQL numeric booleans to JS booleans
+            post.setDataValue('accountLike', !!post.dataValues.accountLike)
+            post.setDataValue('accountRating', !!post.dataValues.accountRating)
+            post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
+            post.setDataValue('accountLink', !!post.dataValues.accountLink)
+            res.json(post)
         })
-        post.IndirectSpaces.forEach(space => {
-            space.setDataValue('type', space.dataValues.PostHolon.type)
-            delete space.dataValues.PostHolon
-        })
-        // convert SQL numeric booleans to JS booleans
-        post.setDataValue('accountLike', !!post.dataValues.accountLike)
-        post.setDataValue('accountRating', !!post.dataValues.accountRating)
-        post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
-        post.setDataValue('accountLink', !!post.dataValues.accountLink)
-        res.json(post)
-    })
-    .catch(err => console.log(err))
+        .catch((err) => console.log(err))
 })
 
 router.get('/post-comments', (req, res) => {
     const { postId } = req.query
 
-    Comment.findAll({ 
+    Comment.findAll({
         where: {
             postId,
             state: 'visible',
@@ -282,7 +303,7 @@ router.get('/post-comments', (req, res) => {
             {
                 model: User,
                 as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath']
+                attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
             {
                 model: Comment,
@@ -295,61 +316,69 @@ router.get('/post-comments', (req, res) => {
                     {
                         model: User,
                         as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath']
-                    }
-                ]
+                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                    },
+                ],
             },
-        ]
+        ],
     })
-    .then(comments => { res.json(comments) })
-    .catch(err => console.log(err))
+        .then((comments) => {
+            res.json(comments)
+        })
+        .catch((err) => console.log(err))
 })
 
 router.get('/poll-votes', (req, res) => {
-    Reaction.findAll({ 
+    Reaction.findAll({
         where: { type: 'vote', postId: req.query.postId },
-        attributes: ['pollAnswerId', 'value', 'createdAt']
+        attributes: ['pollAnswerId', 'value', 'createdAt'],
     })
-    .then(labels => {
-        labels.forEach(label => {
-            label.setDataValue("parsedCreatedAt", Date.parse(label.createdAt))
-            delete label.dataValues.createdAt
+        .then((labels) => {
+            labels.forEach((label) => {
+                label.setDataValue('parsedCreatedAt', Date.parse(label.createdAt))
+                delete label.dataValues.createdAt
+            })
+            return labels
         })
-        return labels
-    })
-    .then(labels => { res.json(labels) })
+        .then((labels) => {
+            res.json(labels)
+        })
 })
 
 router.get('/prism-data', (req, res) => {
     const { postId } = req.query
-    Prism.findOne({ 
+    Prism.findOne({
         where: { postId: postId },
         include: [
-            { 
+            {
                 model: User,
                 attributes: ['handle', 'name', 'flagImagePath'],
-                through: { attributes: [] }
-            }
-        ]
+                through: { attributes: [] },
+            },
+        ],
     })
-    .then(prism => { res.json(prism) })
-    .catch(err => console.log(err))
+        .then((prism) => {
+            res.json(prism)
+        })
+        .catch((err) => console.log(err))
 })
 
 router.get('/plot-graph-data', (req, res) => {
     const { postId } = req.query
-    PlotGraph.findOne({ 
+    PlotGraph.findOne({
         where: { postId: postId },
         // include: [
-        //     { 
+        //     {
         //         model: User,
         //         attributes: ['handle', 'name', 'flagImagePath'],
         //         through: { attributes: [] }
         //     }
         // ]
     })
-    .then(plotGraph => { res.json(plotGraph) })
-    .catch(err => console.log(err))
+        .then((plotGraph) => {
+            res.json(plotGraph)
+        })
+        .catch((err) => console.log(err))
 })
 
 router.get('/scrape-url', async (req, res) => {
@@ -359,8 +388,10 @@ router.get('/scrape-url', async (req, res) => {
         const browser = await puppeteer.launch() // { headless: false })
         const page = await browser.newPage()
         await page.goto(url, { waitUntil: 'domcontentloaded' }) // { timeout: 60000 }, { waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2' }
-        await page.evaluate(async() => {
-            const youtubeCookieConsent = await document.querySelector('base[href="https://consent.youtube.com/"]')
+        await page.evaluate(async () => {
+            const youtubeCookieConsent = await document.querySelector(
+                'base[href="https://consent.youtube.com/"]'
+            )
             if (youtubeCookieConsent) {
                 const rejectButton = await document.querySelector('button[aria-label="Reject all"]')
                 rejectButton.click()
@@ -370,7 +401,7 @@ router.get('/scrape-url', async (req, res) => {
             }
         })
         await page.waitForSelector('title')
-        const urlData = await page.evaluate(async() => {
+        const urlData = await page.evaluate(async () => {
             let data = {
                 title: document.title || null,
                 description: null,
@@ -403,20 +434,20 @@ router.get('/scrape-url', async (req, res) => {
         if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
         res.send(urlData)
         await browser.close()
-    } catch(e) {
+    } catch (e) {
         console.log('error: ', e)
         res.send({
             title: null,
             description: null,
             domain: null,
-            image: null
+            image: null,
         })
     }
 })
 
 router.get('/glass-bead-game-data', (req, res) => {
     const { postId } = req.query
-    GlassBeadGame.findOne({ 
+    GlassBeadGame.findOne({
         where: { postId },
         attributes: [
             'id',
@@ -431,40 +462,42 @@ router.get('/glass-bead-game-data', (req, res) => {
             'introDuration',
             'intervalDuration',
             'outroDuration',
-            'locked'
+            'locked',
         ],
         order: [
             [GlassBeadGameComment, 'createdAt', 'ASC'],
             [GlassBead, 'createdAt', 'DESC'],
         ],
         include: [
-            { 
+            {
                 model: GlassBead,
                 where: { state: 'visible' },
                 required: false,
-                include: [{
-                    model: User,
-                    as: 'user',
-                    attributes: ['handle', 'name', 'flagImagePath']
-                }]
+                include: [
+                    {
+                        model: User,
+                        as: 'user',
+                        attributes: ['handle', 'name', 'flagImagePath'],
+                    },
+                ],
             },
             {
                 model: GlassBeadGameComment,
                 required: false,
-                include: [{
-                    model: User,
-                    required: false,
-                    as: 'user',
-                    attributes: ['handle', 'name', 'flagImagePath']
-                }]
+                include: [
+                    {
+                        model: User,
+                        required: false,
+                        as: 'user',
+                        attributes: ['handle', 'name', 'flagImagePath'],
+                    },
+                ],
             },
-
-        ]
+        ],
     })
-    .then(post => res.json(post))
-    .catch(err => console.log(err))
+        .then((post) => res.json(post))
+        .catch((err) => console.log(err))
 })
-
 
 // POST
 router.post('/create-post', authenticateToken, (req, res) => {
@@ -511,164 +544,217 @@ router.post('/create-post', authenticateToken, (req, res) => {
             urlDomain,
             urlTitle,
             urlDescription,
-        }).then(async post => {
+        }).then(async (post) => {
             const indirectSpaceIds = await new Promise((resolve, reject) => {
-                Promise.all(spaceIds.map((id) => Holon.findOne({
-                    where: { id, state: 'active' },
-                    attributes: [],
-                    include: [{
-                        model: Holon,
-                        as: 'HolonHandles',
-                        attributes: ['id'],
-                        through: { where: { state: 'open' }, attributes: [] }
-                    }]
-                }))).then((spaces) => {
+                Promise.all(
+                    spaceIds.map((id) =>
+                        Holon.findOne({
+                            where: { id, state: 'active' },
+                            attributes: [],
+                            include: [
+                                {
+                                    model: Holon,
+                                    as: 'HolonHandles',
+                                    attributes: ['id'],
+                                    through: { where: { state: 'open' }, attributes: [] },
+                                },
+                            ],
+                        })
+                    )
+                ).then((spaces) => {
                     const ids = []
-                    spaces.forEach((space) => ids.push(...space.HolonHandles.map(holon => holon.id)))
-                    const filteredIds = [...new Set(ids)].filter(id => !spaceIds.includes(id))
+                    spaces.forEach((space) =>
+                        ids.push(...space.HolonHandles.map((holon) => holon.id))
+                    )
+                    const filteredIds = [...new Set(ids)].filter((id) => !spaceIds.includes(id))
                     resolve(filteredIds)
                 })
             })
 
-            const createDirectRelationships = Promise.all(spaceIds.map((id) => PostHolon.create({
-                type: 'post',
-                relationship: 'direct',
-                creatorId: accountId,
-                postId: post.id,
-                holonId: id
-            })))
-
-            const createIndirectRelationships = Promise.all(indirectSpaceIds.map((id) => PostHolon.create({
-                type: 'post',
-                relationship: 'indirect',
-                creatorId: accountId,
-                postId: post.id,
-                holonId: id
-            })))
-
-            const createEvent = (type === 'event' || (type === 'glass-bead-game' && startTime))
-                ? Event.create({
-                    postId: post.id,
-                    state: 'active',
-                    title,
-                    startTime,
-                    endTime,
-                })
-                : null
-
-            const createGBG = (type === 'glass-bead-game')
-                ? GlassBeadGame.create({
-                    postId: post.id,
-                    topic,
-                    topicGroup,
-                    topicImage,
-                    locked: false,
-                })
-                : null
-
-            const createImages = (type === 'image')
-                ? Promise.all(imageData.map((image, index) => PostImage.create({
-                    postId: post.id,
-                    creatorId: accountId,
-                    index,
-                    url: image.url || files.find((file) => file.index === index).location,
-                    caption: image.caption,
-                })))
-                : null
-
-
-            const createStringPosts = (type === 'string')
-                ? Promise.all(stringData.map((bead, index) => 
-                    new Promise((resolve, reject) => {
-                        Post.create({
-                            type: `string-${bead.type}`,
-                            state: 'visible',
-                            creatorId: accountId,
-                            text: bead.text,
-                            url: bead.type === 'audio' ? files.find((file) => file.beadIndex === index).location : bead.url,
-                            urlImage: bead.type === 'url' ? bead.urlData.image : null,
-                            urlDomain: bead.type === 'url' ? bead.urlData.domain : null,
-                            urlTitle: bead.type === 'url' ? bead.urlData.title : null,
-                            urlDescription: bead.type === 'url' ? bead.urlData.description : null,
-                            state: 'visible'
-                        }).then((stringPost) => {
-                            const createPostImages = (bead.type === 'image')
-                                ? Promise.all(bead.images.map((image, i) => PostImage.create({
-                                    postId: stringPost.id,
-                                    creatorId: accountId,
-                                    index: i,
-                                    url: image.url || files.find((file) => file.beadIndex === index && file.imageIndex === i).location,
-                                    caption: image.caption,
-                                })))
-                                : null
-
-                            const createStringLink = Link.create({
-                                state: 'visible',
-                                type: 'string-post',
-                                index,
-                                creatorId: accountId,
-                                itemAId: post.id,
-                                itemBId: stringPost.id,
-                            })
-
-                            Promise
-                                .all([createPostImages, createStringLink])
-                                .then((data) => resolve({ stringPost, imageData: data[0], linkData: data[1] }))
-                        })
+            const createDirectRelationships = Promise.all(
+                spaceIds.map((id) =>
+                    PostHolon.create({
+                        type: 'post',
+                        relationship: 'direct',
+                        creatorId: accountId,
+                        postId: post.id,
+                        holonId: id,
                     })
-                ))
-                : null
+                )
+            )
 
-            const createWeave = (type === 'weave')
-                ? new Promise((resolve, reject) => {
-                    Weave.create({
-                        numberOfMoves,
-                        numberOfTurns,
-                        // moveDuration,
-                        allowedBeadTypes,
-                        audioTimeLimit,
-                        privacy,
-                        postId: post.id
-                    }).then(async() => {
-                        if (privacy === 'all-users-allowed') resolve()
-                        else {
-                            const users = await User.findAll({
-                                where: { id: userIds },
-                                attributes: ['id', 'name', 'handle', 'email'],
-                            })
-                            const accountUser = users.find((user) => user.id === accountId)
-                            Promise.all(userIds.map((userId, index) => {
-                                const user = users.find((u) => u.id === userId)
-                                return UserPost.create({
-                                    userId: user.id,
-                                    postId: post.id,
-                                    type: 'weave',
-                                    relationship: 'player',
-                                    index: index + 1,
-                                    state: user.id === accountId ? 'accepted' : 'pending'
-                                }).then(() => {
-                                    if (user.id !== accountId) {
-                                        // send invite notification and email
-                                        Notification.create({
-                                            type: 'weave-invitation',
-                                            ownerId: user.id,
-                                            userId: accountId,
-                                            postId: post.id,
-                                            seen: false,
-                                            state: 'pending',
-                                        })
-                                        sgMail.send({
-                                            to: user.email,
-                                            from: {
-                                                email: 'admin@weco.io',
-                                                name: 'we { collective }'
-                                            },
-                                            subject: 'New notification',
-                                            text: `
+            const createIndirectRelationships = Promise.all(
+                indirectSpaceIds.map((id) =>
+                    PostHolon.create({
+                        type: 'post',
+                        relationship: 'indirect',
+                        creatorId: accountId,
+                        postId: post.id,
+                        holonId: id,
+                    })
+                )
+            )
+
+            const createEvent =
+                type === 'event' || (type === 'glass-bead-game' && startTime)
+                    ? Event.create({
+                          postId: post.id,
+                          state: 'active',
+                          title,
+                          startTime,
+                          endTime,
+                      })
+                    : null
+
+            const createGBG =
+                type === 'glass-bead-game'
+                    ? GlassBeadGame.create({
+                          postId: post.id,
+                          topic,
+                          topicGroup,
+                          topicImage,
+                          locked: false,
+                      })
+                    : null
+
+            const createImages =
+                type === 'image'
+                    ? Promise.all(
+                          imageData.map((image, index) =>
+                              PostImage.create({
+                                  postId: post.id,
+                                  creatorId: accountId,
+                                  index,
+                                  url:
+                                      image.url ||
+                                      files.find((file) => file.index === index).location,
+                                  caption: image.caption,
+                              })
+                          )
+                      )
+                    : null
+
+            const createStringPosts =
+                type === 'string'
+                    ? Promise.all(
+                          stringData.map(
+                              (bead, index) =>
+                                  new Promise((resolve, reject) => {
+                                      Post.create({
+                                          type: `string-${bead.type}`,
+                                          state: 'visible',
+                                          creatorId: accountId,
+                                          text: bead.text,
+                                          url:
+                                              bead.type === 'audio'
+                                                  ? files.find((file) => file.beadIndex === index)
+                                                        .location
+                                                  : bead.url,
+                                          urlImage: bead.type === 'url' ? bead.urlData.image : null,
+                                          urlDomain:
+                                              bead.type === 'url' ? bead.urlData.domain : null,
+                                          urlTitle: bead.type === 'url' ? bead.urlData.title : null,
+                                          urlDescription:
+                                              bead.type === 'url' ? bead.urlData.description : null,
+                                          state: 'visible',
+                                      }).then((stringPost) => {
+                                          const createPostImages =
+                                              bead.type === 'image'
+                                                  ? Promise.all(
+                                                        bead.images.map((image, i) =>
+                                                            PostImage.create({
+                                                                postId: stringPost.id,
+                                                                creatorId: accountId,
+                                                                index: i,
+                                                                url:
+                                                                    image.url ||
+                                                                    files.find(
+                                                                        (file) =>
+                                                                            file.beadIndex ===
+                                                                                index &&
+                                                                            file.imageIndex === i
+                                                                    ).location,
+                                                                caption: image.caption,
+                                                            })
+                                                        )
+                                                    )
+                                                  : null
+
+                                          const createStringLink = Link.create({
+                                              state: 'visible',
+                                              type: 'string-post',
+                                              index,
+                                              creatorId: accountId,
+                                              itemAId: post.id,
+                                              itemBId: stringPost.id,
+                                          })
+
+                                          Promise.all([createPostImages, createStringLink]).then(
+                                              (data) =>
+                                                  resolve({
+                                                      stringPost,
+                                                      imageData: data[0],
+                                                      linkData: data[1],
+                                                  })
+                                          )
+                                      })
+                                  })
+                          )
+                      )
+                    : null
+
+            const createWeave =
+                type === 'weave'
+                    ? new Promise((resolve, reject) => {
+                          Weave.create({
+                              numberOfMoves,
+                              numberOfTurns,
+                              // moveDuration,
+                              allowedBeadTypes,
+                              audioTimeLimit,
+                              privacy,
+                              postId: post.id,
+                          }).then(async () => {
+                              if (privacy === 'all-users-allowed') resolve()
+                              else {
+                                  const users = await User.findAll({
+                                      where: { id: userIds },
+                                      attributes: ['id', 'name', 'handle', 'email'],
+                                  })
+                                  const accountUser = users.find((user) => user.id === accountId)
+                                  Promise.all(
+                                      userIds.map((userId, index) => {
+                                          const user = users.find((u) => u.id === userId)
+                                          return UserPost.create({
+                                              userId: user.id,
+                                              postId: post.id,
+                                              type: 'weave',
+                                              relationship: 'player',
+                                              index: index + 1,
+                                              state: user.id === accountId ? 'accepted' : 'pending',
+                                          }).then(() => {
+                                              if (user.id !== accountId) {
+                                                  // send invite notification and email
+                                                  Notification.create({
+                                                      type: 'weave-invitation',
+                                                      ownerId: user.id,
+                                                      userId: accountId,
+                                                      postId: post.id,
+                                                      seen: false,
+                                                      state: 'pending',
+                                                  })
+                                                  sgMail.send({
+                                                      to: user.email,
+                                                      from: {
+                                                          email: 'admin@weco.io',
+                                                          name: 'we { collective }',
+                                                      },
+                                                      subject: 'New notification',
+                                                      text: `
                                                 Hi ${user.name}, ${accountUser.name} just invited you to join a Weave on weco: https://${config.appURL}/p/${post.id}
                                                 Log in and go to your notifications to accept or reject the invitation: https://${config.appURL}/u/${user.id}/notifications
                                             `,
-                                            html: `
+                                                      html: `
                                                 <p>
                                                     Hi ${user.name},
                                                     <br/>
@@ -678,14 +764,15 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                     Log in and go to your <a href='${config.appURL}/u/${user.id}/notifications'>notifications</a> to accept or reject the invitation.
                                                 </p>
                                             `,
-                                        })
-                                    }
-                                })
-                            })).then(() => resolve(users))
-                        }
-                    })
-                })
-                : null
+                                                  })
+                                              }
+                                          })
+                                      })
+                                  ).then(() => resolve(users))
+                              }
+                          })
+                      })
+                    : null
 
             Promise.all([
                 createDirectRelationships,
@@ -694,7 +781,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 createGBG,
                 createImages,
                 createStringPosts,
-                createWeave
+                createWeave,
             ]).then((data) => {
                 res.status(200).json({
                     post,
@@ -702,7 +789,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     event: data[2],
                     images: data[4],
                     string: data[5],
-                    multiplayerStringUsers: data[6]
+                    multiplayerStringUsers: data[6],
                 })
             })
         })
@@ -710,7 +797,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
 
     const baseUrl = `https://weco-${process.env.NODE_ENV}-`
     const s3Url = '.s3.eu-west-1.amazonaws.com'
-    
+
     if (uploadType === 'image-post') {
         multer({
             limits: { fileSize: imageMBLimit * 1024 * 1024 },
@@ -726,19 +813,22 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     const date = Date.now().toString()
                     const fileName = `post-image-upload-${accountId}-${name}-${date}`
                     cb(null, fileName)
-                }
-            })
+                },
+            }),
         }).any('file')(req, res, (error) => {
             const { files, body } = req
             if (error instanceof multer.MulterError) {
-                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                if (error.code === 'LIMIT_FILE_SIZE')
+                    res.status(413).send({ message: 'File size too large' })
                 else res.status(500).send(error)
             } else if (error) {
                 res.status(500).send(error)
             } else {
                 createPost(
                     JSON.parse(body.postData),
-                    files.map((file) => { return { location: file.location, index: Number(file.originalname) } }),
+                    files.map((file) => {
+                        return { location: file.location, index: Number(file.originalname) }
+                    }),
                     JSON.parse(body.imageData)
                 )
             }
@@ -759,12 +849,13 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     const fileName = `post-audio-upload-${accountId}-${name}-${date}.mp3`
                     console.log('fileName: ', fileName)
                     cb(null, fileName)
-                }
-            })
+                },
+            }),
         }).single('file')(req, res, (error) => {
             const { file, body } = req
             if (error instanceof multer.MulterError) {
-                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                if (error.code === 'LIMIT_FILE_SIZE')
+                    res.status(413).send({ message: 'File size too large' })
                 else res.status(500).send(error)
             } else if (error) {
                 res.status(500).send(error)
@@ -788,7 +879,8 @@ router.post('/create-post', authenticateToken, (req, res) => {
             const { file, body } = req
             // handle errors
             if (error instanceof multer.MulterError) {
-                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                if (error.code === 'LIMIT_FILE_SIZE')
+                    res.status(413).send({ message: 'File size too large' })
                 else res.status(500).send(error)
             } else if (error) {
                 res.status(500).send(error)
@@ -796,37 +888,43 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 // convert raw audio to mp3
                 ffmpeg(file.path)
                     .output(`audio/mp3/${file.filename}.mp3`)
-                    .on('end', function() {
+                    .on('end', function () {
                         // upload new mp3 file to s3 bucket
                         fs.readFile(`audio/mp3/${file.filename}.mp3`, function (err, data) {
                             if (!err) {
-                                const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
+                                const name = file.originalname
+                                    .replace(/[^A-Za-z0-9]/g, '-')
+                                    .substring(0, 30)
                                 const date = Date.now().toString()
                                 const fileName = `post-audio-recording-${accountId}-${name}-${date}.mp3`
                                 console.log('fileName: ', fileName)
-                                s3.putObject({
-                                    Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
-                                    ACL: 'public-read',
-                                    Key: fileName,
-                                    Body: data,
-                                    Metadata: { mimetype: file.mimetype }
-                                }, (err) => {
-                                    if (err) console.log(err)
-                                    else {
-                                        // delete old files
-                                        fs.unlink(`audio/raw/${file.filename}`, (err => {
-                                            if (err) console.log(err)
-                                        }))
-                                        fs.unlink(`audio/mp3/${file.filename}.mp3`, (err => {
-                                            if (err) console.log(err)
-                                        }))
-                                        // create post
-                                        createPost(
-                                            JSON.parse(body.postData),
-                                            [{ location: `https://weco-${process.env.NODE_ENV}-post-audio.s3.eu-west-1.amazonaws.com/${fileName}` }]
-                                        )
+                                s3.putObject(
+                                    {
+                                        Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
+                                        ACL: 'public-read',
+                                        Key: fileName,
+                                        Body: data,
+                                        Metadata: { mimetype: file.mimetype },
+                                    },
+                                    (err) => {
+                                        if (err) console.log(err)
+                                        else {
+                                            // delete old files
+                                            fs.unlink(`audio/raw/${file.filename}`, (err) => {
+                                                if (err) console.log(err)
+                                            })
+                                            fs.unlink(`audio/mp3/${file.filename}.mp3`, (err) => {
+                                                if (err) console.log(err)
+                                            })
+                                            // create post
+                                            createPost(JSON.parse(body.postData), [
+                                                {
+                                                    location: `https://weco-${process.env.NODE_ENV}-post-audio.s3.eu-west-1.amazonaws.com/${fileName}`,
+                                                },
+                                            ])
+                                        }
                                     }
-                                })
+                                )
                             }
                         })
                     })
@@ -839,93 +937,118 @@ router.post('/create-post', authenticateToken, (req, res) => {
             dest: './stringData',
         }).any()(req, res, (error) => {
             const { files, body } = req
-            Promise.all(files.map((file) => new Promise((resolve, reject) => {
-                if (file.fieldname === 'audioFile') {
-                    fs.readFile(`stringData/${file.filename}`, function (err, data) {
-                        s3.putObject({
-                            Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
-                            ACL: 'public-read',
-                            Key: file.filename,
-                            Body: data,
-                            Metadata: { mimetype: file.mimetype }
-                        }, (err) => {
-                            if (err) console.log(err)
-                            else {
-                                resolve({
-                                    fieldname: file.fieldname,
-                                    beadIndex: +file.originalname,
-                                    location: `${baseUrl}post-audio${s3Url}/${file.filename}`
-                                })
-                                fs.unlink(`stringData/${file.filename}`, (err => {
-                                    if (err) console.log(err)
-                                }))
-                            }
-                        })
-                    })
-                } else if (file.fieldname === 'audioRecording') {
-                    // convert audio blob to mp3
-                    ffmpeg(file.path)
-                        .output(`audio/mp3/${file.filename}.mp3`)
-                        .on('end', () => {
-                            // upload mp3 to s3 bucket
-                            fs.readFile(`audio/mp3/${file.filename}.mp3`, function (err, data) {
-                                if (!err) {
-                                    const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
-                                    const date = Date.now().toString()
-                                    const fileName = `post-audio-recording-${accountId}-${name}-${date}.mp3`
-                                    s3.putObject({
-                                        Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
-                                        ACL: 'public-read',
-                                        Key: fileName,
-                                        Body: data,
-                                        Metadata: { mimetype: file.mimetype }
-                                    }, (err) => {
-                                        if (err) console.log(err)
-                                        else {
-                                            resolve({
-                                                fieldname: file.fieldname,
-                                                beadIndex: +file.originalname,
-                                                location: `${baseUrl}post-audio${s3Url}/${fileName}`
-                                            })
-                                            console.log('delete files!!!!!!!')
-                                            fs.unlink(`stringData/${file.filename}`, (err => {
-                                                if (err) console.log(err)
-                                            }))
-                                            fs.unlink(`audio/mp3/${file.filename}.mp3`, (err => {
-                                                if (err) console.log(err)
-                                            }))
+            Promise.all(
+                files.map(
+                    (file) =>
+                        new Promise((resolve, reject) => {
+                            if (file.fieldname === 'audioFile') {
+                                fs.readFile(`stringData/${file.filename}`, function (err, data) {
+                                    s3.putObject(
+                                        {
+                                            Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
+                                            ACL: 'public-read',
+                                            Key: file.filename,
+                                            Body: data,
+                                            Metadata: { mimetype: file.mimetype },
+                                        },
+                                        (err) => {
+                                            if (err) console.log(err)
+                                            else {
+                                                resolve({
+                                                    fieldname: file.fieldname,
+                                                    beadIndex: +file.originalname,
+                                                    location: `${baseUrl}post-audio${s3Url}/${file.filename}`,
+                                                })
+                                                fs.unlink(`stringData/${file.filename}`, (err) => {
+                                                    if (err) console.log(err)
+                                                })
+                                            }
                                         }
-                                    })
-                                }
-                            })
-                        })
-                        .run()
-                } else if (file.fieldname === 'image') {
-                    fs.readFile(`stringData/${file.filename}`, function (err, data) {
-                        s3.putObject({
-                            Bucket: `weco-${process.env.NODE_ENV}-post-images`,
-                            ACL: 'public-read',
-                            Key: file.filename,
-                            Body: data,
-                            Metadata: { mimetype: file.mimetype }
-                        }, (err, response) => {
-                            if (err) console.log(err)
-                            else {
-                                const indexes = file.originalname.split('-')
-                                resolve({
-                                    fieldname: file.fieldname,
-                                    beadIndex: +indexes[0],
-                                    imageIndex: +indexes[1],
-                                    location: `${baseUrl}post-images${s3Url}/${file.filename}`
+                                    )
                                 })
-                                fs.unlink(`stringData/${file.filename}`, (err => {
-                                    if (err) console.log(err)
-                                }))
-                            }
+                            } else if (file.fieldname === 'audioRecording') {
+                                // convert audio blob to mp3
+                                ffmpeg(file.path)
+                                    .output(`audio/mp3/${file.filename}.mp3`)
+                                    .on('end', () => {
+                                        // upload mp3 to s3 bucket
+                                        fs.readFile(
+                                            `audio/mp3/${file.filename}.mp3`,
+                                            function (err, data) {
+                                                if (!err) {
+                                                    const name = file.originalname
+                                                        .replace(/[^A-Za-z0-9]/g, '-')
+                                                        .substring(0, 30)
+                                                    const date = Date.now().toString()
+                                                    const fileName = `post-audio-recording-${accountId}-${name}-${date}.mp3`
+                                                    s3.putObject(
+                                                        {
+                                                            Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
+                                                            ACL: 'public-read',
+                                                            Key: fileName,
+                                                            Body: data,
+                                                            Metadata: { mimetype: file.mimetype },
+                                                        },
+                                                        (err) => {
+                                                            if (err) console.log(err)
+                                                            else {
+                                                                resolve({
+                                                                    fieldname: file.fieldname,
+                                                                    beadIndex: +file.originalname,
+                                                                    location: `${baseUrl}post-audio${s3Url}/${fileName}`,
+                                                                })
+                                                                console.log('delete files!!!!!!!')
+                                                                fs.unlink(
+                                                                    `stringData/${file.filename}`,
+                                                                    (err) => {
+                                                                        if (err) console.log(err)
+                                                                    }
+                                                                )
+                                                                fs.unlink(
+                                                                    `audio/mp3/${file.filename}.mp3`,
+                                                                    (err) => {
+                                                                        if (err) console.log(err)
+                                                                    }
+                                                                )
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    })
+                                    .run()
+                            } else if (file.fieldname === 'image') {
+                                fs.readFile(`stringData/${file.filename}`, function (err, data) {
+                                    s3.putObject(
+                                        {
+                                            Bucket: `weco-${process.env.NODE_ENV}-post-images`,
+                                            ACL: 'public-read',
+                                            Key: file.filename,
+                                            Body: data,
+                                            Metadata: { mimetype: file.mimetype },
+                                        },
+                                        (err, response) => {
+                                            if (err) console.log(err)
+                                            else {
+                                                const indexes = file.originalname.split('-')
+                                                resolve({
+                                                    fieldname: file.fieldname,
+                                                    beadIndex: +indexes[0],
+                                                    imageIndex: +indexes[1],
+                                                    location: `${baseUrl}post-images${s3Url}/${file.filename}`,
+                                                })
+                                                fs.unlink(`stringData/${file.filename}`, (err) => {
+                                                    if (err) console.log(err)
+                                                })
+                                            }
+                                        }
+                                    )
+                                })
+                            } else resolve(null)
                         })
-                    })
-                } else resolve(null)
-            }))).then((data) => {
+                )
+            ).then((data) => {
                 createPost(JSON.parse(body.postData), data, null, JSON.parse(body.stringData))
             })
         })
@@ -941,16 +1064,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
     const imageMBLimit = 2
 
     function createBead(beadData, files, imageData) {
-        const {
-            postId,
-            beadIndex,
-            privacy,
-            nextPlayerId,
-            type,
-            text,
-            url,
-            urlData,
-        } = beadData
+        const { postId, beadIndex, privacy, nextPlayerId, type, text, url, urlData } = beadData
 
         Post.create({
             type: `string-${type}`,
@@ -962,16 +1076,23 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
             urlDomain: urlData ? urlData.domain : null,
             urlTitle: urlData ? urlData.title : null,
             urlDescription: urlData ? urlData.description : null,
-        }).then(async post => {
-            const createImages = (type === 'image')
-                ? Promise.all(imageData.map((image, index) => PostImage.create({
-                    postId: post.id,
-                    creatorId: accountId,
-                    index,
-                    url: image.url || files.find((file) => file.index === index).location,
-                    caption: image.caption,
-                })))
-                : null
+        }).then(async (post) => {
+            const createImages =
+                type === 'image'
+                    ? Promise.all(
+                          imageData.map((image, index) =>
+                              PostImage.create({
+                                  postId: post.id,
+                                  creatorId: accountId,
+                                  index,
+                                  url:
+                                      image.url ||
+                                      files.find((file) => file.index === index).location,
+                                  caption: image.caption,
+                              })
+                          )
+                      )
+                    : null
 
             const createStringLink = Link.create({
                 state: 'visible',
@@ -982,26 +1103,31 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                 itemBId: post.id,
             })
 
-            const notifyNextPlayer = (privacy === 'only-selected-users' && nextPlayerId) ? new Promise(async (resolve, reject) => {
-                const nextPlayer = await User.findOne({ where: { id: nextPlayerId }, attributes: ['name', 'email'], })
-                const createMoveNotification = await Notification.create({
-                    type: 'weave-move',
-                    ownerId: nextPlayerId,
-                    postId: postId,
-                    seen: false,
-                })
-                const sendMoveEmail = await sgMail.send({
-                    to: nextPlayer.email,
-                    from: {
-                        email: 'admin@weco.io',
-                        name: 'we { collective }'
-                    },
-                    subject: 'New notification',
-                    text: `
+            const notifyNextPlayer =
+                privacy === 'only-selected-users' && nextPlayerId
+                    ? new Promise(async (resolve, reject) => {
+                          const nextPlayer = await User.findOne({
+                              where: { id: nextPlayerId },
+                              attributes: ['name', 'email'],
+                          })
+                          const createMoveNotification = await Notification.create({
+                              type: 'weave-move',
+                              ownerId: nextPlayerId,
+                              postId: postId,
+                              seen: false,
+                          })
+                          const sendMoveEmail = await sgMail.send({
+                              to: nextPlayer.email,
+                              from: {
+                                  email: 'admin@weco.io',
+                                  name: 'we { collective }',
+                              },
+                              subject: 'New notification',
+                              text: `
                         Hi ${nextPlayer.name}, it's your move!
                         Add a new bead to the Weave on weco: https://${config.appURL}/p/${postId}
                     `,
-                    html: `
+                              html: `
                         <p>
                             Hi ${nextPlayer.name},
                             <br/>
@@ -1010,20 +1136,19 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                             Add a new bead to the <a href='${config.appURL}/p/${postId}'>Weave</a> on weco.
                         </p>
                     `,
-                })
-                Promise
-                    .all([createMoveNotification, sendMoveEmail])
-                    .then(() => resolve())
-                    .catch((error) => console.log(error))
-            })
-            : null
+                          })
+                          Promise.all([createMoveNotification, sendMoveEmail])
+                              .then(() => resolve())
+                              .catch((error) => console.log(error))
+                      })
+                    : null
 
-            Promise
-                .all([createImages, createStringLink, notifyNextPlayer])
-                .then((data) => res.status(200).json({ bead: post, imageData: data[0], linkData: data[1] }))
+            Promise.all([createImages, createStringLink, notifyNextPlayer])
+                .then((data) =>
+                    res.status(200).json({ bead: post, imageData: data[0], linkData: data[1] })
+                )
                 .catch((error) => console.log(error))
         })
-
     }
 
     if (uploadType === 'image-post') {
@@ -1041,19 +1166,22 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                     const date = Date.now().toString()
                     const fileName = `post-image-upload-${accountId}-${name}-${date}`
                     cb(null, fileName)
-                }
-            })
+                },
+            }),
         }).any('file')(req, res, (error) => {
             const { files, body } = req
             if (error instanceof multer.MulterError) {
-                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                if (error.code === 'LIMIT_FILE_SIZE')
+                    res.status(413).send({ message: 'File size too large' })
                 else res.status(500).send(error)
             } else if (error) {
                 res.status(500).send(error)
             } else {
                 createBead(
                     JSON.parse(body.beadData),
-                    files.map((file) => { return { location: file.location, index: Number(file.originalname) } }),
+                    files.map((file) => {
+                        return { location: file.location, index: Number(file.originalname) }
+                    }),
                     JSON.parse(body.imageData)
                 )
             }
@@ -1074,12 +1202,13 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                     const fileName = `post-audio-upload-${accountId}-${name}-${date}.mp3`
                     console.log('fileName: ', fileName)
                     cb(null, fileName)
-                }
-            })
+                },
+            }),
         }).single('file')(req, res, (error) => {
             const { file, body } = req
             if (error instanceof multer.MulterError) {
-                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                if (error.code === 'LIMIT_FILE_SIZE')
+                    res.status(413).send({ message: 'File size too large' })
                 else res.status(500).send(error)
             } else if (error) {
                 res.status(500).send(error)
@@ -1103,7 +1232,8 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
             const { file, body } = req
             // handle errors
             if (error instanceof multer.MulterError) {
-                if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+                if (error.code === 'LIMIT_FILE_SIZE')
+                    res.status(413).send({ message: 'File size too large' })
                 else res.status(500).send(error)
             } else if (error) {
                 res.status(500).send(error)
@@ -1111,37 +1241,43 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                 // convert raw audio to mp3
                 ffmpeg(file.path)
                     .output(`audio/mp3/${file.filename}.mp3`)
-                    .on('end', function() {
+                    .on('end', function () {
                         // upload new mp3 file to s3 bucket
                         fs.readFile(`audio/mp3/${file.filename}.mp3`, function (err, data) {
                             if (!err) {
-                                const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
+                                const name = file.originalname
+                                    .replace(/[^A-Za-z0-9]/g, '-')
+                                    .substring(0, 30)
                                 const date = Date.now().toString()
                                 const fileName = `post-audio-recording-${accountId}-${name}-${date}.mp3`
                                 console.log('fileName: ', fileName)
-                                s3.putObject({
-                                    Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
-                                    ACL: 'public-read',
-                                    Key: fileName,
-                                    Body: data,
-                                    Metadata: { mimetype: file.mimetype }
-                                }, (err) => {
-                                    if (err) console.log(err)
-                                    else {
-                                        // delete old files
-                                        fs.unlink(`audio/raw/${file.filename}`, (err => {
-                                            if (err) console.log(err)
-                                        }))
-                                        fs.unlink(`audio/mp3/${file.filename}.mp3`, (err => {
-                                            if (err) console.log(err)
-                                        }))
-                                        // create post
-                                        createBead(
-                                            JSON.parse(body.beadData),
-                                            [{ location: `https://weco-${process.env.NODE_ENV}-post-audio.s3.eu-west-1.amazonaws.com/${fileName}` }]
-                                        )
+                                s3.putObject(
+                                    {
+                                        Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
+                                        ACL: 'public-read',
+                                        Key: fileName,
+                                        Body: data,
+                                        Metadata: { mimetype: file.mimetype },
+                                    },
+                                    (err) => {
+                                        if (err) console.log(err)
+                                        else {
+                                            // delete old files
+                                            fs.unlink(`audio/raw/${file.filename}`, (err) => {
+                                                if (err) console.log(err)
+                                            })
+                                            fs.unlink(`audio/mp3/${file.filename}.mp3`, (err) => {
+                                                if (err) console.log(err)
+                                            })
+                                            // create post
+                                            createBead(JSON.parse(body.beadData), [
+                                                {
+                                                    location: `https://weco-${process.env.NODE_ENV}-post-audio.s3.eu-west-1.amazonaws.com/${fileName}`,
+                                                },
+                                            ])
+                                        }
                                     }
-                                })
+                                )
                             }
                         })
                     })
@@ -1158,11 +1294,13 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
     const post = await Post.findOne({
         where: { id: postId },
         attributes: [],
-        include: [{ 
-            model: User,
-            as: 'Creator',
-            attributes: ['id', 'handle', 'name', 'flagImagePath', 'email']
-        }]
+        include: [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+            },
+        ],
     })
 
     const sendNotification = await Notification.create({
@@ -1178,7 +1316,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
         to: post.Creator.email,
         from: {
             email: 'admin@weco.io',
-            name: 'we { collective }'
+            name: 'we { collective }',
         },
         subject: 'New notification',
         text: `
@@ -1197,72 +1335,83 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
         `,
     })
 
-    const createReactions = Promise.all(selectedSpaceIds.map((id) => Reaction.create({
-        type: 'repost',
-        state: 'active',
-        holonId: id,
-        userId: accountId,
-        postId: postId
-    })))
+    const createReactions = Promise.all(
+        selectedSpaceIds.map((id) =>
+            Reaction.create({
+                type: 'repost',
+                state: 'active',
+                holonId: id,
+                userId: accountId,
+                postId: postId,
+            })
+        )
+    )
 
-    const createDirectRelationships = Promise.all(selectedSpaceIds.map((id) => PostHolon.create({
-        type: 'repost',
-        relationship: 'direct',
-        creatorId: accountId,
-        postId: postId,
-        holonId: id
-    })))
+    const createDirectRelationships = Promise.all(
+        selectedSpaceIds.map((id) =>
+            PostHolon.create({
+                type: 'repost',
+                relationship: 'direct',
+                creatorId: accountId,
+                postId: postId,
+                holonId: id,
+            })
+        )
+    )
 
     const indirectSpaceIds = await new Promise((resolve, reject) => {
-        Promise.all(selectedSpaceIds.map((id) => Holon.findOne({
-            where: { id, state: 'active' },
-            attributes: [],
-            include: [{
-                model: Holon,
-                as: 'HolonHandles',
-                attributes: ['id'],
-                through: { where: { state: 'open' }, attributes: [] }
-            }]
-        }))).then((spaces) => {
+        Promise.all(
+            selectedSpaceIds.map((id) =>
+                Holon.findOne({
+                    where: { id, state: 'active' },
+                    attributes: [],
+                    include: [
+                        {
+                            model: Holon,
+                            as: 'HolonHandles',
+                            attributes: ['id'],
+                            through: { where: { state: 'open' }, attributes: [] },
+                        },
+                    ],
+                })
+            )
+        ).then((spaces) => {
             const ids = []
-            spaces.forEach((space) => ids.push(...space.HolonHandles.map(holon => holon.id)))
-            const filteredIds = [...new Set(ids)].filter(id => !selectedSpaceIds.includes(id))
+            spaces.forEach((space) => ids.push(...space.HolonHandles.map((holon) => holon.id)))
+            const filteredIds = [...new Set(ids)].filter((id) => !selectedSpaceIds.includes(id))
             resolve(filteredIds)
         })
     })
 
-    const createIndirectRelationships = Promise.all(indirectSpaceIds.map((id) => {
+    const createIndirectRelationships = Promise.all(
+        indirectSpaceIds.map((id) => {
             return new Promise((resolve, reject) => {
-                PostHolon
-                    .findOne({ where: { postId, holonId: id } })
-                    .then(postHolon => {
-                        if (!postHolon) {
-                            PostHolon
-                                .create({
-                                    type: 'repost',
-                                    relationship: 'indirect',
-                                    // state: 'active',
-                                    creatorId: accountId,
-                                    postId: postId,
-                                    holonId: id
-                                })
-                                .then(() => resolve(id))
-                                
-                        }
-                        else resolve()
-                    })
+                PostHolon.findOne({ where: { postId, holonId: id } }).then((postHolon) => {
+                    if (!postHolon) {
+                        PostHolon.create({
+                            type: 'repost',
+                            relationship: 'indirect',
+                            // state: 'active',
+                            creatorId: accountId,
+                            postId: postId,
+                            holonId: id,
+                        }).then(() => resolve(id))
+                    } else resolve()
+                })
             })
-    }))
+        })
+    )
 
-    Promise
-        .all([
-            sendNotification,
-            sendEmail,
-            createReactions,
-            createDirectRelationships,
-            createIndirectRelationships
-        ])
-        .then((data) => res.status(200).json({ message: 'Success', indirectRelationships: data[4] }))
+    Promise.all([
+        sendNotification,
+        sendEmail,
+        createReactions,
+        createDirectRelationships,
+        createIndirectRelationships,
+    ])
+        .then((data) =>
+            res.status(200).json({ message: 'Success', indirectRelationships: data[4] })
+        )
         .catch(() => res.status(500).json({ message: 'Error' }))
 })
 
@@ -1273,14 +1422,16 @@ router.post('/add-like', authenticateToken, async (req, res) => {
     const post = await Post.findOne({
         where: { id: postId },
         attributes: [],
-        include: [{ 
-            model: User,
-            as: 'Creator',
-            attributes: ['id', 'handle', 'name', 'flagImagePath', 'email']
-        }]
+        include: [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+            },
+        ],
     })
 
-    const createReaction = await Reaction.create({ 
+    const createReaction = await Reaction.create({
         type: 'like',
         value: null,
         state: 'active',
@@ -1297,14 +1448,14 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         holonAId: holonId,
         userId: accountId,
         postId,
-        commentId: null
+        commentId: null,
     })
 
     const sendEmail = await sgMail.send({
         to: post.Creator.email,
         from: {
             email: 'admin@weco.io',
-            name: 'we { collective }'
+            name: 'we { collective }',
         },
         subject: 'New notification',
         text: `
@@ -1323,8 +1474,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         `,
     })
 
-    Promise
-        .all([createReaction, createNotification, sendEmail])
+    Promise.all([createReaction, createNotification, sendEmail])
         .then(() => res.status(200).json({ message: 'Success' }))
         .catch(() => res.status(500).json({ message: 'Error' }))
 })
@@ -1332,13 +1482,17 @@ router.post('/add-like', authenticateToken, async (req, res) => {
 router.post('/remove-like', authenticateToken, async (req, res) => {
     const accountId = req.user.id
     const { postId } = req.body
-    Reaction
-        .update({ state: 'removed' }, { where: { 
-            type: 'like',
-            state: 'active',
-            postId,
-            userId: accountId
-        }})
+    Reaction.update(
+        { state: 'removed' },
+        {
+            where: {
+                type: 'like',
+                state: 'active',
+                postId,
+                userId: accountId,
+            },
+        }
+    )
         .then(() => res.status(200).json({ message: 'Success' }))
         .catch(() => res.status(500).json({ message: 'Error' }))
 })
@@ -1350,14 +1504,16 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
     const post = await Post.findOne({
         where: { id: postId },
         attributes: [],
-        include: [{ 
-            model: User,
-            as: 'Creator',
-            attributes: ['id', 'handle', 'name', 'flagImagePath', 'email']
-        }]
+        include: [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+            },
+        ],
     })
 
-    const createReaction = await Reaction.create({ 
+    const createReaction = await Reaction.create({
         type: 'rating',
         value: newRating,
         state: 'active',
@@ -1379,7 +1535,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
         to: post.Creator.email,
         from: {
             email: 'admin@weco.io',
-            name: 'we { collective }'
+            name: 'we { collective }',
         },
         subject: 'New notification',
         text: `
@@ -1398,8 +1554,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
         `,
     })
 
-    Promise
-        .all([createReaction, sendNotification, sendEmail])
+    Promise.all([createReaction, sendNotification, sendEmail])
         .then(() => res.status(200).json({ message: 'Success' }))
         .catch(() => res.status(500).json({ message: 'Error' }))
 })
@@ -1407,15 +1562,17 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
 router.post('/remove-rating', authenticateToken, (req, res) => {
     const accountId = req.user.id
     const { postId, spaceId } = req.body
-    Reaction
-        .update({ state: 'removed' }, {
-            where: { 
+    Reaction.update(
+        { state: 'removed' },
+        {
+            where: {
                 type: 'rating',
                 state: 'active',
                 userId: accountId,
-                postId
-            }
-        })
+                postId,
+            },
+        }
+    )
         .then(() => res.status(200).json({ message: 'Success' }))
         .catch(() => res.status(500).json({ message: 'Error' }))
 })
@@ -1430,11 +1587,13 @@ router.post('/add-link', authenticateToken, async (req, res) => {
         const itemA = await Post.findOne({
             where: { id: itemAId },
             attributes: [],
-            include: [{ 
-                model: User,
-                as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email']
-            }]
+            include: [
+                {
+                    model: User,
+                    as: 'Creator',
+                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+                },
+            ],
         })
 
         const createLink = await Link.create({
@@ -1443,7 +1602,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             creatorId: accountId,
             description,
             itemAId,
-            itemBId
+            itemBId,
         })
 
         // todo: also send notification to itemB owner, and include itemB info in email
@@ -1460,7 +1619,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             to: itemA.Creator.email,
             from: {
                 email: 'admin@weco.io',
-                name: 'we { collective }'
+                name: 'we { collective }',
             },
             subject: 'New notification',
             text: `
@@ -1478,9 +1637,8 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                 </p>
             `,
         })
-            
-        Promise
-            .all([createLink, sendNotification, sendEmail])
+
+        Promise.all([createLink, sendNotification, sendEmail])
             .then((data) => res.status(200).json({ link: data[0], message: 'Success' }))
             .catch(() => res.status(500).json({ message: 'Error' }))
     }
@@ -1502,11 +1660,13 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
     const post = await Post.findOne({
         where: { id: postId },
         attributes: [],
-        include: [{ 
-            model: User,
-            as: 'Creator',
-            attributes: ['id', 'handle', 'name', 'flagImagePath', 'email']
-        }]
+        include: [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+            },
+        ],
     })
     // create comment
     Comment.create({
@@ -1515,18 +1675,20 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
         holonId: spaceId,
         postId,
         parentCommentId,
-        text
-    }).then(async comment => {
+        text,
+    }).then(async (comment) => {
         if (parentCommentId) {
             // find parent comment owner
             const parentComment = await Comment.findOne({
                 where: { id: parentCommentId },
                 attributes: [],
-                include: [{ 
-                    model: User,
-                    as: 'Creator',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'email']
-                }]
+                include: [
+                    {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+                    },
+                ],
             })
             // create notfication for parent comment owner
             Notification.create({
@@ -1536,14 +1698,14 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                 holonAId: spaceId,
                 userId: accountId,
                 postId,
-                commentId: comment.id
+                commentId: comment.id,
             })
             // send email to parent comment owner
             sgMail.send({
                 to: parentComment.Creator.email,
                 from: {
                     email: 'admin@weco.io',
-                    name: 'we { collective }'
+                    name: 'we { collective }',
                 },
                 subject: 'New notification',
                 text: `
@@ -1570,21 +1732,22 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
             holonAId: spaceId,
             userId: accountId,
             postId,
-            commentId: comment.id
+            commentId: comment.id,
         })
         // send email to post owner
-        sgMail.send({
-            to: post.Creator.email,
-            from: {
-                email: 'admin@weco.io',
-                name: 'we { collective }'
-            },
-            subject: 'New notification',
-            text: `
+        sgMail
+            .send({
+                to: post.Creator.email,
+                from: {
+                    email: 'admin@weco.io',
+                    name: 'we { collective }',
+                },
+                subject: 'New notification',
+                text: `
                 Hi ${post.Creator.name}, ${accountName} just commented on your post on weco:
                 http://${config.appURL}/p/${postId}
             `,
-            html: `
+                html: `
                 <p>
                     Hi ${post.Creator.name},
                     <br/>
@@ -1594,9 +1757,9 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                     on weco
                 </p>
             `,
-        })
-        .then(() => res.status(200).json(comment))
-        .catch(() => res.status(500).json({ message: 'Error' }))
+            })
+            .then(() => res.status(200).json(comment))
+            .catch(() => res.status(500).json({ message: 'Error' }))
     })
 })
 
@@ -1612,69 +1775,67 @@ router.post('/respond-to-event', authenticateToken, (req, res) => {
             relationship: response,
             state: 'active',
         },
-        attributes: ['id']
+        attributes: ['id'],
     }).then((userEvent) => {
         if (userEvent) {
             // if matching event, remove event
-            UserEvent
-                .update({ state: 'removed' }, { where: { id: userEvent.id } })
-                .then(() => res.status(200).send({ message: 'UserEvent removed' }))
+            UserEvent.update({ state: 'removed' }, { where: { id: userEvent.id } }).then(() =>
+                res.status(200).send({ message: 'UserEvent removed' })
+            )
         } else {
             // else remove other responses to event if present
-            UserEvent
-                .update({ state: 'removed' }, { where: {
-                    userId: accountId,
-                    eventId,
-                    relationship: response === 'going' ? 'interested' : 'going',
-                    state: 'active',
-                }})
-                .then(() => {
-                    // then create new user event
-                    UserEvent.create({
+            UserEvent.update(
+                { state: 'removed' },
+                {
+                    where: {
                         userId: accountId,
                         eventId,
-                        relationship: response,
+                        relationship: response === 'going' ? 'interested' : 'going',
                         state: 'active',
-                    }).then((userEvent) => {
-                        // schedule reminder notifications
-                        ScheduledTasks.scheduleNotification({
-                            type: response,
-                            postId,
-                            eventId,
-                            userEventId: userEvent.id,
-                            startTime,
-                            userId: accountId,
-                            userName,
-                            userEmail
-                        })
-                        res.status(200).send({ message: 'UserEvent added' })
+                    },
+                }
+            ).then(() => {
+                // then create new user event
+                UserEvent.create({
+                    userId: accountId,
+                    eventId,
+                    relationship: response,
+                    state: 'active',
+                }).then((userEvent) => {
+                    // schedule reminder notifications
+                    ScheduledTasks.scheduleNotification({
+                        type: response,
+                        postId,
+                        eventId,
+                        userEventId: userEvent.id,
+                        startTime,
+                        userId: accountId,
+                        userName,
+                        userEmail,
                     })
+                    res.status(200).send({ message: 'UserEvent added' })
                 })
+            })
         }
     })
 })
 
 // todo: add authenticateToken to all endpoints below
 router.post('/save-glass-bead-game', (req, res) => {
-    const {
-        gameId,
-        beads
-    } = req.body
+    const { gameId, beads } = req.body
 
-    GlassBeadGame
-        .update({ locked: true }, { where: { id: gameId, locked: false }})
-        .then(() => {
-            beads.forEach((bead) => {
-                GlassBead.create({
-                    gameId,
-                    index: bead.index,
-                    userId: bead.user.id,
-                    beadUrl: bead.beadUrl,
-                    state: 'visible'
-                })
+    GlassBeadGame.update({ locked: true }, { where: { id: gameId, locked: false } }).then(() => {
+        beads.forEach((bead) => {
+            GlassBead.create({
+                gameId,
+                index: bead.index,
+                userId: bead.user.id,
+                beadUrl: bead.beadUrl,
+                state: 'visible',
             })
-            res.status(200).send({ message: 'Game saved' })
         })
+        res.status(200).send({ message: 'Game saved' })
+    })
 })
 
 router.post('/glass-bead-game-comment', (req, res) => {
@@ -1682,7 +1843,7 @@ router.post('/glass-bead-game-comment', (req, res) => {
     GlassBeadGameComment.create({
         gameId,
         userId,
-        text
+        text,
     }).then(res.status(200).send({ message: 'Success' }))
 })
 
@@ -1697,29 +1858,27 @@ router.post('/save-glass-bead-game-settings', (req, res) => {
         outroDuration,
     } = req.body
 
-    GlassBeadGame
-        .update({
+    GlassBeadGame.update(
+        {
             playerOrder,
             introDuration,
             numberOfTurns,
             moveDuration,
             intervalDuration,
             outroDuration,
-        }, { where: { id: gameId }})
+        },
+        { where: { id: gameId } }
+    )
         .then(res.status(200).send({ message: 'Success' }))
-        .catch(error => console.log(error))
+        .catch((error) => console.log(error))
 })
 
 router.post('/save-gbg-topic', (req, res) => {
-    const {
-        gameId,
-        newTopic,
-    } = req.body
+    const { gameId, newTopic } = req.body
 
-    GlassBeadGame
-        .update({ topic: newTopic, topicGroup: null }, { where: { id: gameId }})
+    GlassBeadGame.update({ topic: newTopic, topicGroup: null }, { where: { id: gameId } })
         .then(res.status(200).send({ message: 'Success' }))
-        .catch(error => console.log(error))
+        .catch((error) => console.log(error))
 })
 
 router.post('/find-spaces', (req, res) => {
@@ -1735,8 +1894,7 @@ router.post('/find-spaces', (req, res) => {
             ],
         },
         attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    })
-    .then(spaces => res.send(spaces))
+    }).then((spaces) => res.send(spaces))
 })
 
 router.post('/delete-post', authenticateToken, async (req, res) => {
@@ -1745,11 +1903,13 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
 
     const post = await Post.findOne({
         where: { id: postId, creatorId: accountId },
-        include: [{
-            model: Event,
-            attributes: ['id'],
-            required: false,
-        }]
+        include: [
+            {
+                model: Event,
+                attributes: ['id'],
+                required: false,
+            },
+        ],
     })
     if (post) {
         post.update({ state: 'deleted' }).then(() => {
@@ -1762,10 +1922,9 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
 router.post('/delete-comment', authenticateToken, (req, res) => {
     const accountId = req.user.id
     const { commentId } = req.body
-    Comment
-        .update({ state: 'deleted' }, { where: { id: commentId, creatorId: accountId } })
+    Comment.update({ state: 'deleted' }, { where: { id: commentId, creatorId: accountId } })
         .then(res.status(200).json({ message: 'Comment deleted' }))
-        .catch(error => console.log(error))
+        .catch((error) => console.log(error))
 })
 
 module.exports = router
@@ -1956,17 +2115,17 @@ module.exports = router
 //         where: { state: 'visible', itemAId: postId },
 //         attributes: ['id'],
 //         include: [
-//             { 
+//             {
 //                 model: User,
 //                 as: 'creator',
 //                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
 //             },
-//             { 
+//             {
 //                 model: Post,
 //                 as: 'postB',
 //                 //attributes: ['handle', 'name', 'flagImagePath'],
 //                 include: [
-//                     { 
+//                     {
 //                         model: User,
 //                         as: 'creator',
 //                         attributes: ['handle', 'name', 'flagImagePath'],
@@ -1980,17 +2139,17 @@ module.exports = router
 //         where: { state: 'visible', itemBId: postId },
 //         attributes: ['id'],
 //         include: [
-//             { 
+//             {
 //                 model: User,
 //                 as: 'creator',
 //                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
 //             },
-//             { 
+//             {
 //                 model: Post,
 //                 as: 'postA',
 //                 //attributes: ['handle', 'name', 'flagImagePath'],
 //                 include: [
-//                     { 
+//                     {
 //                         model: User,
 //                         as: 'creator',
 //                         attributes: ['handle', 'name', 'flagImagePath'],
@@ -2012,11 +2171,11 @@ module.exports = router
 
 // router.get('/post-reaction-data', (req, res) => {
 //     const { postId } = req.query
-//     Post.findOne({ 
+//     Post.findOne({
 //         where: { id: postId },
 //         attributes: [],
 //         include: [
-//             { 
+//             {
 //                 model: Reaction,
 //                 where: { state: 'active' },
 //                 attributes: ['id', 'type', 'value'],
@@ -2052,7 +2211,7 @@ module.exports = router
 //     selectedPollAnswers.forEach((answer) => {
 //         let value = 1
 //         if (pollType === 'weighted-choice') { value = answer.value / 100}
-//         Reaction.create({ 
+//         Reaction.create({
 //             type: 'vote',
 //             value: value,
 //             postId: postId,

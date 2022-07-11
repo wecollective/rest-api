@@ -24,8 +24,8 @@ Generate [seeds](./docs/sequelize-commands.md)
 
 In separate terminals run:
 
-- `npm run deps`
-- `npm run dev`
+-   `npm run deps`
+-   `npm run dev`
 
 ## Start
 

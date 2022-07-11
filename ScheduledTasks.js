@@ -56,37 +56,47 @@ module.exports = {
                     model: User,
                     as: 'Going',
                     attributes: ['id', 'handle', 'name', 'email'],
-                    through: { where: { relationship: 'going', state: 'active' }, attributes: ['id'] },
+                    through: {
+                        where: { relationship: 'going', state: 'active' },
+                        attributes: ['id'],
+                    },
                 },
                 {
                     model: User,
                     as: 'Interested',
                     attributes: ['id', 'handle', 'name', 'email'],
-                    through: { where: { relationship: 'interested', state: 'active' }, attributes: ['id'] },
-                }
-            ]
+                    through: {
+                        where: { relationship: 'interested', state: 'active' },
+                        attributes: ['id'],
+                    },
+                },
+            ],
         })
         upcomingEvents.forEach((event) => {
-            event.Going.forEach((user) => scheduleNotification({
-                type: 'going',
-                postId: event.postId,
-                eventId: event.id,
-                userEventId: user.UserEvent.id,
-                startTime: event.startTime,
-                userId: user.id,
-                userName: user.name,
-                userEmail: user.email
-            }))
-            event.Interested.forEach((user) => scheduleNotification({
-                type: 'interested',
-                postId: event.postId,
-                eventId: event.id,
-                userEventId: user.UserEvent.id,
-                startTime: event.startTime,
-                userId: user.id,
-                userName: user.name,
-                userEmail: user.email
-            }))
+            event.Going.forEach((user) =>
+                scheduleNotification({
+                    type: 'going',
+                    postId: event.postId,
+                    eventId: event.id,
+                    userEventId: user.UserEvent.id,
+                    startTime: event.startTime,
+                    userId: user.id,
+                    userName: user.name,
+                    userEmail: user.email,
+                })
+            )
+            event.Interested.forEach((user) =>
+                scheduleNotification({
+                    type: 'interested',
+                    postId: event.postId,
+                    eventId: event.id,
+                    userEventId: user.UserEvent.id,
+                    startTime: event.startTime,
+                    userId: user.id,
+                    userName: user.name,
+                    userEmail: user.email,
+                })
+            )
         })
     },
     scheduleNotification,

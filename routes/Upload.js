@@ -1,4 +1,4 @@
-require("dotenv").config()
+require('dotenv').config()
 const express = require('express')
 const router = express.Router()
 
@@ -18,9 +18,9 @@ ffmpeg.setFfmpegPath(ffmpegPath)
 aws.config.update({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    region: 'eu-west-1'
+    region: 'eu-west-1',
 })
-  
+
 const s3 = new aws.S3({})
 
 router.post('/image-upload', authenticateToken, (req, res) => {
@@ -31,29 +31,29 @@ router.post('/image-upload', authenticateToken, (req, res) => {
     function saveImage(imageType, url) {
         switch (imageType) {
             case 'user-flag':
-                User
-                    .update({ flagImagePath: url }, { where: { id: accountId }})
-                    .then(res.status(200).json({ message: 'Success', imageURL: url }))
+                User.update({ flagImagePath: url }, { where: { id: accountId } }).then(
+                    res.status(200).json({ message: 'Success', imageURL: url })
+                )
                 break
             case 'user-cover':
-                User
-                    .update({ coverImagePath: url }, { where: { id: accountId }})
-                    .then(res.status(200).json({ message: 'Success', imageURL: url }))
+                User.update({ coverImagePath: url }, { where: { id: accountId } }).then(
+                    res.status(200).json({ message: 'Success', imageURL: url })
+                )
                 break
             case 'space-flag':
-                Holon
-                    .update({ flagImagePath: url }, { where: { id } })
-                    .then(res.status(200).json({ message: 'Success', imageURL: url }))
+                Holon.update({ flagImagePath: url }, { where: { id } }).then(
+                    res.status(200).json({ message: 'Success', imageURL: url })
+                )
                 break
             case 'space-cover':
-                Holon
-                    .update({ coverImagePath: url }, { where: { id } })
-                    .then(res.status(200).json({ message: 'Success', imageURL: url }))
+                Holon.update({ coverImagePath: url }, { where: { id } }).then(
+                    res.status(200).json({ message: 'Success', imageURL: url })
+                )
                 break
             case 'gbg-topic':
-                GlassBeadGame
-                    .update({ topicImage: url }, { where: { id }})
-                    .then(res.status(200).json({ message: 'Success', imageURL: url }))
+                GlassBeadGame.update({ topicImage: url }, { where: { id } }).then(
+                    res.status(200).json({ message: 'Success', imageURL: url })
+                )
                 break
             default:
                 break
@@ -76,8 +76,8 @@ router.post('/image-upload', authenticateToken, (req, res) => {
                     const extension = file.mimetype.split('/')[1]
                     const fileName = `${type}-image-${id}-${accountId}-${name}-${date}.${extension}`
                     cb(null, fileName)
-                }
-            })
+                },
+            }),
         }).single('image')(req, res, (err) => {
             const { file } = req
             if (file) saveImage(type, file.location)
@@ -92,15 +92,20 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
     const { imageURL, videoURL, videoStartTime } = req.body
 
     if (imageURL) {
-        GlassBeadGame
-            .update({ backgroundImage: imageURL, backgroundVideo: null, backgroundVideoStartTime: null }, { where: { id: gameId }})
-            .then(res.status(200).json({ message: 'Success' }))
+        GlassBeadGame.update(
+            { backgroundImage: imageURL, backgroundVideo: null, backgroundVideoStartTime: null },
+            { where: { id: gameId } }
+        ).then(res.status(200).json({ message: 'Success' }))
     } else if (videoURL) {
-        GlassBeadGame
-            .update({ backgroundImage: null, backgroundVideo: videoURL, backgroundVideoStartTime: videoStartTime }, { where: { id: gameId }})
-            .then(res.status(200).json({ message: 'Success' }))
-    }
-    else {
+        GlassBeadGame.update(
+            {
+                backgroundImage: null,
+                backgroundVideo: videoURL,
+                backgroundVideoStartTime: videoStartTime,
+            },
+            { where: { id: gameId } }
+        ).then(res.status(200).json({ message: 'Success' }))
+    } else {
         multer({
             storage: multerS3({
                 s3: s3,
@@ -115,16 +120,20 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
                     const extension = file.mimetype.split('/')[1]
                     const fileName = `gbg-background-image-${gameId}-${accountId}-${name}-${date}.${extension}`
                     cb(null, fileName)
-                }
-            })
+                },
+            }),
         }).single('image')(req, res, (err) => {
             const { file } = req
             if (file) {
-                GlassBeadGame
-                    .update({ backgroundImage: file.location, backgroundVideo: null, backgroundVideoStartTime: null }, { where: { id: gameId }})
-                    .then(res.status(200).json({ message: 'Success', imageURL: file.location }))
-            }
-            else res.status(500).json({ message: 'Failed', error: err })
+                GlassBeadGame.update(
+                    {
+                        backgroundImage: file.location,
+                        backgroundVideo: null,
+                        backgroundVideoStartTime: null,
+                    },
+                    { where: { id: gameId } }
+                ).then(res.status(200).json({ message: 'Success', imageURL: file.location }))
+            } else res.status(500).json({ message: 'Failed', error: err })
         })
     }
 })
@@ -146,7 +155,8 @@ router.post('/audio-upload', (req, res) => {
     }).single('file')(req, res, (error) => {
         // handle errors
         if (error instanceof multer.MulterError) {
-            if (error.code === 'LIMIT_FILE_SIZE') res.status(413).send({ message: 'File size too large' })
+            if (error.code === 'LIMIT_FILE_SIZE')
+                res.status(413).send({ message: 'File size too large' })
             else res.status(500).send(error)
         } else if (error) {
             res.status(500).send(error)
@@ -155,31 +165,36 @@ router.post('/audio-upload', (req, res) => {
             // convert raw audio to mp3
             ffmpeg(req.file.path)
                 .output(`audio/mp3/${req.file.filename}.mp3`)
-                .on('end', function() {
+                .on('end', function () {
                     // upload new mp3 file to s3 bucket
                     fs.readFile(`audio/mp3/${req.file.filename}.mp3`, function (err, data) {
                         if (!err) {
                             const fileName = `glass-bead-${postId}-${Date.now().toString()}.mp3`
-                            s3.putObject({
-                                Bucket: bucket,
-                                ACL: 'public-read',
-                                Key: fileName,
-                                Body: data,
-                                Metadata: { 'type': 'mp3', 'postId': postId }
-                            }, (err) => {
-                                if (err) console.log(err)
-                                else {
-                                    // delete old files
-                                    fs.unlink(`audio/raw/${req.file.filename}`, (err => {
-                                        if (err) console.log(err)
-                                    }))
-                                    fs.unlink(`audio/mp3/${req.file.filename}.mp3`, (err => {
-                                        if (err) console.log(err)
-                                    }))
-                                    // send back the mp3's url
-                                    res.send(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
+                            s3.putObject(
+                                {
+                                    Bucket: bucket,
+                                    ACL: 'public-read',
+                                    Key: fileName,
+                                    Body: data,
+                                    Metadata: { type: 'mp3', postId: postId },
+                                },
+                                (err) => {
+                                    if (err) console.log(err)
+                                    else {
+                                        // delete old files
+                                        fs.unlink(`audio/raw/${req.file.filename}`, (err) => {
+                                            if (err) console.log(err)
+                                        })
+                                        fs.unlink(`audio/mp3/${req.file.filename}.mp3`, (err) => {
+                                            if (err) console.log(err)
+                                        })
+                                        // send back the mp3's url
+                                        res.send(
+                                            `https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`
+                                        )
+                                    }
                                 }
-                            })
+                            )
                         }
                     })
                 })

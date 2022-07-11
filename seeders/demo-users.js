@@ -14,12 +14,12 @@ module.exports = {
                 flagImagePath: null,
                 coverImagePath: null,
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
             },
         ])
     },
 
     down: (queryInterface, Sequelize) => {
         return queryInterface.bulkDelete('Users', null, {})
-    }
+    },
 }
