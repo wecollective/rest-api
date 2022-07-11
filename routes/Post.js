@@ -531,6 +531,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             numberOfMoves,
             numberOfTurns,
             allowedBeadTypes,
+            characterLimit,
             audioTimeLimit,
         } = postData
 
@@ -711,6 +712,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               numberOfTurns,
                               // moveDuration,
                               allowedBeadTypes,
+                              characterLimit,
                               audioTimeLimit,
                               privacy,
                               postId: post.id,
