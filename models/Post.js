@@ -9,7 +9,7 @@ module.exports = (sequelize, DataTypes) => {
                 autoIncrement: true,
             },
             type: DataTypes.STRING,
-            subType: DataTypes.STRING,
+            color: DataTypes.STRING,
             state: DataTypes.STRING,
             creatorId: DataTypes.INTEGER,
             text: DataTypes.TEXT,

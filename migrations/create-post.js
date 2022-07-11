@@ -11,7 +11,7 @@ module.exports = {
             type: {
                 type: Sequelize.STRING,
             },
-            subType: {
+            color: {
                 type: Sequelize.STRING,
             },
             state: {

@@ -849,6 +849,7 @@ router.get('/space-posts', (req, res) => {
                         attributes: [
                             'id',
                             'type',
+                            'color',
                             'text',
                             'url',
                             'urlTitle',
