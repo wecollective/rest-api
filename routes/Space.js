@@ -890,7 +890,10 @@ router.get('/space-posts', (req, res) => {
                         model: User,
                         as: 'StringPlayers',
                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                        through: { where: { type: 'weave' }, attributes: ['index', 'state'] },
+                        through: {
+                            where: { type: 'weave' },
+                            attributes: ['index', 'state', 'color'],
+                        },
                         required: false,
                     },
                 ],

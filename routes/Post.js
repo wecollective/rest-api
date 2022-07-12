@@ -264,7 +264,7 @@ router.get('/post-data', (req, res) => {
                 model: User,
                 as: 'StringPlayers',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                through: { where: { type: 'weave' }, attributes: ['index', 'state'] },
+                through: { where: { type: 'weave' }, attributes: ['index', 'state', 'color'] },
                 required: false,
             },
         ],
@@ -527,7 +527,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             topicImage,
             // weaves
             privacy,
-            userIds,
+            playerData,
             numberOfMoves,
             numberOfTurns,
             allowedBeadTypes,
@@ -708,6 +708,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             const createWeave =
                 type === 'weave'
                     ? new Promise((resolve, reject) => {
+                          const players = JSON.parse(playerData)
                           Weave.create({
                               numberOfMoves,
                               numberOfTurns,
@@ -720,58 +721,64 @@ router.post('/create-post', authenticateToken, (req, res) => {
                           }).then(async () => {
                               if (privacy === 'all-users-allowed') resolve()
                               else {
-                                  const users = await User.findAll({
-                                      where: { id: userIds },
+                                  const playerAccounts = await User.findAll({
+                                      where: { id: players.map((p) => p.id) },
                                       attributes: ['id', 'name', 'handle', 'email'],
                                   })
-                                  const accountUser = users.find((user) => user.id === accountId)
+                                  const creatorAccount = playerAccounts.find(
+                                      (p) => p.id === accountId
+                                  )
                                   Promise.all(
-                                      userIds.map((userId, index) => {
-                                          const user = users.find((u) => u.id === userId)
+                                      players.map((player, index) => {
                                           return UserPost.create({
-                                              userId: user.id,
+                                              userId: player.id,
                                               postId: post.id,
                                               type: 'weave',
                                               relationship: 'player',
                                               index: index + 1,
-                                              state: user.id === accountId ? 'accepted' : 'pending',
+                                              color: player.color,
+                                              state:
+                                                  player.id === accountId ? 'accepted' : 'pending',
                                           }).then(() => {
-                                              if (user.id !== accountId) {
+                                              if (player.id !== accountId) {
                                                   // send invite notification and email
                                                   Notification.create({
                                                       type: 'weave-invitation',
-                                                      ownerId: user.id,
+                                                      ownerId: player.id,
                                                       userId: accountId,
                                                       postId: post.id,
                                                       seen: false,
                                                       state: 'pending',
                                                   })
+                                                  const playerAccount = playerAccounts.find(
+                                                      (pa) => pa.id === player.id
+                                                  )
                                                   sgMail.send({
-                                                      to: user.email,
+                                                      to: playerAccount.email,
                                                       from: {
                                                           email: 'admin@weco.io',
                                                           name: 'we { collective }',
                                                       },
                                                       subject: 'New notification',
                                                       text: `
-                                                Hi ${user.name}, ${accountUser.name} just invited you to join a Weave on weco: https://${config.appURL}/p/${post.id}
-                                                Log in and go to your notifications to accept or reject the invitation: https://${config.appURL}/u/${user.id}/notifications
+                                                Hi ${playerAccount.name}, ${creatorAccount.name} just invited you to join a Weave on weco: https://${config.appURL}/p/${post.id}
+                                                Log in and go to your notifications to accept or reject the invitation: https://${config.appURL}/u/${playerAccount.handle}/notifications
                                             `,
                                                       html: `
                                                 <p>
-                                                    Hi ${user.name},
+                                                    Hi ${playerAccount.name},
                                                     <br/>
-                                                    <a href='${config.appURL}/u/${accountUser.handle}'>${accountUser.name}</a>
+                                                    <a href='${config.appURL}/u/${creatorAccount.handle}'>${creatorAccount.name}</a>
                                                     just invited you to join a <a href='${config.appURL}/p/${post.id}'>Weave</a> on weco.
                                                     <br/>
-                                                    Log in and go to your <a href='${config.appURL}/u/${user.id}/notifications'>notifications</a> to accept or reject the invitation.
+                                                    Log in and go to your <a href='${config.appURL}/u/${playerAccount.handle}/notifications'>notifications</a> to accept or reject the invitation.
                                                 </p>
                                             `,
                                                   })
                                               }
                                           })
                                       })
-                                  ).then(() => resolve(users))
+                                  ).then(() => resolve(playerAccounts))
                               }
                           })
                       })

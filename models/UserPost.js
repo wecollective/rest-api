@@ -14,6 +14,7 @@ module.exports = (sequelize, DataTypes) => {
             relationship: DataTypes.STRING,
             index: DataTypes.INTEGER,
             state: DataTypes.STRING,
+            color: DataTypes.STRING,
         },
         {}
     )
