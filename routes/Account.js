@@ -183,7 +183,7 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
         UserPost.update({ state: response }, { where: { postId, userId: accountId } }).then(() => {
             UserPost.findAll({ where: { postId, type: 'weave', relationship: 'player' } }).then(
                 async (players) => {
-                    if (players.find((p) => p.state === 'pending')) resolve()
+                    if (players.find((p) => ['pending', 'rejected'].includes(p.state))) resolve()
                     else {
                         const firstPlayerId = players.find((p) => p.index === 1).userId
                         const firstPlayer = await User.findOne({
