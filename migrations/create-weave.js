@@ -8,6 +8,9 @@ module.exports = {
                 primaryKey: true,
                 type: Sequelize.INTEGER,
             },
+            state: {
+                type: Sequelize.STRING,
+            },
             postId: {
                 type: Sequelize.INTEGER,
             },
@@ -28,9 +31,6 @@ module.exports = {
             },
             characterLimit: {
                 type: Sequelize.INTEGER,
-            },
-            fixedPlayerColors: {
-                type: Sequelize.BOOLEAN,
             },
             privacy: {
                 type: Sequelize.STRING,

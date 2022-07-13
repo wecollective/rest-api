@@ -231,7 +231,7 @@ router.get('/post-data', (req, res) => {
             {
                 model: Post,
                 as: 'StringPosts',
-                through: { where: { state: 'visible' } },
+                through: { where: { state: 'visible' } }, //todo: add required attributes (only index?)
                 required: false,
                 include: [
                     {
@@ -255,7 +255,7 @@ router.get('/post-data', (req, res) => {
                     'moveTimeWindow',
                     'audioTimeLimit',
                     'characterLimit',
-                    'fixedPlayerColors',
+                    'state',
                     'privacy',
                 ],
                 required: false,
@@ -1816,7 +1816,7 @@ router.post('/respond-to-event', authenticateToken, (req, res) => {
                     state: 'active',
                 }).then((userEvent) => {
                     // schedule reminder notifications
-                    ScheduledTasks.scheduleNotification({
+                    ScheduledTasks.scheduleEventNotification({
                         type: response,
                         postId,
                         eventId,

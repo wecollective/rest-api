@@ -533,7 +533,7 @@ router.get('/user-posts', (req, res) => {
                             'moveTimeWindow',
                             'audioTimeLimit',
                             'characterLimit',
-                            'fixedPlayerColors',
+                            'state',
                             'privacy',
                         ],
                         required: false,
