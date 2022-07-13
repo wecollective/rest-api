@@ -533,6 +533,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             allowedBeadTypes,
             characterLimit,
             audioTimeLimit,
+            moveTimeWindow,
         } = postData
 
         Post.create({
@@ -712,10 +713,10 @@ router.post('/create-post', authenticateToken, (req, res) => {
                           Weave.create({
                               numberOfMoves,
                               numberOfTurns,
-                              // moveDuration,
                               allowedBeadTypes,
                               characterLimit,
                               audioTimeLimit,
+                              moveTimeWindow,
                               privacy,
                               postId: post.id,
                           }).then(async () => {
