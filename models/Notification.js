@@ -33,6 +33,10 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'holonBId',
             as: 'secondarySpace',
         })
+        Notification.belongsTo(models.Post, {
+            foreignKey: 'postId',
+            as: 'relatedPost',
+        })
     }
     return Notification
 }
