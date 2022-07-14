@@ -149,27 +149,33 @@ async function scheduleWeaveMoveJobs(postId, player, moveTimeWindow) {
                                     postId,
                                     seen: false,
                                 })
-                                const name = p.id === player.id ? 'You' : player.name
+                                const you = p.id === player.id
                                 const sendEmail = await sgMail.send({
                                     to: p.email,
                                     from: { email: 'admin@weco.io', name: 'we { collective }' },
                                     subject: 'New notification',
                                     text: `
-                                    Hi ${p.name}, ${name} failed to make their move in time on this Weave:
-                                    http://${config.appURL}/p/${postId}
-                                    The game has now ended!
-                                `,
-                                    html: `
-                                    <p>
-                                        Hi ${p.name},
-                                        <br/>
-                                        <br/>
-                                        ${name} failed to make their move in time on <a href='${config.appURL}/p/${postId}'>this Weave</a>.
-                                        <br/>
-                                        <br/>
+                                        Hi ${p.name}, ${you ? 'You' : player.name} failed to make ${
+                                        you ? 'your' : 'their'
+                                    } move in time on this Weave:
+                                        http://${config.appURL}/p/${postId}
                                         The game has now ended!
-                                    </p>
-                                `,
+                                    `,
+                                    html: `
+                                        <p>
+                                            Hi ${p.name},
+                                            <br/>
+                                            <br/>
+                                            ${you ? 'You' : player.name} failed to make ${
+                                        you ? 'your' : 'their'
+                                    } move in time on <a href='${
+                                        config.appURL
+                                    }/p/${postId}'>this Weave</a>.
+                                            <br/>
+                                            <br/>
+                                            The game has now ended!
+                                        </p>
+                                    `,
                                 })
                                 Promise.all([createNotification, sendEmail])
                                     .then(() => resolve())
