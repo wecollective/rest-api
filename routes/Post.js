@@ -711,6 +711,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     ? new Promise((resolve, reject) => {
                           const players = JSON.parse(playerData)
                           Weave.create({
+                              state: privacy === 'all-users-allowed' ? 'active' : 'pending',
                               numberOfMoves,
                               numberOfTurns,
                               allowedBeadTypes,
@@ -1089,13 +1090,13 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
             urlDomain: urlData ? urlData.domain : null,
             urlTitle: urlData ? urlData.title : null,
             urlDescription: urlData ? urlData.description : null,
-        }).then(async (post) => {
+        }).then(async (bead) => {
             const createImages =
                 type === 'image'
-                    ? Promise.all(
+                    ? await Promise.all(
                           imageData.map((image, index) =>
                               PostImage.create({
-                                  postId: post.id,
+                                  postId: bead.id,
                                   creatorId: accountId,
                                   index,
                                   url:
@@ -1107,58 +1108,290 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                       )
                     : null
 
-            const createStringLink = Link.create({
+            const createStringLink = await Link.create({
                 state: 'visible',
                 type: 'string-post',
                 index: beadIndex,
                 creatorId: accountId,
                 itemAId: postId,
-                itemBId: post.id,
+                itemBId: bead.id,
             })
 
-            const notifyNextPlayer =
-                privacy === 'only-selected-users' && nextPlayerId
-                    ? new Promise(async (resolve, reject) => {
-                          const nextPlayer = await User.findOne({
-                              where: { id: nextPlayerId },
-                              attributes: ['name', 'email'],
-                          })
-                          const createMoveNotification = await Notification.create({
-                              type: 'weave-move',
-                              ownerId: nextPlayerId,
-                              postId: postId,
-                              seen: false,
-                          })
-                          const sendMoveEmail = await sgMail.send({
-                              to: nextPlayer.email,
-                              from: {
-                                  email: 'admin@weco.io',
-                                  name: 'we { collective }',
-                              },
-                              subject: 'New notification',
-                              text: `
-                        Hi ${nextPlayer.name}, it's your move!
-                        Add a new bead to the Weave on weco: https://${config.appURL}/p/${postId}
-                    `,
-                              html: `
-                        <p>
-                            Hi ${nextPlayer.name},
-                            <br/>
-                            It's your move!
-                            <br/>
-                            Add a new bead to the <a href='${config.appURL}/p/${postId}'>Weave</a> on weco.
-                        </p>
-                    `,
-                          })
-                          Promise.all([createMoveNotification, sendMoveEmail])
-                              .then(() => resolve())
-                              .catch((error) => console.log(error))
-                      })
-                    : null
+            const post = await Post.findOne({
+                where: { id: postId, state: 'visible' },
+                include: [
+                    {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'name', 'handle', 'email'],
+                    },
+                    {
+                        model: Weave,
+                    },
+                    {
+                        model: User,
+                        as: 'StringPlayers',
+                        attributes: ['id', 'name', 'email'],
+                        through: {
+                            where: { type: 'weave' },
+                            attributes: ['index'],
+                        },
+                    },
+                    {
+                        model: Post,
+                        as: 'StringPosts',
+                        required: false,
+                        through: {
+                            where: { state: 'visible' },
+                            attributes: ['index'],
+                        },
+                        include: [
+                            {
+                                model: User,
+                                as: 'Creator',
+                                attributes: ['id', 'name', 'handle', 'email'],
+                            },
+                        ],
+                    },
+                ],
+            })
 
-            Promise.all([createImages, createStringLink, notifyNextPlayer])
+            const updateWeaveStateAndNotifyPlayers = await new Promise(async (resolve) => {
+                const openGameFinished =
+                    privacy === 'all-users-allowed' &&
+                    post.StringPosts.length === post.Weave.numberOfMoves
+                const privateGameFinished = privacy === 'only-selected-users' && !nextPlayerId
+                if (openGameFinished) {
+                    // find open game players
+                    const openGamePlayers = []
+                    post.StringPosts.forEach((bead) => {
+                        if (!openGamePlayers.find((p) => p.id === bead.Creator.id))
+                            openGamePlayers.push(bead.Creator)
+                    })
+                    const updateWeaveState = await Weave.update(
+                        { state: 'ended' },
+                        { where: { postId } }
+                    )
+                    const notifyPlayers = await Promise.all(
+                        openGamePlayers.map(
+                            (p) =>
+                                new Promise(async (Resolve) => {
+                                    const notifyPlayer = await Notification.create({
+                                        type: 'weave-ended',
+                                        ownerId: p.id,
+                                        postId: postId,
+                                        seen: false,
+                                    })
+                                    const emailPlayer = await sgMail.send({
+                                        to: p.email,
+                                        from: {
+                                            email: 'admin@weco.io',
+                                            name: 'we { collective }',
+                                        },
+                                        subject: 'New notification',
+                                        text: `
+                                            Hi ${p.name}, a weave you participated in has now finished.
+                                            https://${config.appURL}/p/${postId}
+                                        `,
+                                        html: `
+                                            <p>
+                                                Hi ${p.name},
+                                                <br/>
+                                                A <a href='${config.appURL}/p/${postId}'>weave</a> you participated in has now finished.
+                                            </p>
+                                        `,
+                                    })
+                                    Promise.all([notifyPlayer, emailPlayer])
+                                        .then(() => Resolve())
+                                        .catch((error) => Resolve(error))
+                                })
+                        )
+                    )
+                    Promise.all([updateWeaveState, notifyPlayers])
+                        .then(() => resolve())
+                        .catch(() => resolve())
+                } else if (privateGameFinished) {
+                    const updateWeaveState = await Weave.update(
+                        { state: 'ended' },
+                        { where: { postId } }
+                    )
+                    // todo: add notification
+                    const notifyPlayers = await Promise.all(
+                        post.StringPlayers.map(
+                            (p) =>
+                                new Promise(async (Resolve) => {
+                                    const notifyPlayer = await Notification.create({
+                                        type: 'weave-ended',
+                                        ownerId: p.id,
+                                        postId: postId,
+                                        seen: false,
+                                    })
+                                    const emailPlayer = await sgMail.send({
+                                        to: p.email,
+                                        from: {
+                                            email: 'admin@weco.io',
+                                            name: 'we { collective }',
+                                        },
+                                        subject: 'New notification',
+                                        text: `
+                                        Hi ${p.name}, a weave you participated in has now finished.
+                                        https://${config.appURL}/p/${postId}
+                                    `,
+                                        html: `
+                                        <p>
+                                            Hi ${p.name},
+                                            <br/>
+                                            A <a href='${config.appURL}/p/${postId}'>weave</a> you participated in has now finished.
+                                        </p>
+                                    `,
+                                    })
+                                    Promise.all([notifyPlayer, emailPlayer])
+                                        .then(() => Resolve())
+                                        .catch((error) => Resolve(error))
+                                })
+                        )
+                    )
+                    Promise.all([updateWeaveState, notifyPlayers])
+                        .then(() => resolve())
+                        .catch(() => resolve())
+                } else if (privacy === 'only-selected-users') {
+                    // notify next player in private game
+                    const nextPlayer = post.StringPlayers.find((p) => p.id === nextPlayerId)
+                    const createMoveNotification = await Notification.create({
+                        type: 'weave-move',
+                        ownerId: nextPlayerId,
+                        postId: postId,
+                        seen: false,
+                    })
+                    const sendMoveEmail = await sgMail.send({
+                        to: nextPlayer.email,
+                        from: {
+                            email: 'admin@weco.io',
+                            name: 'we { collective }',
+                        },
+                        subject: 'New notification',
+                        text: `
+                            Hi ${nextPlayer.name}, it's your move!
+                            Add a new bead to the Weave on weco: https://${config.appURL}/p/${postId}
+                        `,
+                        html: `
+                            <p>
+                                Hi ${nextPlayer.name},
+                                <br/>
+                                It's your move!
+                                <br/>
+                                Add a new bead to the <a href='${config.appURL}/p/${postId}'>Weave</a> on weco.
+                            </p>
+                        `,
+                    })
+                    const scheduleWeaveMoveJobs = ScheduledTasks.scheduleWeaveMoveJobs(
+                        postId,
+                        nextPlayer,
+                        post.Weave.moveTimeWindow
+                    )
+                    Promise.all([createMoveNotification, sendMoveEmail, scheduleWeaveMoveJobs])
+                        .then(() => resolve())
+                        .catch(() => resolve())
+                } else {
+                    // find open game players
+                    const openGamePlayers = []
+                    post.StringPosts.forEach((bead) => {
+                        // filter out game creator and existing records
+                        if (
+                            bead.Creator.id !== post.Creator.id &&
+                            !openGamePlayers.find((p) => p.id === bead.Creator.id)
+                        )
+                            openGamePlayers.push(bead.Creator)
+                    })
+                    const notifyGameCreator =
+                        post.Creator.id === accountId
+                            ? null
+                            : await new Promise(async (Resolve) => {
+                                  const respondingPlayer = openGamePlayers.find(
+                                      (p) => p.id === accountId
+                                  )
+                                  const notifyCreator = await Notification.create({
+                                      type: 'weave-creator-move-from-other-player',
+                                      ownerId: post.Creator.id,
+                                      postId: postId,
+                                      userId: accountId,
+                                      seen: false,
+                                  })
+                                  const emailCreator = await sgMail.send({
+                                      to: post.Creator.email,
+                                      from: {
+                                          email: 'admin@weco.io',
+                                          name: 'we { collective }',
+                                      },
+                                      subject: 'New notification',
+                                      text: `
+                                Hi ${post.Creator.name}, ${respondingPlayer.name} just added a new bead to a weave you created.
+                                https://${config.appURL}/p/${postId}
+                            `,
+                                      html: `
+                                <p>
+                                    Hi ${post.Creator.name},
+                                    <br/>
+                                    <a href='${config.appURL}/u/${respondingPlayer.handle}'>${respondingPlayer.name}</a> just added a new bead to a
+                                    <a href='${config.appURL}/p/${postId}'>Weave</a> you created.
+                                </p>
+                            `,
+                                  })
+                                  Promise.all([notifyCreator, emailCreator])
+                                      .then(() => Resolve())
+                                      .catch((error) => Resolve(error))
+                              })
+                    const notifyOtherPlayers = await Promise.all(
+                        openGamePlayers.map(
+                            (p) =>
+                                new Promise(async (Resolve) => {
+                                    if (p.id !== accountId) {
+                                        const respondingPlayer =
+                                            openGamePlayers.find((p) => p.id === accountId) ||
+                                            post.Creator
+                                        const notifyPlayer = await Notification.create({
+                                            type: 'weave-move-from-other-player',
+                                            ownerId: p.id,
+                                            postId: postId,
+                                            userId: accountId,
+                                            seen: false,
+                                        })
+                                        const emailPlayer = await sgMail.send({
+                                            to: p.email,
+                                            from: {
+                                                email: 'admin@weco.io',
+                                                name: 'we { collective }',
+                                            },
+                                            subject: 'New notification',
+                                            text: `
+                                                Hi ${p.name}, ${respondingPlayer.name} just added a new bead to a weave you participated in.
+                                                https://${config.appURL}/p/${postId}
+                                            `,
+                                            html: `
+                                                <p>
+                                                    Hi ${p.name},
+                                                    <br/>
+                                                    <a href='${config.appURL}/u/${respondingPlayer.handle}'>${respondingPlayer.name}</a> just added a new bead to a
+                                                    <a href='${config.appURL}/p/${postId}'>Weave</a> you participated in.
+                                                </p>
+                                            `,
+                                        })
+                                        Promise.all([notifyPlayer, emailPlayer])
+                                            .then(() => Resolve())
+                                            .catch((error) => Resolve(error))
+                                    } else Resolve()
+                                })
+                        )
+                    )
+                    Promise.all([notifyGameCreator, notifyOtherPlayers])
+                        .then(() => resolve())
+                        .catch((error) => resolve(error))
+                }
+            })
+
+            Promise.all([createImages, createStringLink, updateWeaveStateAndNotifyPlayers])
                 .then((data) =>
-                    res.status(200).json({ bead: post, imageData: data[0], linkData: data[1] })
+                    res.status(200).json({ bead, imageData: data[0], linkData: data[1] })
                 )
                 .catch((error) => console.log(error))
         })
