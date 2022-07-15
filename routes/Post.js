@@ -231,7 +231,7 @@ router.get('/post-data', (req, res) => {
             {
                 model: Post,
                 as: 'StringPosts',
-                through: { where: { state: 'visible' } }, //todo: add required attributes (only index?)
+                through: { where: { state: 'visible' }, attributes: ['index', 'relationship'] },
                 required: false,
                 include: [
                     {
@@ -534,6 +534,8 @@ router.post('/create-post', authenticateToken, (req, res) => {
             characterLimit,
             audioTimeLimit,
             moveTimeWindow,
+            // strings and weaves
+            sourceId,
         } = postData
 
         Post.create({
@@ -573,7 +575,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 })
             })
 
-            const createDirectRelationships = Promise.all(
+            const createDirectRelationships = await Promise.all(
                 spaceIds.map((id) =>
                     PostHolon.create({
                         type: 'post',
@@ -585,7 +587,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 )
             )
 
-            const createIndirectRelationships = Promise.all(
+            const createIndirectRelationships = await Promise.all(
                 indirectSpaceIds.map((id) =>
                     PostHolon.create({
                         type: 'post',
@@ -599,7 +601,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
 
             const createEvent =
                 type === 'event' || (type === 'glass-bead-game' && startTime)
-                    ? Event.create({
+                    ? await Event.create({
                           postId: post.id,
                           state: 'active',
                           title,
@@ -610,7 +612,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
 
             const createGBG =
                 type === 'glass-bead-game'
-                    ? GlassBeadGame.create({
+                    ? await GlassBeadGame.create({
                           postId: post.id,
                           topic,
                           topicGroup,
@@ -621,7 +623,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
 
             const createImages =
                 type === 'image'
-                    ? Promise.all(
+                    ? await Promise.all(
                           imageData.map((image, index) =>
                               PostImage.create({
                                   postId: post.id,
@@ -638,72 +640,96 @@ router.post('/create-post', authenticateToken, (req, res) => {
 
             const createStringPosts =
                 type === 'string'
-                    ? Promise.all(
-                          stringData.map(
-                              (bead, index) =>
-                                  new Promise((resolve, reject) => {
-                                      Post.create({
-                                          type: `string-${bead.type}`,
-                                          state: 'visible',
-                                          creatorId: accountId,
-                                          color: bead.color,
-                                          text: bead.text,
-                                          url:
-                                              bead.type === 'audio'
-                                                  ? files.find((file) => file.beadIndex === index)
-                                                        .location
-                                                  : bead.url,
-                                          urlImage: bead.type === 'url' ? bead.urlData.image : null,
-                                          urlDomain:
-                                              bead.type === 'url' ? bead.urlData.domain : null,
-                                          urlTitle: bead.type === 'url' ? bead.urlData.title : null,
-                                          urlDescription:
-                                              bead.type === 'url' ? bead.urlData.description : null,
-                                          state: 'visible',
-                                      }).then((stringPost) => {
-                                          const createPostImages =
-                                              bead.type === 'image'
-                                                  ? Promise.all(
-                                                        bead.images.map((image, i) =>
-                                                            PostImage.create({
-                                                                postId: stringPost.id,
-                                                                creatorId: accountId,
-                                                                index: i,
-                                                                url:
-                                                                    image.url ||
-                                                                    files.find(
-                                                                        (file) =>
-                                                                            file.beadIndex ===
-                                                                                index &&
-                                                                            file.imageIndex === i
-                                                                    ).location,
-                                                                caption: image.caption,
-                                                            })
-                                                        )
-                                                    )
-                                                  : null
-
-                                          const createStringLink = Link.create({
+                    ? await new Promise(async (resolve) => {
+                          const createSourceBead = sourceId
+                              ? await Link.create({
+                                    state: 'visible',
+                                    type: 'string-post',
+                                    index: 0,
+                                    relationship: 'source',
+                                    creatorId: accountId,
+                                    itemAId: post.id,
+                                    itemBId: sourceId,
+                                })
+                              : null
+                          const createNormalBeads = await Promise.all(
+                              stringData.map(
+                                  (bead, index) =>
+                                      new Promise((Resolve, reject) => {
+                                          Post.create({
+                                              type: `string-${bead.type}`,
                                               state: 'visible',
-                                              type: 'string-post',
-                                              index,
                                               creatorId: accountId,
-                                              itemAId: post.id,
-                                              itemBId: stringPost.id,
-                                          })
+                                              color: bead.color,
+                                              text: bead.text,
+                                              url:
+                                                  bead.type === 'audio'
+                                                      ? files.find(
+                                                            (file) => file.beadIndex === index
+                                                        ).location
+                                                      : bead.url,
+                                              urlImage:
+                                                  bead.type === 'url' ? bead.urlData.image : null,
+                                              urlDomain:
+                                                  bead.type === 'url' ? bead.urlData.domain : null,
+                                              urlTitle:
+                                                  bead.type === 'url' ? bead.urlData.title : null,
+                                              urlDescription:
+                                                  bead.type === 'url'
+                                                      ? bead.urlData.description
+                                                      : null,
+                                              state: 'visible',
+                                          }).then(async (stringPost) => {
+                                              const createPostImages =
+                                                  bead.type === 'image'
+                                                      ? await Promise.all(
+                                                            bead.images.map((image, i) =>
+                                                                PostImage.create({
+                                                                    postId: stringPost.id,
+                                                                    creatorId: accountId,
+                                                                    index: i,
+                                                                    url:
+                                                                        image.url ||
+                                                                        files.find(
+                                                                            (file) =>
+                                                                                file.beadIndex ===
+                                                                                    index &&
+                                                                                file.imageIndex ===
+                                                                                    i
+                                                                        ).location,
+                                                                    caption: image.caption,
+                                                                })
+                                                            )
+                                                        )
+                                                      : null
 
-                                          Promise.all([createPostImages, createStringLink]).then(
-                                              (data) =>
-                                                  resolve({
+                                              const createStringLink = await Link.create({
+                                                  state: 'visible',
+                                                  type: 'string-post',
+                                                  index: index + 1,
+                                                  creatorId: accountId,
+                                                  itemAId: post.id,
+                                                  itemBId: stringPost.id,
+                                              })
+
+                                              Promise.all([
+                                                  createPostImages,
+                                                  createStringLink,
+                                              ]).then((data) =>
+                                                  Resolve({
                                                       stringPost,
                                                       imageData: data[0],
                                                       linkData: data[1],
                                                   })
-                                          )
+                                              )
+                                          })
                                       })
-                                  })
+                              )
                           )
-                      )
+                          Promise.all([createSourceBead, createNormalBeads])
+                              .then((data) => resolve(data[1]))
+                              .catch((error) => resolve(error))
+                      })
                     : null
 
             const createWeave =

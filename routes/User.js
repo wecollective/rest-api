@@ -509,7 +509,10 @@ router.get('/user-posts', (req, res) => {
                     {
                         model: Post,
                         as: 'StringPosts',
-                        through: { where: { state: 'visible' } },
+                        through: {
+                            where: { state: 'visible' },
+                            attributes: ['index', 'relationship'],
+                        },
                         required: false,
                         include: [
                             {

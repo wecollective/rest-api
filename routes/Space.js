@@ -857,7 +857,10 @@ router.get('/space-posts', (req, res) => {
                             'urlDomain',
                             'urlDescription',
                         ],
-                        through: { where: { state: 'visible' }, attributes: ['index'] },
+                        through: {
+                            where: { state: 'visible' },
+                            attributes: ['index', 'relationship'],
+                        },
                         required: false,
                         include: [
                             {
