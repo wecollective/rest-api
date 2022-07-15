@@ -101,7 +101,7 @@ router.get('/post-data', (req, res) => {
         ],
     ]
     Post.findOne({
-        where: { id: postId, state: 'visible' },
+        where: { id: postId },
         attributes: attributes,
         include: [
             {
@@ -270,20 +270,24 @@ router.get('/post-data', (req, res) => {
         ],
     })
         .then((post) => {
-            post.DirectSpaces.forEach((space) => {
-                space.setDataValue('type', space.dataValues.PostHolon.type)
-                delete space.dataValues.PostHolon
-            })
-            post.IndirectSpaces.forEach((space) => {
-                space.setDataValue('type', space.dataValues.PostHolon.type)
-                delete space.dataValues.PostHolon
-            })
-            // convert SQL numeric booleans to JS booleans
-            post.setDataValue('accountLike', !!post.dataValues.accountLike)
-            post.setDataValue('accountRating', !!post.dataValues.accountRating)
-            post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
-            post.setDataValue('accountLink', !!post.dataValues.accountLink)
-            res.json(post)
+            if (!post) res.status(404).json({ message: 'Post not found' })
+            else if (post.state === 'deleted') res.status(401).json({ message: 'Post deleted' })
+            else {
+                post.DirectSpaces.forEach((space) => {
+                    space.setDataValue('type', space.dataValues.PostHolon.type)
+                    delete space.dataValues.PostHolon
+                })
+                post.IndirectSpaces.forEach((space) => {
+                    space.setDataValue('type', space.dataValues.PostHolon.type)
+                    delete space.dataValues.PostHolon
+                })
+                // convert SQL numeric booleans to JS booleans
+                post.setDataValue('accountLike', !!post.dataValues.accountLike)
+                post.setDataValue('accountRating', !!post.dataValues.accountRating)
+                post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
+                post.setDataValue('accountLink', !!post.dataValues.accountLink)
+                res.json(post)
+            }
         })
         .catch((err) => console.log(err))
 })
@@ -508,6 +512,8 @@ router.post('/create-post', authenticateToken, (req, res) => {
 
     function createPost(postData, files, imageData, stringData) {
         const {
+            creatorName,
+            creatorHandle,
             type,
             text,
             spaceIds,
@@ -535,7 +541,8 @@ router.post('/create-post', authenticateToken, (req, res) => {
             audioTimeLimit,
             moveTimeWindow,
             // strings and weaves
-            sourceId,
+            sourcePostId,
+            sourceCreatorId,
         } = postData
 
         Post.create({
@@ -641,7 +648,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             const createStringPosts =
                 type === 'string'
                     ? await new Promise(async (resolve) => {
-                          const createSourceBead = sourceId
+                          const linkSourceBead = sourcePostId
                               ? await Link.create({
                                     state: 'visible',
                                     type: 'string-post',
@@ -649,9 +656,47 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                     relationship: 'source',
                                     creatorId: accountId,
                                     itemAId: post.id,
-                                    itemBId: sourceId,
+                                    itemBId: sourcePostId,
                                 })
                               : null
+                          const notifySourcePlayer =
+                              sourcePostId && sourceCreatorId !== accountId
+                                  ? await new Promise(async (Resolve) => {
+                                        const sourceCreator = await User.findOne({
+                                            where: { id: sourceCreatorId },
+                                            attributes: ['name', 'email'],
+                                        })
+                                        const notifyCreator = await Notification.create({
+                                            type: 'new-string-from-your-post',
+                                            ownerId: sourceCreatorId,
+                                            userId: accountId,
+                                            postId: post.id,
+                                            seen: false,
+                                        })
+                                        const emailCreator = await sgMail.send({
+                                            to: sourceCreator.email,
+                                            from: {
+                                                email: 'admin@weco.io',
+                                                name: 'we { collective }',
+                                            },
+                                            subject: 'New notification',
+                                            text: `
+                                                Hi ${sourceCreator.name}, ${creatorName} just created a string from your post on Weco: https://${config.appURL}/p/${post.id}
+                                            `,
+                                            html: `
+                                                <p>
+                                                    Hi ${sourceCreator.name},
+                                                    <br/>
+                                                    <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+                                                    just created a <a href='${config.appURL}/p/${post.id}'>string</a> from your post on Weco.
+                                                </p>
+                                            `,
+                                        })
+                                        Promise.all([notifyCreator, emailCreator])
+                                            .then(() => Resolve())
+                                            .catch((error) => Resolve(error))
+                                    })
+                                  : null
                           const createNormalBeads = await Promise.all(
                               stringData.map(
                                   (bead, index) =>
@@ -726,8 +771,8 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                       })
                               )
                           )
-                          Promise.all([createSourceBead, createNormalBeads])
-                              .then((data) => resolve(data[1]))
+                          Promise.all([linkSourceBead, notifySourcePlayer, createNormalBeads])
+                              .then((data) => resolve(data[2]))
                               .catch((error) => resolve(error))
                       })
                     : null
@@ -978,7 +1023,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             Promise.all(
                 files.map(
                     (file) =>
-                        new Promise((resolve, reject) => {
+                        new Promise((resolve) => {
                             if (file.fieldname === 'audioFile') {
                                 fs.readFile(`stringData/${file.filename}`, function (err, data) {
                                     s3.putObject(

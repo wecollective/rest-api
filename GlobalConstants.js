@@ -3,6 +3,7 @@ const sequelize = require('sequelize')
 const postAttributes = [
     'id',
     'type',
+    'state',
     'color',
     'text',
     'url',
