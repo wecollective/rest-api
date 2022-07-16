@@ -647,7 +647,7 @@ router.get('/space-posts', (req, res) => {
             {
                 model: GlassBeadGame,
                 required: false,
-                attributes: ['topic', 'topicGroup'],
+                attributes: ['topic'],
             },
         ],
     })
@@ -723,83 +723,15 @@ router.get('/space-posts', (req, res) => {
                     {
                         model: Holon,
                         as: 'IndirectSpaces',
-                        attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
+                        attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
                         through: { where: { relationship: 'indirect' }, attributes: ['type'] },
                     },
-                    {
-                        model: Reaction,
-                        where: { state: 'active' },
-                        required: false,
-                        attributes: ['id', 'type', 'value'],
-                        include: [
-                            {
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                            },
-                            {
-                                model: Holon,
-                                as: 'Space',
-                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                            },
-                        ],
-                    },
-                    {
-                        model: Link,
-                        as: 'OutgoingLinks',
-                        where: { state: 'visible', type: { [Op.not]: 'string-post' } },
-                        required: false,
-                        attributes: ['id'],
-                        include: [
-                            {
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                            },
-                            {
-                                model: Post,
-                                as: 'PostB',
-                                attributes: ['id'],
-                                include: [
-                                    {
-                                        model: User,
-                                        as: 'Creator',
-                                        attributes: ['handle', 'name', 'flagImagePath'],
-                                    },
-                                ],
-                            },
-                        ],
-                    },
-                    {
-                        model: Link,
-                        as: 'IncomingLinks',
-                        where: { state: 'visible' },
-                        required: false,
-                        attributes: ['id'],
-                        include: [
-                            {
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                            },
-                            {
-                                model: Post,
-                                as: 'PostA',
-                                attributes: ['id'],
-                                include: [
-                                    {
-                                        model: User,
-                                        as: 'Creator',
-                                        attributes: ['handle', 'name', 'flagImagePath'],
-                                    },
-                                ],
-                            },
-                        ],
-                    },
+                    // todo: add required attributes
                     {
                         model: PostImage,
                         required: false,
                     },
+                    // todo: add required attributes
                     {
                         model: Event,
                         required: false,
@@ -856,6 +788,49 @@ router.get('/space-posts', (req, res) => {
                             'urlImage',
                             'urlDomain',
                             'urlDescription',
+                            [
+                                sequelize.literal(
+                                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = StringPosts.id AND Reaction.type = 'like' AND Reaction.state = 'active')`
+                                ),
+                                'totalLikes',
+                            ],
+                            [
+                                sequelize.literal(
+                                    `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = StringPosts.id)`
+                                ),
+                                'totalComments',
+                            ],
+                            [
+                                sequelize.literal(
+                                    `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND Link.type != 'string-post' AND (Link.itemAId = StringPosts.id OR Link.itemBId = StringPosts.id))`
+                                ),
+                                'totalLinks',
+                            ],
+                            [
+                                sequelize.literal(`(
+                                SELECT COUNT(*) > 0
+                                FROM Reactions
+                                AS Reaction
+                                WHERE Reaction.postId = StringPosts.id
+                                AND Reaction.userId = ${accountId}
+                                AND Reaction.type = 'like'
+                                AND Reaction.state = 'active'
+                                )`),
+                                'accountLike',
+                            ],
+                            // todo: add account comment when set up
+                            [
+                                sequelize.literal(`(
+                                SELECT COUNT(*) > 0
+                                FROM Links
+                                AS Link
+                                WHERE Link.state = 'visible'
+                                AND Link.type != 'string-post'
+                                AND Link.creatorId = ${accountId}
+                                AND (Link.itemAId = StringPosts.id OR Link.itemBId = StringPosts.id)
+                                )`),
+                                'accountLink',
+                            ],
                         ],
                         through: {
                             where: { state: 'visible' },
