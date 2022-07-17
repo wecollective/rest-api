@@ -407,6 +407,7 @@ router.get('/space-data', async (req, res) => {
 
     if (!spaceData) res.status(404).send({ message: 'Space not found' })
     else {
+        // todo: potentially retreive after space data has loaded so posts can start loading quicker
         // child spaces and latest users retrieved seperately so limit and order can be applied (not allowed for M:M includes in Sequelize)
         const childSpaces = await Holon.findAll({
             where: { '$DirectParentHolons.id$': spaceData.id, state: 'active' },
@@ -857,6 +858,7 @@ router.get('/space-posts', (req, res) => {
                             'numberOfMoves',
                             'allowedBeadTypes',
                             'moveTimeWindow',
+                            'nextMoveDeadline',
                             'audioTimeLimit',
                             'characterLimit',
                             'state',

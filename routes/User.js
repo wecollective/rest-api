@@ -372,6 +372,7 @@ router.get('/user-posts', (req, res) => {
                 FROM Links
                 AS Link
                 WHERE Link.state = 'visible'
+                AND Link.type != 'string-post'
                 AND Link.creatorId = ${accountId}
                 AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
                 )`),
@@ -518,6 +519,7 @@ router.get('/user-posts', (req, res) => {
                             'numberOfMoves',
                             'allowedBeadTypes',
                             'moveTimeWindow',
+                            'nextMoveDeadline',
                             'audioTimeLimit',
                             'characterLimit',
                             'state',

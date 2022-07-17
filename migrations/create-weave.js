@@ -26,6 +26,9 @@ module.exports = {
             moveTimeWindow: {
                 type: Sequelize.INTEGER,
             },
+            nextMoveDeadline: {
+                type: Sequelize.DATE,
+            },
             audioTimeLimit: {
                 type: Sequelize.INTEGER,
             },

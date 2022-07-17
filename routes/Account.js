@@ -313,8 +313,11 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
                         res.status(200).json({ message: 'Success' })
                     } else {
                         // if all players ready: update weave state and notify first player
+                        const deadline = post.Weave.moveTimeWindow
+                            ? new Date(new Date().getTime() + post.Weave.moveTimeWindow * 60 * 1000)
+                            : null
                         const updateWeaveState = await Weave.update(
-                            { state: 'active' },
+                            { state: 'active', nextMoveDeadline: deadline },
                             { where: { postId } }
                         )
                         const notifyFirstPlayer = await Notification.create({
@@ -345,11 +348,7 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
                                 `,
                         })
                         const scheduleWeaveMoveJobs = post.Weave.moveTimeWindow
-                            ? ScheduledTasks.scheduleWeaveMoveJobs(
-                                  postId,
-                                  players[0],
-                                  post.Weave.moveTimeWindow
-                              )
+                            ? ScheduledTasks.scheduleWeaveMoveJobs(postId, players[0], deadline)
                             : null
                         Promise.all([
                             updateWeaveState,

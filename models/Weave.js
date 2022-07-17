@@ -14,6 +14,7 @@ module.exports = (sequelize, DataTypes) => {
             numberOfTurns: DataTypes.INTEGER,
             allowedBeadTypes: DataTypes.STRING,
             moveTimeWindow: DataTypes.INTEGER,
+            nextMoveDeadline: DataTypes.DATE,
             audioTimeLimit: DataTypes.INTEGER,
             characterLimit: DataTypes.INTEGER,
             privacy: DataTypes.STRING,

@@ -240,6 +240,7 @@ router.get('/post-data', (req, res) => {
                     'numberOfTurns',
                     'allowedBeadTypes',
                     'moveTimeWindow',
+                    'nextMoveDeadline',
                     'audioTimeLimit',
                     'characterLimit',
                     'state',
@@ -374,7 +375,7 @@ router.get('/post-links', async (req, res) => {
             {
                 model: Link,
                 as: 'IncomingLinks',
-                where: { state: 'visible' },
+                where: { state: 'visible', type: { [Op.not]: 'string-post' } },
                 required: false,
                 attributes: ['id'],
                 include: [
@@ -925,6 +926,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                   player.id === accountId ? 'accepted' : 'pending',
                                           }).then(() => {
                                               if (player.id !== accountId) {
+                                                  // const moveTimeWindow = ''
                                                   // send invite notification and email
                                                   Notification.create({
                                                       type: 'weave-invitation',
@@ -952,10 +954,49 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                 <p>
                                                     Hi ${playerAccount.name},
                                                     <br/>
-                                                    <a href='${config.appURL}/u/${creatorAccount.handle}'>${creatorAccount.name}</a>
-                                                    just invited you to join a <a href='${config.appURL}/p/${post.id}'>Weave</a> on weco.
+                                                    <a href='${config.appURL}/u/${
+                                                          creatorAccount.handle
+                                                      }'>${creatorAccount.name}</a>
+                                                    just invited you to join a <a href='${
+                                                        config.appURL
+                                                    }/p/${post.id}'>Weave</a> on weco.
                                                     <br/>
-                                                    Log in and go to your <a href='${config.appURL}/u/${playerAccount.handle}/notifications'>notifications</a> to accept or reject the invitation.
+                                                    Log in and go to your <a href='${
+                                                        config.appURL
+                                                    }/u/${
+                                                          playerAccount.handle
+                                                      }/notifications'>notifications</a> to accept or reject the invitation.
+                                                    <br/>
+                                                    <br/>
+                                                    Weave settings:
+                                                    <br/>
+                                                    <br/>
+                                                    Player order: ${playerAccounts
+                                                        .map((p) => p.name)
+                                                        .join(' → ')}
+                                                    <br/>
+                                                    Turns (moves per player): ${numberOfTurns}
+                                                    <br/>
+                                                    Allowed bead types: ${allowedBeadTypes}
+                                                    <br/>
+                                                    Time window for moves: ${
+                                                        moveTimeWindow
+                                                            ? `${moveTimeWindow} minutes`
+                                                            : 'Off'
+                                                    }
+                                                    <br/>
+                                                    Character limit: ${
+                                                        characterLimit
+                                                            ? `${characterLimit} characters`
+                                                            : 'Off'
+                                                    }
+                                                    <br/>
+                                                    Audio time limit: ${
+                                                        audioTimeLimit
+                                                            ? `${audioTimeLimit} seconds`
+                                                            : 'Off'
+                                                    }
+                                                    <br/>
                                                 </p>
                                             `,
                                                   })
@@ -1437,6 +1478,13 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                         .then(() => resolve())
                         .catch(() => resolve())
                 } else if (privacy === 'only-selected-users') {
+                    // update next move deadline
+                    const deadline = post.Weave.moveTimeWindow
+                        ? new Date(new Date().getTime() + post.Weave.moveTimeWindow * 60 * 1000)
+                        : null
+                    const updateWeaveState = deadline
+                        ? await Weave.update({ nextMoveDeadline: deadline }, { where: { postId } })
+                        : null
                     // notify next player in private game
                     const nextPlayer = post.StringPlayers.find((p) => p.id === nextPlayerId)
                     const createMoveNotification = await Notification.create({
@@ -1469,10 +1517,15 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                     const scheduleWeaveMoveJobs = ScheduledTasks.scheduleWeaveMoveJobs(
                         postId,
                         nextPlayer,
-                        post.Weave.moveTimeWindow
+                        deadline
                     )
-                    Promise.all([createMoveNotification, sendMoveEmail, scheduleWeaveMoveJobs])
-                        .then(() => resolve())
+                    Promise.all([
+                        updateWeaveState,
+                        createMoveNotification,
+                        sendMoveEmail,
+                        scheduleWeaveMoveJobs,
+                    ])
+                        .then(() => resolve(deadline))
                         .catch(() => resolve())
                 } else {
                     // find open game players
@@ -1573,7 +1626,9 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
 
             Promise.all([createImages, createStringLink, updateWeaveStateAndNotifyPlayers])
                 .then((data) =>
-                    res.status(200).json({ bead, imageData: data[0], linkData: data[1] })
+                    res
+                        .status(200)
+                        .json({ bead, imageData: data[0], linkData: data[1], newDeadline: data[2] })
                 )
                 .catch((error) => console.log(error))
         })
@@ -2012,6 +2067,15 @@ router.post('/add-link', authenticateToken, async (req, res) => {
     const itemB = await Post.findOne({ where: { id: itemBId } })
     if (!itemB) res.status(404).send({ message: 'Item B not found' })
     else {
+        const createLink = await Link.create({
+            state: 'visible',
+            type: 'post-post',
+            creatorId: accountId,
+            description,
+            itemAId,
+            itemBId,
+        })
+
         const itemA = await Post.findOne({
             where: { id: itemAId },
             attributes: [],
@@ -2024,13 +2088,16 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             ],
         })
 
-        const createLink = await Link.create({
-            state: 'visible',
-            type: 'post-post',
-            creatorId: accountId,
-            description,
-            itemAId,
-            itemBId,
+        const itemB = await Post.findOne({
+            where: { id: itemBId },
+            attributes: ['id'],
+            include: [
+                {
+                    model: User,
+                    as: 'Creator',
+                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+                },
+            ],
         })
 
         // todo: also send notification to itemB owner, and include itemB info in email
@@ -2067,7 +2134,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
         })
 
         Promise.all([createLink, sendNotification, sendEmail])
-            .then((data) => res.status(200).json({ link: data[0], message: 'Success' }))
+            .then((data) => res.status(200).json({ itemB, link: data[0], message: 'Success' }))
             .catch(() => res.status(500).json({ message: 'Error' }))
     }
 })
