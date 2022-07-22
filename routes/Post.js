@@ -1040,6 +1040,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 s3: s3,
                 bucket: `weco-${process.env.NODE_ENV}-post-images`,
                 acl: 'public-read',
+                contentType: function (req, file, cb) {
+                    cb(null, file.mimetype)
+                },
                 metadata: function (req, file, cb) {
                     cb(null, { mimetype: file.mimetype })
                 },
@@ -1261,6 +1264,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             ACL: 'public-read',
                                             Key: file.filename,
                                             Body: data,
+                                            ContentType: file.mimetype,
                                             Metadata: { mimetype: file.mimetype },
                                         },
                                         (err, response) => {
@@ -1641,6 +1645,9 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                 s3: s3,
                 bucket: `weco-${process.env.NODE_ENV}-post-images`,
                 acl: 'public-read',
+                contentType: function (req, file, cb) {
+                    cb(null, file.mimetype)
+                },
                 metadata: function (req, file, cb) {
                     cb(null, { mimetype: file.mimetype })
                 },
