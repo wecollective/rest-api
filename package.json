@@ -5,8 +5,8 @@
     "main": "index.js",
     "scripts": {
         "deps": "docker-compose up --build mysql",
+        "migrate": "sequelize db:migrate",
         "seed": "sequelize db:seed:all",
-        "predev": "sequelize db:migrate",
         "dev": "nodemon Server.js",
         "start": "node Server.js"
     },
