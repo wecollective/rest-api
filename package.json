@@ -4,7 +4,8 @@
     "description": "",
     "main": "index.js",
     "scripts": {
-        "deps": "COMPOSE_PROJECT_NAME=weco docker-compose up --build mysql",
+        "deps": "docker-compose up --build mysql",
+        "seed": "sequelize db:seed:all",
         "predev": "sequelize db:migrate",
         "dev": "nodemon Server.js",
         "start": "node Server.js"

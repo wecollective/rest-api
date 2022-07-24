@@ -7,6 +7,7 @@ module.exports = {
     password: process.env[devApi ? 'DEV_DB_PASSWORD' : 'PROD_DB_PASSWORD'],
     database: process.env[devApi ? 'DEV_DB_NAME' : 'PROD_DB_NAME'],
     host: process.env[devApi ? 'DEV_DB_HOST' : 'PROD_DB_HOST'],
+    port: process.env[devApi ? 'DEV_DB_PORT' : 'PROD_DB_PORT'],
     dialect: 'mysql',
 
     appURL: process.env[devApp ? 'DEV_APP_URL' : 'PROD_APP_URL'],
