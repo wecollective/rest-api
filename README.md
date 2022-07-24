@@ -23,6 +23,8 @@ ACCESS_TOKEN_SECRET=secret
 
 ## Develop
 
+Install docker https://docs.docker.com/get-docker/
+
 ### Build the MySQL database in Docker
 
 ```
