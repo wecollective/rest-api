@@ -23,9 +23,9 @@ ACCESS_TOKEN_SECRET=secret
 
 ## Develop
 
-Install docker https://docs.docker.com/get-docker/
+Requires docker https://docs.docker.com/get-docker/
 
-### Build the MySQL database in Docker
+### Build the MySQL database
 
 ```
 npm run deps
@@ -33,9 +33,7 @@ npm run deps
 
 ### Populate the database
 
-Open a new terminal
-
-Generate the database tables:
+Open a new terminal and generate the database tables:
 
 ```
 npm run migrate
