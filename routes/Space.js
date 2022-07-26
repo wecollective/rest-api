@@ -23,6 +23,8 @@ const {
     GlassBeadGame,
     GlassBead,
     Event,
+    Inquiry,
+    InquiryAnswer,
     PostImage,
     Weave,
 } = require('../models')
@@ -513,6 +515,7 @@ router.get('/space-posts', (req, res) => {
                   'image',
                   'audio',
                   'event',
+                  'inquiry',
                   'glass-bead-game',
                   'string',
                   'weave',
@@ -754,6 +757,41 @@ router.get('/space-posts', (req, res) => {
                                     where: { relationship: 'interested', state: 'active' },
                                     attributes: [],
                                 },
+                            },
+                        ],
+                    },
+                    {
+                        model: Inquiry,
+                        required: false,
+                        include: [
+                            {
+                                model: InquiryAnswer,
+                                required: false,
+                                include: [
+                                    {
+                                        model: User,
+                                        as: 'Creator',
+                                        attributes: ['handle', 'name', 'flagImagePath'],
+                                    },
+                                    {
+                                        model: Reaction,
+                                        attributes: ['value'],
+                                        where: { state: 'active' },
+                                        required: false,
+                                        include: [
+                                            {
+                                                model: User,
+                                                as: 'Creator',
+                                                attributes: [
+                                                    'id',
+                                                    'handle',
+                                                    'name',
+                                                    'flagImagePath',
+                                                ],
+                                            },
+                                        ],
+                                    },
+                                ],
                             },
                         ],
                     },

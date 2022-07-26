@@ -44,6 +44,8 @@ const {
     PostImage,
     Weave,
     UserPost,
+    Inquiry,
+    InquiryAnswer,
 } = require('../models')
 
 // GET
@@ -630,15 +632,21 @@ router.post('/create-post', authenticateToken, (req, res) => {
             text,
             spaceIds,
             url,
-            // url posts
+            // urls
             urlImage,
             urlDomain,
             urlTitle,
             urlDescription,
-            // event posts
+            // events
             title,
             startTime,
             endTime,
+            // inquiries
+            inquiryTitle,
+            inquiryEndTime,
+            answersLocked,
+            inquiryType,
+            inquiryAnswers,
             // glass bead games
             topic,
             topicGroup,
@@ -726,6 +734,30 @@ router.post('/create-post', authenticateToken, (req, res) => {
                           title,
                           startTime,
                           endTime,
+                      })
+                    : null
+
+            const createInquiry =
+                type === 'inquiry'
+                    ? await new Promise(async (resolve) => {
+                          Inquiry.create({
+                              postId: post.id,
+                              type: inquiryType,
+                              title: inquiryTitle,
+                              answersLocked,
+                              endTime: inquiryEndTime || null,
+                          }).then((inquiry) => {
+                              const answers = JSON.parse(inquiryAnswers)
+                              Promise.all(
+                                  answers.map((answer) =>
+                                      InquiryAnswer.create({
+                                          inquiryId: inquiry.id,
+                                          creatorId: accountId,
+                                          text: answer.text,
+                                      })
+                                  )
+                              ).then((data) => resolve(data))
+                          })
                       })
                     : null
 
@@ -1013,6 +1045,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 createDirectRelationships,
                 createIndirectRelationships,
                 createEvent,
+                createInquiry,
                 createGBG,
                 createImages,
                 createStringPosts,
@@ -1022,9 +1055,10 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     post,
                     indirectRelationships: data[1],
                     event: data[2],
-                    images: data[4],
-                    string: data[5],
-                    multiplayerStringUsers: data[6],
+                    inquiryAnswers: data[3],
+                    images: data[5],
+                    string: data[6],
+                    multiplayerStringUsers: data[7],
                 })
             })
         })
@@ -1928,7 +1962,6 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         holonId,
         userId: accountId,
         postId,
-        commentId: null,
     })
 
     const createNotification = await Notification.create({
@@ -1938,7 +1971,6 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         holonAId: holonId,
         userId: accountId,
         postId,
-        commentId: null,
     })
 
     const sendEmail = await sgMail.send({
@@ -2320,6 +2352,83 @@ router.post('/respond-to-event', authenticateToken, (req, res) => {
             })
         }
     })
+})
+
+router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
+    const accountId = req.user.id
+    const { userName, userHandle, spaceId, postId, inquiryId, voteData } = req.body
+    console.log(req.body)
+
+    const post = await Post.findOne({
+        where: { id: postId },
+        attributes: [],
+        include: [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+            },
+        ],
+    })
+
+    const removeOldReactions = await Reaction.update(
+        { state: 'removed' },
+        { where: { userId: accountId, postId } }
+    )
+
+    const createNewReactions = await Promise.all(
+        voteData.map((answer) =>
+            Reaction.create({
+                type: 'inquiry-vote',
+                value: answer.value,
+                state: 'active',
+                holonId: spaceId,
+                userId: accountId,
+                postId,
+                inquiryAnswerId: answer.id,
+            })
+        )
+    )
+
+    const createNotification =
+        post.Creator.id !== accountId
+            ? await Notification.create({
+                  ownerId: post.Creator.id,
+                  type: 'inquiry-vote',
+                  seen: false,
+                  userId: accountId,
+                  postId,
+              })
+            : null
+
+    const sendEmail =
+        post.Creator.id !== accountId
+            ? await sgMail.send({
+                  to: post.Creator.email,
+                  from: {
+                      email: 'admin@weco.io',
+                      name: 'we { collective }',
+                  },
+                  subject: 'New notification',
+                  text: `
+            Hi ${post.Creator.name}, ${userName} just voted on your inquiry:
+            http://${config.appURL}/p/${postId}
+        `,
+                  html: `
+            <p>
+                Hi ${post.Creator.name},
+                <br/>
+                <a href='${config.appURL}/u/${userHandle}'>${userName}</a>
+                just voted on your
+                <a href='${config.appURL}/p/${postId}'>inquiry</a>
+            </p>
+        `,
+              })
+            : null
+
+    Promise.all([removeOldReactions, createNewReactions, createNotification, sendEmail])
+        .then(() => res.status(200).json({ message: 'Success' }))
+        .catch(() => res.status(500).json({ message: 'Error' }))
 })
 
 // todo: add authenticateToken to all endpoints below
