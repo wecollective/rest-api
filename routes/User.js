@@ -18,6 +18,8 @@ const {
     GlassBeadGame,
     GlassBead,
     Weave,
+    Inquiry,
+    InquiryAnswer,
 } = require('../models')
 
 // GET
@@ -224,6 +226,7 @@ router.get('/user-posts', (req, res) => {
                 'image',
                 'audio',
                 'event',
+                'inquiry',
                 'glass-bead-game',
                 'string',
                 'weave',
@@ -417,6 +420,61 @@ router.get('/user-posts', (req, res) => {
                                 model: User,
                                 as: 'Interested',
                                 through: { where: { relationship: 'interested', state: 'active' } },
+                            },
+                        ],
+                    },
+                    {
+                        model: Inquiry,
+                        required: false,
+                        include: [
+                            {
+                                model: InquiryAnswer,
+                                required: false,
+                                attributes: [
+                                    'id',
+                                    'text',
+                                    'createdAt',
+                                    // [
+                                    //     sequelize.literal(`(
+                                    // SELECT COUNT(*)
+                                    // FROM Reactions
+                                    // AS Reaction
+                                    // WHERE Reaction.state = 'active'
+                                    // AND Reaction.inquiryAnswerId = InquiryAnswer.id
+                                    // )`),
+                                    //     'totalVotes',
+                                    // ],
+                                ],
+                                include: [
+                                    {
+                                        model: User,
+                                        as: 'Creator',
+                                        attributes: ['handle', 'name', 'flagImagePath'],
+                                    },
+                                    {
+                                        model: Reaction,
+                                        attributes: [
+                                            'value',
+                                            'state',
+                                            'inquiryAnswerId',
+                                            'createdAt',
+                                            'updatedAt',
+                                        ],
+                                        required: false,
+                                        include: [
+                                            {
+                                                model: User,
+                                                as: 'Creator',
+                                                attributes: [
+                                                    'id',
+                                                    'handle',
+                                                    'name',
+                                                    'flagImagePath',
+                                                ],
+                                            },
+                                        ],
+                                    },
+                                ],
                             },
                         ],
                     },

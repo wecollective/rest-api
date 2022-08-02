@@ -767,6 +767,21 @@ router.get('/space-posts', (req, res) => {
                             {
                                 model: InquiryAnswer,
                                 required: false,
+                                attributes: [
+                                    'id',
+                                    'text',
+                                    'createdAt',
+                                    // [
+                                    //     sequelize.literal(`(
+                                    // SELECT COUNT(*)
+                                    // FROM Reactions
+                                    // AS Reaction
+                                    // WHERE Reaction.state = 'active'
+                                    // AND Reaction.inquiryAnswerId = InquiryAnswer.id
+                                    // )`),
+                                    //     'totalVotes',
+                                    // ],
+                                ],
                                 include: [
                                     {
                                         model: User,
@@ -775,8 +790,13 @@ router.get('/space-posts', (req, res) => {
                                     },
                                     {
                                         model: Reaction,
-                                        attributes: ['value'],
-                                        where: { state: 'active' },
+                                        attributes: [
+                                            'value',
+                                            'state',
+                                            'inquiryAnswerId',
+                                            'createdAt',
+                                            'updatedAt',
+                                        ],
                                         required: false,
                                         include: [
                                             {

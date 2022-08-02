@@ -143,6 +143,56 @@ router.get('/post-data', (req, res) => {
                 ],
             },
             {
+                model: Inquiry,
+                required: false,
+                include: [
+                    {
+                        model: InquiryAnswer,
+                        required: false,
+                        attributes: [
+                            'id',
+                            'text',
+                            'createdAt',
+                            // [
+                            //     sequelize.literal(`(
+                            // SELECT COUNT(*)
+                            // FROM Reactions
+                            // AS Reaction
+                            // WHERE Reaction.state = 'active'
+                            // AND Reaction.inquiryAnswerId = InquiryAnswer.id
+                            // )`),
+                            //     'totalVotes',
+                            // ],
+                        ],
+                        include: [
+                            {
+                                model: User,
+                                as: 'Creator',
+                                attributes: ['handle', 'name', 'flagImagePath'],
+                            },
+                            {
+                                model: Reaction,
+                                attributes: [
+                                    'value',
+                                    'state',
+                                    'inquiryAnswerId',
+                                    'createdAt',
+                                    'updatedAt',
+                                ],
+                                required: false,
+                                include: [
+                                    {
+                                        model: User,
+                                        as: 'Creator',
+                                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            },
+            {
                 model: GlassBeadGame,
                 attributes: ['topic', 'topicGroup', 'topicImage'],
                 include: [
@@ -448,8 +498,8 @@ router.get('/post-comments', (req, res) => {
 
 router.get('/poll-votes', (req, res) => {
     Reaction.findAll({
-        where: { type: 'vote', postId: req.query.postId },
-        attributes: ['pollAnswerId', 'value', 'createdAt'],
+        where: { type: 'inquiry-vote', state: 'active', postId: req.query.postId },
+        attributes: ['inquiryAnswerId', 'value', 'createdAt'],
     })
         .then((labels) => {
             labels.forEach((label) => {
@@ -2356,8 +2406,7 @@ router.post('/respond-to-event', authenticateToken, (req, res) => {
 
 router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
     const accountId = req.user.id
-    const { userName, userHandle, spaceId, postId, inquiryId, voteData } = req.body
-    console.log(req.body)
+    const { userName, userHandle, spaceId, postId, voteData } = req.body
 
     const post = await Post.findOne({
         where: { id: postId },
@@ -2373,14 +2422,14 @@ router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
 
     const removeOldReactions = await Reaction.update(
         { state: 'removed' },
-        { where: { userId: accountId, postId } }
+        { where: { state: 'active', userId: accountId, postId } }
     )
 
     const createNewReactions = await Promise.all(
         voteData.map((answer) =>
             Reaction.create({
                 type: 'inquiry-vote',
-                value: answer.value,
+                value: answer.value || null,
                 state: 'active',
                 holonId: spaceId,
                 userId: accountId,
