@@ -29,7 +29,7 @@ module.exports = {
             commentId: {
                 type: Sequelize.INTEGER,
             },
-            pollAnswerId: {
+            inquiryAnswerId: {
                 type: Sequelize.INTEGER,
             },
             linkId: {
