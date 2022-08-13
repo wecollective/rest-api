@@ -553,7 +553,7 @@ router.get('/user-posts', (req, res) => {
                             ],
                         ],
                         through: {
-                            where: { state: 'visible' },
+                            where: { state: 'visible', type: 'string-post' },
                             attributes: ['index', 'relationship'],
                         },
                         required: false,

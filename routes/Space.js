@@ -892,7 +892,7 @@ router.get('/space-posts', (req, res) => {
                             ],
                         ],
                         through: {
-                            where: { state: 'visible' },
+                            where: { state: 'visible', type: 'string-post' },
                             attributes: ['index', 'relationship'],
                         },
                         required: false,
@@ -1010,6 +1010,7 @@ router.get('/post-map-data', async (req, res) => {
                   'image',
                   'audio',
                   'event',
+                  'inquiry',
                   'glass-bead-game',
                   'string',
                   'weave',

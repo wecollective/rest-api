@@ -268,7 +268,7 @@ router.get('/post-data', (req, res) => {
                     ],
                 ],
                 through: {
-                    where: { state: 'visible' },
+                    where: { state: 'visible', type: 'string-post' },
                     attributes: ['index', 'relationship'],
                 },
                 required: false,
@@ -552,8 +552,8 @@ router.get('/plot-graph-data', (req, res) => {
 router.get('/scrape-url', async (req, res) => {
     const { url } = req.query
 
+    const browser = await puppeteer.launch() // { headless: false })
     try {
-        const browser = await puppeteer.launch() // { headless: false })
         const page = await browser.newPage()
         await page.goto(url, { waitUntil: 'domcontentloaded' }) // { timeout: 60000 }, { waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2' }
         await page.evaluate(async () => {
@@ -601,7 +601,6 @@ router.get('/scrape-url', async (req, res) => {
         })
         if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
         res.send(urlData)
-        await browser.close()
     } catch (e) {
         console.log('error: ', e)
         res.send({
@@ -610,6 +609,8 @@ router.get('/scrape-url', async (req, res) => {
             domain: null,
             image: null,
         })
+    } finally {
+        await browser.close()
     }
 })
 
@@ -2460,7 +2461,7 @@ router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
                   },
                   subject: 'New notification',
                   text: `
-            Hi ${post.Creator.name}, ${userName} just voted on your inquiry:
+            Hi ${post.Creator.name}, ${userName} just voted on your Inquiry:
             http://${config.appURL}/p/${postId}
         `,
                   html: `
@@ -2469,7 +2470,7 @@ router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
                 <br/>
                 <a href='${config.appURL}/u/${userHandle}'>${userName}</a>
                 just voted on your
-                <a href='${config.appURL}/p/${postId}'>inquiry</a>
+                <a href='${config.appURL}/p/${postId}'>Inquiry</a>
             </p>
         `,
               })
