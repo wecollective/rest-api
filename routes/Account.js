@@ -219,7 +219,7 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
                 attributes: ['id', 'name', 'handle', 'email'],
                 through: {
                     where: { type: 'weave' },
-                    attributes: ['index'],
+                    attributes: ['index', 'state'],
                 },
             },
         ],
@@ -348,7 +348,7 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
                                 `,
                         })
                         const scheduleWeaveMoveJobs = post.Weave.moveTimeWindow
-                            ? ScheduledTasks.scheduleWeaveMoveJobs(postId, players[0], deadline)
+                            ? ScheduledTasks.scheduleWeaveMoveJobs(postId, players[0], 1, deadline)
                             : null
                         Promise.all([
                             updateWeaveState,

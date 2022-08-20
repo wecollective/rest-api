@@ -51,7 +51,7 @@ function scheduleEventNotification(data) {
     }
 }
 
-async function scheduleWeaveMoveJobs(postId, player, deadline) {
+async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
     const reminderTime = new Date(deadline.getTime() - 15 * 60 * 1000) // 15 minutes before
     // schedule reminder
     if (reminderTime > new Date()) {
@@ -81,38 +81,40 @@ async function scheduleWeaveMoveJobs(postId, player, deadline) {
                     },
                 ],
             })
-            const beads = post.StringPosts.sort((a, b) => a.Link.index - b.Link.index)
-            const moveTaken = beads.length > 0 && beads[beads.length - 1].Creator.id === player.id
-            if (post && post.Weave.state === 'active' && !moveTaken) {
-                // create notification
-                Notification.create({
-                    ownerId: player.id,
-                    type: 'weave-move-reminder',
-                    seen: false,
-                    postId,
-                })
-                // send email
-                sgMail.send({
-                    to: player.email,
-                    from: { email: 'admin@weco.io', name: 'we { collective }' },
-                    subject: 'New notification',
-                    text: `
-                        Hi ${player.name}, you have 15 minutes left to complete your move on this Weave:
-                        http://${config.appURL}/p/${postId}
-                        If you fail to do this, the game ends!
-                    `,
-                    html: `
-                        <p>
-                            Hi ${player.name},
-                            <br/>
-                            <br/>
-                            You have 15 minutes left to complete your move on <a href='${config.appURL}/p/${postId}'>this Weave</a>.
-                            <br/>
-                            <br/>
+            if (post) {
+                const beads = post.StringPosts.sort((a, b) => a.Link.index - b.Link.index)
+                const moveTaken = beads.length >= moveNumber
+                if (post.Weave.state === 'active' && !moveTaken) {
+                    // create notification
+                    Notification.create({
+                        ownerId: player.id,
+                        type: 'weave-move-reminder',
+                        seen: false,
+                        postId,
+                    })
+                    // send email
+                    sgMail.send({
+                        to: player.email,
+                        from: { email: 'admin@weco.io', name: 'we { collective }' },
+                        subject: 'New notification',
+                        text: `
+                            Hi ${player.name}, you have 15 minutes left to complete your move on this Weave:
+                            http://${config.appURL}/p/${postId}
                             If you fail to do this, the game ends!
-                        </p>
-                    `,
-                })
+                        `,
+                        html: `
+                            <p>
+                                Hi ${player.name},
+                                <br/>
+                                <br/>
+                                You have 15 minutes left to complete your move on <a href='${config.appURL}/p/${postId}'>this Weave</a>.
+                                <br/>
+                                <br/>
+                                If you fail to do this, the game ends!
+                            </p>
+                        `,
+                    })
+                }
             }
         })
     }
@@ -153,60 +155,64 @@ async function scheduleWeaveMoveJobs(postId, player, deadline) {
                     },
                 ],
             })
-            const beads = post.StringPosts.sort((a, b) => a.Link.index - b.Link.index)
-            const moveTaken = beads.length > 0 && beads[beads.length - 1].Creator.id === player.id
-            if (post && post.Weave.state === 'active' && !moveTaken) {
-                // cancel game and notify other players
-                const updateWeaveState = await Weave.update(
-                    { state: 'cancelled' },
-                    { where: { postId } }
-                )
-                const notifyPlayers = await Promise.all[
-                    post.StringPlayers.map(
-                        (p) =>
-                            new Promise(async (resolve) => {
-                                const createNotification = await Notification.create({
-                                    ownerId: p.id,
-                                    type: 'weave-cancelled',
-                                    userId: player.id,
-                                    postId,
-                                    seen: false,
-                                })
-                                const you = p.id === player.id
-                                const sendEmail = await sgMail.send({
-                                    to: p.email,
-                                    from: { email: 'admin@weco.io', name: 'we { collective }' },
-                                    subject: 'New notification',
-                                    text: `
-                                        Hi ${p.name}, ${you ? 'You' : player.name} failed to make ${
-                                        you ? 'your' : 'their'
-                                    } move in time on this Weave:
-                                        http://${config.appURL}/p/${postId}
-                                        The game has now ended!
-                                    `,
-                                    html: `
-                                        <p>
-                                            Hi ${p.name},
-                                            <br/>
-                                            <br/>
-                                            ${you ? 'You' : player.name} failed to make ${
-                                        you ? 'your' : 'their'
-                                    } move in time on <a href='${
-                                        config.appURL
-                                    }/p/${postId}'>this Weave</a>.
-                                            <br/>
-                                            <br/>
-                                            The game has now ended!
-                                        </p>
-                                    `,
-                                })
-                                Promise.all([createNotification, sendEmail])
-                                    .then(() => resolve())
-                                    .catch(() => resolve())
-                            })
+            if (post) {
+                const beads = post.StringPosts.sort((a, b) => a.Link.index - b.Link.index)
+                const moveTaken = beads.length >= moveNumber
+                if (post.Weave.state === 'active' && !moveTaken) {
+                    // cancel game and notify other players
+                    const updateWeaveState = await Weave.update(
+                        { state: 'cancelled' },
+                        { where: { postId } }
                     )
-                ]
-                Promise.all([updateWeaveState, notifyPlayers])
+                    const notifyPlayers = await Promise.all[
+                        post.StringPlayers.map(
+                            (p) =>
+                                new Promise(async (resolve) => {
+                                    const createNotification = await Notification.create({
+                                        ownerId: p.id,
+                                        type: 'weave-cancelled',
+                                        userId: player.id,
+                                        postId,
+                                        seen: false,
+                                    })
+                                    const you = p.id === player.id
+                                    const sendEmail = await sgMail.send({
+                                        to: p.email,
+                                        from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                        subject: 'New notification',
+                                        text: `
+                                            Hi ${p.name}, ${
+                                            you ? 'You' : player.name
+                                        } failed to make ${
+                                            you ? 'your' : 'their'
+                                        } move in time on this Weave:
+                                            http://${config.appURL}/p/${postId}
+                                            The game has now ended!
+                                        `,
+                                        html: `
+                                            <p>
+                                                Hi ${p.name},
+                                                <br/>
+                                                <br/>
+                                                ${you ? 'You' : player.name} failed to make ${
+                                            you ? 'your' : 'their'
+                                        } move in time on <a href='${
+                                            config.appURL
+                                        }/p/${postId}'>this Weave</a>.
+                                                <br/>
+                                                <br/>
+                                                The game has now ended!
+                                            </p>
+                                        `,
+                                    })
+                                    Promise.all([createNotification, sendEmail])
+                                        .then(() => resolve())
+                                        .catch(() => resolve())
+                                })
+                        )
+                    ]
+                    Promise.all([updateWeaveState, notifyPlayers])
+                }
             }
         })
     }
@@ -313,7 +319,9 @@ module.exports = {
             ) {
                 const players = StringPlayers.sort((a, b) => a.UserPost.index - b.UserPost.index)
                 const activePlayer = players[StringPosts.length % players.length]
-                if (activePlayer) scheduleWeaveMoveJobs(id, activePlayer, nextMoveDeadline)
+                const moveNumber = StringPosts.length + 1
+                if (activePlayer)
+                    scheduleWeaveMoveJobs(id, activePlayer, moveNumber, nextMoveDeadline)
             }
         })
     },

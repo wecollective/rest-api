@@ -1491,6 +1491,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                         : null
                     // notify next player in private game
                     const nextPlayer = post.StringPlayers.find((p) => p.id === nextPlayerId)
+                    const nextMoveNumber = post.StringPosts.length + 1
                     const createMoveNotification = await Notification.create({
                         type: 'weave-move',
                         ownerId: nextPlayerId,
@@ -1521,6 +1522,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                     const scheduleWeaveMoveJobs = ScheduledTasks.scheduleWeaveMoveJobs(
                         postId,
                         nextPlayer,
+                        nextMoveNumber,
                         deadline
                     )
                     Promise.all([
