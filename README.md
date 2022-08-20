@@ -3,7 +3,7 @@
 ## Set up
 
 ```
-npm i
+npm install
 ```
 
 Create .env file:
@@ -12,22 +12,46 @@ Create .env file:
 NODE_ENV=dev
 APP_ENV=dev
 DEV_APP_URL=http://localhost:3000
-DEV_DB_NAME=weco
+DEV_API_URL=http://localhost:5000
+DEV_WEBSOCKET_API_URL=http://localhost:5001
 DEV_DB_USER=root
 DEV_DB_PASSWORD=password
+DEV_DB_NAME=weco
+DEV_DB_PORT=3307
 ACCESS_TOKEN_SECRET=secret
 ```
 
-Generate [seeds](./docs/sequelize-commands.md)
+## Develop
 
-# Develop
+Requires docker https://docs.docker.com/get-docker/
 
-In separate terminals run:
+### Build the MySQL database
 
--   `npm run deps`
--   `npm run dev`
+```
+npm run deps
+```
 
-## Start
+### Populate the database
+
+Open a new terminal and generate the database tables:
+
+```
+npm run migrate
+```
+
+Populate the tables with demo data:
+
+```
+npm run seed
+```
+
+### Start the development server
+
+```
+npm run dev
+```
+
+## Start the production server
 
 ```
 npm start

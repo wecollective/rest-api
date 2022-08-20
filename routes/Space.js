@@ -23,6 +23,8 @@ const {
     GlassBeadGame,
     GlassBead,
     Event,
+    Inquiry,
+    InquiryAnswer,
     PostImage,
     Weave,
 } = require('../models')
@@ -513,6 +515,7 @@ router.get('/space-posts', (req, res) => {
                   'image',
                   'audio',
                   'event',
+                  'inquiry',
                   'glass-bead-game',
                   'string',
                   'weave',
@@ -758,6 +761,61 @@ router.get('/space-posts', (req, res) => {
                         ],
                     },
                     {
+                        model: Inquiry,
+                        required: false,
+                        include: [
+                            {
+                                model: InquiryAnswer,
+                                required: false,
+                                attributes: [
+                                    'id',
+                                    'text',
+                                    'createdAt',
+                                    // [
+                                    //     sequelize.literal(`(
+                                    // SELECT COUNT(*)
+                                    // FROM Reactions
+                                    // AS Reaction
+                                    // WHERE Reaction.state = 'active'
+                                    // AND Reaction.inquiryAnswerId = InquiryAnswer.id
+                                    // )`),
+                                    //     'totalVotes',
+                                    // ],
+                                ],
+                                include: [
+                                    {
+                                        model: User,
+                                        as: 'Creator',
+                                        attributes: ['handle', 'name', 'flagImagePath'],
+                                    },
+                                    {
+                                        model: Reaction,
+                                        attributes: [
+                                            'value',
+                                            'state',
+                                            'inquiryAnswerId',
+                                            'createdAt',
+                                            'updatedAt',
+                                        ],
+                                        required: false,
+                                        include: [
+                                            {
+                                                model: User,
+                                                as: 'Creator',
+                                                attributes: [
+                                                    'id',
+                                                    'handle',
+                                                    'name',
+                                                    'flagImagePath',
+                                                ],
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    {
                         model: GlassBeadGame,
                         required: false,
                         attributes: ['topic', 'topicGroup', 'topicImage'],
@@ -834,7 +892,7 @@ router.get('/space-posts', (req, res) => {
                             ],
                         ],
                         through: {
-                            where: { state: 'visible' },
+                            where: { state: 'visible', type: 'string-post' },
                             attributes: ['index', 'relationship'],
                         },
                         required: false,
@@ -952,6 +1010,7 @@ router.get('/post-map-data', async (req, res) => {
                   'image',
                   'audio',
                   'event',
+                  'inquiry',
                   'glass-bead-game',
                   'string',
                   'weave',

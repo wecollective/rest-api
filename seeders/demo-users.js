@@ -10,6 +10,7 @@ module.exports = {
                 email: 'admin@weco.io',
                 password: '$2b$10$PaPDZc0ELfDGZMuGUSoZeO8nFYS/lDeg/8uM6HTJUgC6NzCFMYjXG',
                 bio: '...',
+                state: 'active',
                 emailVerified: true,
                 flagImagePath: null,
                 coverImagePath: null,

@@ -81,21 +81,13 @@ Posts to holon A appear within holon B
 
 `npx sequelize-cli model:generate --name Notification --attributes type:string,text:string,holonId:integer,userId:integer,postId:integer,commentId:integer`
 
-### SpaceNotification
+### Inquiry
 
-`npx sequelize-cli model:generate --name SpaceNotification --attributes ownerId:integer,seen:boolean,type:string,state:string,holonAId:integer,holonBId:integer,userId:integer,postId:integer,commentId:integer`
+`npx sequelize-cli model:generate --name Inquiry --attributes postId:integer,type:string,answersLocked:boolean,endTime:date`
 
-### Message
+### InquiryAnswer
 
-`npx sequelize-cli model:generate --name Message --attributes type:string,state:string,from:integer,to:integer,text:string`
-
-### PollAnswer
-
-`npx sequelize-cli model:generate --name PollAnswer --attributes creator:integer,text:string,postId:integer`
-
-### Session
-
-`npx sequelize-cli model:generate --name Session --attributes sid:integer,expires:date,data:string`
+`npx sequelize-cli model:generate --name InquiryAnswer --attributes creatorId:integer,postId:integer,text:string`
 
 ### Prism
 
