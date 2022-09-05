@@ -634,6 +634,7 @@ router.post('/find-users', (req, res) => {
                 { name: { [Op.like]: `%${query}%` } },
             ],
         },
+        attributes: ['id', 'handle', 'name', 'flagImagePath'],
     }).then((users) => res.send(users))
 })
 
