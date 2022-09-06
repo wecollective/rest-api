@@ -728,29 +728,28 @@ router.post('/create-post', authenticateToken, (req, res) => {
             urlDescription,
         }).then(async (post) => {
             const indirectSpaceIds = await new Promise((resolve, reject) => {
-                Promise.all(
-                    spaceIds.map((id) =>
-                        Holon.findOne({
-                            where: { id, state: 'active' },
-                            attributes: [],
-                            include: [
-                                {
-                                    model: Holon,
-                                    as: 'HolonHandles',
-                                    attributes: ['id'],
-                                    through: { where: { state: 'open' }, attributes: [] },
-                                },
-                            ],
-                        })
-                    )
-                ).then((spaces) => {
-                    const ids = []
-                    spaces.forEach((space) =>
-                        ids.push(...space.HolonHandles.map((holon) => holon.id))
-                    )
-                    const filteredIds = [...new Set(ids)].filter((id) => !spaceIds.includes(id))
-                    resolve(filteredIds)
+                Holon.findAll({
+                    where: { id: spaceIds, state: 'active' },
+                    attributes: [],
+                    include: [
+                        {
+                            model: Holon,
+                            as: 'HolonHandles',
+                            attributes: ['id'],
+                            through: { where: { state: 'open' }, attributes: [] },
+                        },
+                    ],
                 })
+                    .then((spaces) => {
+                        // todo: include space handles and flag images
+                        const ids = []
+                        spaces.forEach((space) =>
+                            ids.push(...space.HolonHandles.map((holon) => holon.id))
+                        )
+                        const filteredIds = [...new Set(ids)].filter((id) => !spaceIds.includes(id))
+                        resolve(filteredIds)
+                    })
+                    .catch(() => resolve([]))
             })
 
             const createDirectRelationships = await Promise.all(
