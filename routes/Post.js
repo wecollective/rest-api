@@ -680,8 +680,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
             creatorName,
             creatorHandle,
             type,
-            text,
             spaceIds,
+            mentions,
+            text,
             url,
             // urls
             urlImage,
@@ -727,7 +728,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             urlTitle,
             urlDescription,
         }).then(async (post) => {
-            const indirectSpaceIds = await new Promise((resolve, reject) => {
+            const indirectSpaceIds = await new Promise((resolve) => {
                 Holon.findAll({
                     where: { id: spaceIds, state: 'active' },
                     attributes: [],
@@ -775,6 +776,59 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     })
                 )
             )
+
+            const notifyMentions = await new Promise(async (resolve) => {
+                User.findAll({
+                    where: { handle: mentions, state: 'active' },
+                    attributes: ['id', 'name', 'email'],
+                })
+                    .then((users) => {
+                        Promise.all(
+                            users.map(
+                                (user) =>
+                                    new Promise(async (reso) => {
+                                        const sendNotification = await Notification.create({
+                                            ownerId: user.id,
+                                            type: 'post-mention',
+                                            seen: false,
+                                            userId: accountId,
+                                            postId: post.id,
+                                        })
+
+                                        const sendEmail = await sgMail.send({
+                                            to: user.email,
+                                            from: {
+                                                email: 'admin@weco.io',
+                                                name: 'we { collective }',
+                                            },
+                                            subject: 'New notification',
+                                            text: `
+                                                Hi ${user.name}, ${creatorName} just mentioned you in a post on weco:
+                                                http://${config.appURL}/p/${post.id}
+                                            `,
+                                            html: `
+                                                <p>
+                                                    Hi ${user.name},
+                                                    <br/>
+                                                    <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+                                                    just mentioned you in a 
+                                                    <a href='${config.appURL}/p/${post.id}'>post</a>
+                                                    on weco
+                                                </p>
+                                            `,
+                                        })
+
+                                        Promise.all([sendNotification, sendEmail])
+                                            .then(() => reso())
+                                            .catch((error) => reso(error))
+                                    })
+                            )
+                        )
+                            .then((data) => resolve(data))
+                            .catch((error) => resolve(data, error))
+                    })
+                    .catch((error) => resolve(error))
+            })
 
             const createEvent =
                 type === 'event' || (type === 'glass-bead-game' && startTime)
@@ -1094,6 +1148,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             Promise.all([
                 createDirectRelationships,
                 createIndirectRelationships,
+                notifyMentions,
                 createEvent,
                 createInquiry,
                 createGBG,
@@ -1104,11 +1159,10 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 res.status(200).json({
                     post,
                     indirectRelationships: data[1],
-                    event: data[2],
-                    inquiryAnswers: data[3],
-                    images: data[5],
-                    string: data[6],
-                    multiplayerStringUsers: data[7],
+                    event: data[3],
+                    inquiryAnswers: data[4],
+                    images: data[6],
+                    string: data[7],
                 })
             })
         })
@@ -1874,7 +1928,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
             {
                 model: User,
                 as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+                attributes: ['id', 'name', 'email'],
             },
         ],
     })
