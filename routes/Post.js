@@ -777,7 +777,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 )
             )
 
-            const notifyMentions = await new Promise(async (resolve) => {
+            const notifyMentions = await new Promise((resolve) => {
                 User.findAll({
                     where: { handle: mentions, state: 'active' },
                     attributes: ['id', 'name', 'email'],
@@ -1441,8 +1441,20 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
     const imageMBLimit = 2
 
     function createBead(beadData, files, imageData) {
-        const { postId, beadIndex, privacy, nextPlayerId, type, color, text, url, urlData } =
-            beadData
+        const {
+            creatorName,
+            creatorHandle,
+            postId,
+            beadIndex,
+            mentions,
+            privacy,
+            nextPlayerId,
+            type,
+            color,
+            text,
+            url,
+            urlData,
+        } = beadData
 
         Post.create({
             type: `string-${type}`,
@@ -1768,7 +1780,65 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                 }
             })
 
-            Promise.all([createImages, createStringLink, updateWeaveStateAndNotifyPlayers])
+            const notifyMentions = await new Promise((resolve) => {
+                User.findAll({
+                    where: { handle: mentions, state: 'active' },
+                    attributes: ['id', 'name', 'email'],
+                })
+                    .then((users) => {
+                        Promise.all(
+                            users.map(
+                                (user) =>
+                                    new Promise(async (reso) => {
+                                        const sendNotification = await Notification.create({
+                                            ownerId: user.id,
+                                            type: 'bead-mention',
+                                            seen: false,
+                                            userId: accountId,
+                                            postId: bead.id,
+                                        })
+
+                                        const sendEmail = await sgMail.send({
+                                            to: user.email,
+                                            from: {
+                                                email: 'admin@weco.io',
+                                                name: 'we { collective }',
+                                            },
+                                            subject: 'New notification',
+                                            text: `
+                                                Hi ${user.name}, ${creatorName} just mentioned you in a bead on weco:
+                                                http://${config.appURL}/p/${bead.id}
+                                            `,
+                                            html: `
+                                                <p>
+                                                    Hi ${user.name},
+                                                    <br/>
+                                                    <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+                                                    just mentioned you in a 
+                                                    <a href='${config.appURL}/p/${bead.id}'>bead</a>
+                                                    on weco
+                                                </p>
+                                            `,
+                                        })
+
+                                        Promise.all([sendNotification, sendEmail])
+                                            .then(() => reso())
+                                            .catch((error) => reso(error))
+                                    })
+                            )
+                        )
+                            .then((data) => resolve(data))
+                            .catch((error) => resolve(data, error))
+                    })
+                    .catch((error) => resolve(error))
+            })
+
+            Promise.all([
+                createImages,
+                createStringLink,
+                updateWeaveStateAndNotifyPlayers,
+                notifyMentions,
+            ])
                 .then((data) =>
                     res
                         .status(200)
