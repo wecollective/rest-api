@@ -275,6 +275,7 @@ router.get('/homepage-highlights', async (req, res) => {
     const spaces = Holon.findAll({
         where: {
             // id: { [Op.ne]: [1] },
+            state: 'active',
             flagImagePath: { [Op.ne]: null },
         },
         attributes: ['flagImagePath'],
