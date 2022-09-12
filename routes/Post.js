@@ -2003,27 +2003,33 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
         ],
     })
 
-    const sendNotification = await Notification.create({
-        ownerId: post.Creator.id,
-        type: 'post-repost',
-        seen: false,
-        holonAId: spaceId,
-        userId: accountId,
-        postId,
-    })
+    const isOwnPost = post.Creator.id === accountId
 
-    const sendEmail = await sgMail.send({
-        to: post.Creator.email,
-        from: {
-            email: 'admin@weco.io',
-            name: 'we { collective }',
-        },
-        subject: 'New notification',
-        text: `
+    const sendNotification = isOwnPost
+        ? null
+        : await Notification.create({
+              ownerId: post.Creator.id,
+              type: 'post-repost',
+              seen: false,
+              holonAId: spaceId,
+              userId: accountId,
+              postId,
+          })
+
+    const sendEmail = isOwnPost
+        ? null
+        : await sgMail.send({
+              to: post.Creator.email,
+              from: {
+                  email: 'admin@weco.io',
+                  name: 'we { collective }',
+              },
+              subject: 'New notification',
+              text: `
             Hi ${post.Creator.name}, ${accountName} just reposted your post on weco:
             http://${config.appURL}/p/${postId}
         `,
-        html: `
+              html: `
             <p>
                 Hi ${post.Creator.name},
                 <br/>
@@ -2033,7 +2039,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                 on weco
             </p>
         `,
-    })
+          })
 
     const createReactions = Promise.all(
         selectedSpaceIds.map((id) =>
@@ -2140,27 +2146,33 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         postId,
     })
 
-    const createNotification = await Notification.create({
-        ownerId: post.Creator.id,
-        type: 'post-like',
-        seen: false,
-        holonAId: holonId,
-        userId: accountId,
-        postId,
-    })
+    const isOwnPost = post.Creator.id === accountId
 
-    const sendEmail = await sgMail.send({
-        to: post.Creator.email,
-        from: {
-            email: 'admin@weco.io',
-            name: 'we { collective }',
-        },
-        subject: 'New notification',
-        text: `
+    const createNotification = isOwnPost
+        ? null
+        : await Notification.create({
+              ownerId: post.Creator.id,
+              type: 'post-like',
+              seen: false,
+              holonAId: holonId,
+              userId: accountId,
+              postId,
+          })
+
+    const sendEmail = isOwnPost
+        ? null
+        : await sgMail.send({
+              to: post.Creator.email,
+              from: {
+                  email: 'admin@weco.io',
+                  name: 'we { collective }',
+              },
+              subject: 'New notification',
+              text: `
             Hi ${post.Creator.name}, ${accountName} just liked your post on weco:
             http://${config.appURL}/p/${postId}
         `,
-        html: `
+              html: `
             <p>
                 Hi ${post.Creator.name},
                 <br/>
@@ -2170,7 +2182,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                 on weco
             </p>
         `,
-    })
+          })
 
     Promise.all([createReaction, createNotification, sendEmail])
         .then(() => res.status(200).json({ message: 'Success' }))
@@ -2211,6 +2223,8 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
         ],
     })
 
+    const isOwnPost = post.Creator.id === accountId
+
     const createReaction = await Reaction.create({
         type: 'rating',
         value: newRating,
@@ -2220,27 +2234,31 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
         postId,
     })
 
-    const sendNotification = await Notification.create({
-        ownerId: post.Creator.id,
-        type: 'post-rating',
-        seen: false,
-        holonAId: spaceId,
-        userId: accountId,
-        postId,
-    })
+    const sendNotification = isOwnPost
+        ? null
+        : await Notification.create({
+              ownerId: post.Creator.id,
+              type: 'post-rating',
+              seen: false,
+              holonAId: spaceId,
+              userId: accountId,
+              postId,
+          })
 
-    const sendEmail = await sgMail.send({
-        to: post.Creator.email,
-        from: {
-            email: 'admin@weco.io',
-            name: 'we { collective }',
-        },
-        subject: 'New notification',
-        text: `
+    const sendEmail = isOwnPost
+        ? null
+        : await sgMail.send({
+              to: post.Creator.email,
+              from: {
+                  email: 'admin@weco.io',
+                  name: 'we { collective }',
+              },
+              subject: 'New notification',
+              text: `
             Hi ${post.Creator.name}, ${accountName} just rated your post on weco:
             http://${config.appURL}/p/${postId}
         `,
-        html: `
+              html: `
             <p>
                 Hi ${post.Creator.name},
                 <br/>
@@ -2250,7 +2268,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
                 on weco
             </p>
         `,
-    })
+          })
 
     Promise.all([createReaction, sendNotification, sendEmail])
         .then(() => res.status(200).json({ message: 'Success' }))
@@ -2315,28 +2333,34 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             ],
         })
 
-        // todo: also send notification to itemB owner, and include itemB info in email
-        const sendNotification = await Notification.create({
-            ownerId: itemA.Creator.id,
-            type: 'post-link',
-            seen: false,
-            holonAId: spaceId,
-            userId: accountId,
-            postId: itemAId,
-        })
+        const isOwnPost = post.Creator.id === accountId
 
-        const sendEmail = await sgMail.send({
-            to: itemA.Creator.email,
-            from: {
-                email: 'admin@weco.io',
-                name: 'we { collective }',
-            },
-            subject: 'New notification',
-            text: `
+        // todo: also send notification to itemB owner, and include itemB info in email
+        const sendNotification = isOwnPost
+            ? null
+            : await Notification.create({
+                  ownerId: itemA.Creator.id,
+                  type: 'post-link',
+                  seen: false,
+                  holonAId: spaceId,
+                  userId: accountId,
+                  postId: itemAId,
+              })
+
+        const sendEmail = isOwnPost
+            ? null
+            : await sgMail.send({
+                  to: itemA.Creator.email,
+                  from: {
+                      email: 'admin@weco.io',
+                      name: 'we { collective }',
+                  },
+                  subject: 'New notification',
+                  text: `
                 Hi ${itemA.Creator.name}, ${accountName} just linked your post to another post on weco:
                 http://${config.appURL}/p/${itemAId}
             `,
-            html: `
+                  html: `
                 <p>
                     Hi ${itemA.Creator.name},
                     <br/>
@@ -2346,7 +2370,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                     to another post on weco
                 </p>
             `,
-        })
+              })
 
         Promise.all([createLink, sendNotification, sendEmail])
             .then((data) => res.status(200).json({ itemB, link: data[0], message: 'Success' }))
