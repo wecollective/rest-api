@@ -2364,9 +2364,9 @@ router.post('/remove-link', authenticateToken, (req, res) => {
 
 router.post('/submit-comment', authenticateToken, async (req, res) => {
     const accountId = req.user.id
-    const { text, postId, parentCommentId, spaceId, accountHandle, accountName } = req.body
+    const { text, postId, parentCommentId, spaceId, accountHandle, accountName, mentions } =
+        req.body
 
-    // find post owner
     const post = await Post.findOne({
         where: { id: postId },
         attributes: [],
@@ -2378,99 +2378,167 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
             },
         ],
     })
-    // create comment
-    Comment.create({
+
+    const parentComment = parentCommentId
+        ? await Comment.findOne({
+              where: { id: parentCommentId },
+              attributes: [],
+              include: [
+                  {
+                      model: User,
+                      as: 'Creator',
+                      attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+                  },
+              ],
+          })
+        : null
+
+    const createComment = await Comment.create({
         state: 'visible',
         creatorId: accountId,
         holonId: spaceId,
         postId,
         parentCommentId,
         text,
-    }).then(async (comment) => {
-        if (parentCommentId) {
-            // find parent comment owner
-            const parentComment = await Comment.findOne({
-                where: { id: parentCommentId },
-                attributes: [],
-                include: [
-                    {
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
-                    },
-                ],
-            })
-            // create notfication for parent comment owner
-            Notification.create({
-                ownerId: parentComment.Creator.id,
-                type: 'comment-reply',
-                seen: false,
-                holonAId: spaceId,
-                userId: accountId,
-                postId,
-                commentId: comment.id,
-            })
-            // send email to parent comment owner
-            sgMail.send({
-                to: parentComment.Creator.email,
-                from: {
-                    email: 'admin@weco.io',
-                    name: 'we { collective }',
-                },
-                subject: 'New notification',
-                text: `
-                    Hi ${parentComment.Creator.name}, ${accountName} just replied to your comment on weco:
+    })
+
+    const notifyPostOwner =
+        post.Creator.id !== accountId
+            ? new Promise((resolve) => {
+                  const createNotification = Notification.create({
+                      ownerId: post.Creator.id,
+                      type: 'post-comment',
+                      seen: false,
+                      holonAId: spaceId,
+                      userId: accountId,
+                      postId,
+                      commentId: createComment.id,
+                  })
+                  const sendEmail = sgMail.send({
+                      to: post.Creator.email,
+                      from: {
+                          email: 'admin@weco.io',
+                          name: 'we { collective }',
+                      },
+                      subject: 'New notification',
+                      text: `
+                    Hi ${post.Creator.name}, ${accountName} just commented on your post on weco:
                     http://${config.appURL}/p/${postId}
                 `,
-                html: `
+                      html: `
                     <p>
-                        Hi ${parentComment.Creator.name},
+                        Hi ${post.Creator.name},
                         <br/>
                         <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                        just replied to your
-                        <a href='${config.appURL}/p/${postId}'>comment</a>
+                        just commented on your
+                        <a href='${config.appURL}/p/${postId}'>post</a>
                         on weco
                     </p>
                 `,
-            })
-        }
-        // create notificaton for post owner
-        Notification.create({
-            ownerId: post.Creator.id,
-            type: 'post-comment',
-            seen: false,
-            holonAId: spaceId,
-            userId: accountId,
-            postId,
-            commentId: comment.id,
+                  })
+                  Promise.all([createNotification, sendEmail])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
+              })
+            : null
+
+    const notifyParentCommentOwner =
+        parentComment && parentComment.Creator.id !== accountId
+            ? new Promise((resolve) => {
+                  const createNotification = Notification.create({
+                      ownerId: parentComment.Creator.id,
+                      type: 'comment-reply',
+                      seen: false,
+                      holonAId: spaceId,
+                      userId: accountId,
+                      postId,
+                      commentId: createComment.id,
+                  })
+                  const sendEmail = sgMail.send({
+                      to: parentComment.Creator.email,
+                      from: {
+                          email: 'admin@weco.io',
+                          name: 'we { collective }',
+                      },
+                      subject: 'New notification',
+                      text: `
+                        Hi ${parentComment.Creator.name}, ${accountName} just replied to your comment on weco:
+                        http://${config.appURL}/p/${postId}
+                    `,
+                      html: `
+                        <p>
+                            Hi ${parentComment.Creator.name},
+                            <br/>
+                            <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                            just replied to your
+                            <a href='${config.appURL}/p/${postId}'>comment</a>
+                            on weco
+                        </p>
+                    `,
+                  })
+                  Promise.all([createNotification, sendEmail])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
+              })
+            : null
+
+    const notifyMentions = await new Promise((resolve) => {
+        User.findAll({
+            where: { handle: mentions, state: 'active' },
+            attributes: ['id', 'name', 'email'],
         })
-        // send email to post owner
-        sgMail
-            .send({
-                to: post.Creator.email,
-                from: {
-                    email: 'admin@weco.io',
-                    name: 'we { collective }',
-                },
-                subject: 'New notification',
-                text: `
-                Hi ${post.Creator.name}, ${accountName} just commented on your post on weco:
-                http://${config.appURL}/p/${postId}
-            `,
-                html: `
-                <p>
-                    Hi ${post.Creator.name},
-                    <br/>
-                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                    just commented on your
-                    <a href='${config.appURL}/p/${postId}'>post</a>
-                    on weco
-                </p>
-            `,
+            .then((users) => {
+                Promise.all(
+                    users.map(
+                        (user) =>
+                            new Promise(async (reso) => {
+                                const sendNotification = await Notification.create({
+                                    ownerId: user.id,
+                                    type: 'comment-mention',
+                                    seen: false,
+                                    userId: accountId,
+                                    postId,
+                                    commentId: createComment.id,
+                                })
+
+                                const sendEmail = await sgMail.send({
+                                    to: user.email,
+                                    from: {
+                                        email: 'admin@weco.io',
+                                        name: 'we { collective }',
+                                    },
+                                    subject: 'New notification',
+                                    text: `
+                                            Hi ${user.name}, ${accountName} just mentioned you in a comment on weco:
+                                            http://${config.appURL}/p/${postId}
+                                        `,
+                                    html: `
+                                            <p>
+                                                Hi ${user.name},
+                                                <br/>
+                                                <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                                just mentioned you in a 
+                                                <a href='${config.appURL}/p/${postId}'>comment</a>
+                                                on weco
+                                            </p>
+                                        `,
+                                })
+
+                                Promise.all([sendNotification, sendEmail])
+                                    .then(() => reso())
+                                    .catch((error) => reso(error))
+                            })
+                    )
+                )
+                    .then((data) => resolve(data))
+                    .catch((error) => resolve(data, error))
             })
-            .then(() => res.status(200).json(comment))
-            .catch(() => res.status(500).json({ message: 'Error' }))
+            .catch((error) => resolve(error))
     })
+
+    Promise.all([createComment, notifyPostOwner, notifyParentCommentOwner, notifyMentions])
+        .then((data) => res.status(200).json(data[0]))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.post('/respond-to-event', authenticateToken, (req, res) => {
