@@ -12,6 +12,7 @@ const postAttributes = [
     'urlTitle',
     'urlDescription',
     'createdAt',
+    'updatedAt',
     [
         sequelize.literal(
             `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = Post.id)`

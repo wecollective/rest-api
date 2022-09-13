@@ -1432,6 +1432,71 @@ router.post('/create-post', authenticateToken, (req, res) => {
     }
 })
 
+router.post('/update-post-text', authenticateToken, async (req, res) => {
+    const accountId = req.user.id
+    const { postId, type, text, mentions, creatorName, creatorHandle } = req.body
+    const mentionType = type.includes('string-') ? 'bead' : 'post'
+
+    const updatePost = await Post.update({ text }, { where: { id: postId, creatorId: accountId } })
+
+    const notifyMentions = await new Promise((resolve) => {
+        User.findAll({
+            where: { handle: mentions, state: 'active' },
+            attributes: ['id', 'name', 'email'],
+        })
+            .then((users) => {
+                Promise.all(
+                    users.map(
+                        (user) =>
+                            new Promise(async (reso) => {
+                                const sendNotification = await Notification.create({
+                                    ownerId: user.id,
+                                    type: `${mentionType}-mention`,
+                                    seen: false,
+                                    userId: accountId,
+                                    postId,
+                                })
+
+                                const sendEmail = await sgMail.send({
+                                    to: user.email,
+                                    from: {
+                                        email: 'admin@weco.io',
+                                        name: 'we { collective }',
+                                    },
+                                    subject: 'New notification',
+                                    text: `
+                                        Hi ${user.name}, ${creatorName} just mentioned you in a ${mentionType} on weco:
+                                        http://${config.appURL}/p/${postId}
+                                    `,
+                                    html: `
+                                        <p>
+                                            Hi ${user.name},
+                                            <br/>
+                                            <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+                                            just mentioned you in a 
+                                            <a href='${config.appURL}/p/${postId}'>${mentionType}</a>
+                                            on weco
+                                        </p>
+                                    `,
+                                })
+
+                                Promise.all([sendNotification, sendEmail])
+                                    .then(() => reso())
+                                    .catch((error) => reso(error))
+                            })
+                    )
+                )
+                    .then((data) => resolve(data))
+                    .catch((error) => resolve(data, error))
+            })
+            .catch((error) => resolve(error))
+    })
+
+    Promise.all([updatePost, notifyMentions])
+        .then(() => res.status(200).json({ message: 'Success' }))
+        .catch(() => res.status(500).json({ message: 'Error' }))
+})
+
 router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
     const accountId = req.user.id
     const { uploadType } = req.query
