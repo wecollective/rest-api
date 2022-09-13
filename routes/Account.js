@@ -104,6 +104,15 @@ router.post('/update-account-bio', authenticateToken, async (req, res) => {
         .catch((err) => console.log(err))
 })
 
+router.post('/update-account-email', authenticateToken, async (req, res) => {
+    const accountId = req.user.id
+    const { payload } = req.body
+
+    User.update({ email: payload }, { where: { id: accountId } })
+        .then(res.send('success'))
+        .catch((err) => console.log(err))
+})
+
 router.post('/mark-notifications-seen', authenticateToken, (req, res) => {
     const accountId = req.user.id
     const ids = req.body
