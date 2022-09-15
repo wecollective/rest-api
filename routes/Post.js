@@ -2396,7 +2396,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             ],
         })
 
-        const isOwnPost = post.Creator.id === accountId
+        const isOwnPost = itemA.Creator.id === accountId
 
         // todo: also send notification to itemB owner, and include itemB info in email
         const sendNotification = isOwnPost
