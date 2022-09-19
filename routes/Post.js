@@ -719,7 +719,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             type,
             state: 'visible',
             creatorId: accountId,
-            text,
+            text: text || null,
             url: type === 'audio' ? files[0].location : url,
             urlImage,
             urlDomain,
@@ -952,7 +952,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                               state: 'visible',
                                               creatorId: accountId,
                                               color: bead.color,
-                                              text: bead.text,
+                                              text: bead.text || null,
                                               url:
                                                   bead.type === 'audio'
                                                       ? files.find(
@@ -1437,7 +1437,10 @@ router.post('/update-post-text', authenticateToken, async (req, res) => {
     const { postId, type, text, mentions, creatorName, creatorHandle } = req.body
     const mentionType = type.includes('string-') ? 'bead' : 'post'
 
-    const updatePost = await Post.update({ text }, { where: { id: postId, creatorId: accountId } })
+    const updatePost = await Post.update(
+        { text: text || null },
+        { where: { id: postId, creatorId: accountId } }
+    )
 
     const notifyMentions = await new Promise((resolve) => {
         User.findAll({
@@ -1524,7 +1527,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
             state: 'visible',
             creatorId: accountId,
             color,
-            text,
+            text: text || null,
             url: type === 'audio' ? files[0].location : url,
             urlImage: urlData ? urlData.image : null,
             urlDomain: urlData ? urlData.domain : null,
