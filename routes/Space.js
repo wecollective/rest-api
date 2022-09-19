@@ -1339,7 +1339,7 @@ router.get('/space-spaces', (req, res) => {
         .catch((err) => console.log(err))
 })
 
-router.get('/space-users', (req, res) => {
+router.get('/space-people', (req, res) => {
     const {
         accountId,
         spaceId,
@@ -1351,8 +1351,6 @@ router.get('/space-users', (req, res) => {
         limit,
         offset,
     } = req.query
-
-    // console.log('req.query: ', req.query)
 
     User.findAll({
         where: {

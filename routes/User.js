@@ -622,19 +622,33 @@ router.get('/user-posts', (req, res) => {
 })
 
 // POST
-router.post('/find-users', (req, res) => {
-    const { query, blacklist } = req.body
+router.post('/find-people', (req, res) => {
+    const { query, blacklist, spaceId } = req.body
+    let where = {
+        state: 'active',
+        [Op.not]: [{ id: [0, ...blacklist] }],
+        [Op.or]: [
+            { handle: { [Op.like]: `%${query}%` } },
+            { name: { [Op.like]: `%${query}%` } },
+            { bio: { [Op.like]: `%${query}%` } },
+        ],
+    }
+    let include = []
+    if (spaceId) {
+        where['$FollowedHolons.id$'] = spaceId
+        include.push({
+            model: Holon,
+            as: 'FollowedHolons',
+            attributes: [],
+            through: { where: { state: 'active' }, attributes: [] },
+        })
+    }
     User.findAll({
+        where,
+        include,
         limit: 20,
-        where: {
-            state: 'active',
-            [Op.not]: [{ id: [0, ...blacklist] }],
-            [Op.or]: [
-                { handle: { [Op.like]: `%${query}%` } },
-                { name: { [Op.like]: `%${query}%` } },
-            ],
-        },
         attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        subQuery: false,
     }).then((users) => res.send(users))
 })
 

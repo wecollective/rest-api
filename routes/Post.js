@@ -2826,18 +2826,33 @@ router.post('/save-gbg-topic', (req, res) => {
 })
 
 router.post('/find-spaces', (req, res) => {
-    const { query, blacklist } = req.body
+    const { query, blacklist, spaceId } = req.body
+    let where = {
+        state: 'active',
+        [Op.not]: [{ id: [0, ...blacklist] }],
+        [Op.or]: [
+            { handle: { [Op.like]: `%${query}%` } },
+            { name: { [Op.like]: `%${query}%` } },
+            { description: { [Op.like]: `%${query}%` } },
+        ],
+    }
+    let include = []
+    if (spaceId) {
+        where['$HolonHandles.id$'] = spaceId
+        where.id = { [Op.ne]: [spaceId] }
+        include.push({
+            model: Holon,
+            as: 'HolonHandles',
+            attributes: [],
+            through: { attributes: [], where: { state: 'open' } },
+        })
+    }
     Holon.findAll({
+        where,
+        include,
         limit: 20,
-        where: {
-            state: 'active',
-            [Op.not]: [{ id: [0, ...blacklist] }],
-            [Op.or]: [
-                { handle: { [Op.like]: `%${query}%` } },
-                { name: { [Op.like]: `%${query}%` } },
-            ],
-        },
         attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        subQuery: false,
     }).then((spaces) => res.send(spaces))
 })
 
