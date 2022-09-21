@@ -306,7 +306,7 @@ router.get('/homepage-highlights', async (req, res) => {
 })
 
 router.get('/space-data', async (req, res) => {
-    const { handle } = req.query
+    const { handle, accountId } = req.query
     const totalUsers =
         handle === 'all'
             ? [
@@ -375,6 +375,16 @@ router.get('/space-data', async (req, res) => {
                 'totalPosts',
             ],
             totalUsers,
+            [
+                sequelize.literal(`(
+                SELECT COUNT(*)
+                    FROM HolonUsers
+                    WHERE HolonUsers.userId = ${accountId}
+                    AND HolonUsers.relationship = 'access'
+                    AND HolonUsers.state = 'pending'
+                )`),
+                'accessPending',
+            ],
         ],
         include: [
             {
@@ -418,6 +428,7 @@ router.get('/space-data', async (req, res) => {
 
     if (!spaceData) res.status(404).send({ message: 'Space not found' })
     else {
+        spaceData.setDataValue('accessPending', !!spaceData.dataValues.accessPending)
         // todo: potentially retreive after space data has loaded so posts can start loading quicker
         // child spaces and latest users retrieved seperately so limit and order can be applied (not allowed for M:M includes in Sequelize)
         const childSpaces = await Holon.findAll({
@@ -1861,6 +1872,291 @@ router.post('/update-space-description', authenticateToken, async (req, res) => 
             .then(res.send('success'))
             .catch((err) => console.log(err))
     }
+})
+
+router.post('/invite-space-users', authenticateToken, async (req, res) => {
+    const accountId = req.user.id
+    const { accountHandle, accountName, spaceId, spaceHandle, spaceName, userIds } = req.body
+
+    const invitedUsers = await User.findAll({
+        where: { id: userIds },
+        attributes: ['id', 'name', 'email'],
+    })
+
+    Promise.all(
+        invitedUsers.map(
+            (user) =>
+                new Promise(async (resolve) => {
+                    const createNotification = await Notification.create({
+                        ownerId: user.id,
+                        type: 'space-invite',
+                        state: 'pending',
+                        seen: false,
+                        holonAId: spaceId,
+                        userId: accountId,
+                    })
+                    const sendEmail = await sgMail.send({
+                        to: user.email,
+                        from: {
+                            email: 'admin@weco.io',
+                            name: 'we { collective }',
+                        },
+                        subject: 'New notification',
+                        text: `
+                            Hi ${user.name}, ${accountName} just invited you to join ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
+                            Log in and go to your notifications to accept the request.
+                        `,
+                        html: `
+                            <p>
+                                Hi ${user.name},
+                                <br/>
+                                <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                just invited you to join
+                                <a href='${config.appURL}/s/${spaceHandle}'>${spaceName}</a>
+                                on weco.
+                                <br/>
+                                Log in and go to your notifications to accept the request.
+                            </p>
+                        `,
+                    })
+                    Promise.all([createNotification, sendEmail])
+                        .then(() => resolve())
+                        .catch((error) => resolve(error))
+                })
+        )
+    )
+        .then(() => res.status(200).json({ message: 'Success' }))
+        .catch((error) => console.log(error))
+})
+
+router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
+    const accountId = req.user.id
+    const {
+        accountHandle,
+        accountName,
+        notificationId,
+        spaceId,
+        spaceHandle,
+        spaceName,
+        userId,
+        response,
+    } = req.body
+    const accepted = response === 'accepted'
+
+    const grantAccess = accepted
+        ? await HolonUser.create({
+              relationship: 'access',
+              state: 'active',
+              holonId: spaceId,
+              userId: accountId,
+          })
+        : null
+
+    const followSpace = accepted
+        ? await HolonUser.create({
+              relationship: 'follower',
+              state: 'active',
+              holonId: spaceId,
+              userId: accountId,
+          })
+        : null
+
+    const updateNotification = await Notification.update(
+        { state: response, seen: true },
+        { where: { id: notificationId } }
+    )
+
+    const notifyInviteCreator = await new Promise(async (resolve) => {
+        const inviteCreator = await User.findOne({
+            where: { id: userId },
+            attributes: ['id', 'name', 'email'],
+        })
+        const createNotification = await Notification.create({
+            ownerId: inviteCreator.id,
+            type: 'space-invite-response',
+            state: response,
+            seen: false,
+            holonAId: spaceId,
+            userId: accountId,
+        })
+        const sendEmail = await sgMail.send({
+            to: inviteCreator.email,
+            from: {
+                email: 'admin@weco.io',
+                name: 'we { collective }',
+            },
+            subject: 'New notification',
+            text: `
+                Hi ${inviteCreator.name}, ${accountName} just ${response} your invite to join ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
+            `,
+            html: `
+                <p>
+                    Hi ${inviteCreator.name},
+                    <br/>
+                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                    just ${response} your invite to join
+                    <a href='${config.appURL}/s/${spaceHandle}'>${spaceName}</a>
+                    on weco.
+                    <br/>
+                </p>
+            `,
+        })
+        Promise.all([createNotification, sendEmail])
+            .then(() => resolve())
+            .catch((error) => resolve(error))
+    })
+
+    Promise.all([grantAccess, followSpace, updateNotification, notifyInviteCreator])
+        .then(() => res.status(200).json({ message: 'Success' }))
+        .catch((error) => console.log(error))
+})
+
+router.post('/request-space-access', authenticateToken, async (req, res) => {
+    const accountId = req.user.id
+    const { accountHandle, accountName, spaceId } = req.body
+
+    const space = await Holon.findOne({
+        where: { id: spaceId },
+        attributes: ['handle', 'name'],
+        include: {
+            model: User,
+            as: 'Moderators',
+            attributes: ['id', 'name', 'email'],
+            through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
+        },
+    })
+
+    const createAccessRealtionship = await HolonUser.create({
+        relationship: 'access',
+        state: 'pending',
+        holonId: spaceId,
+        userId: accountId,
+    })
+
+    const notifyMods = await Promise.all(
+        space.Moderators.map(
+            (mod) =>
+                new Promise(async (resolve) => {
+                    const createNotification = await Notification.create({
+                        ownerId: mod.id,
+                        type: 'space-access-request',
+                        state: 'pending',
+                        seen: false,
+                        holonAId: spaceId,
+                        userId: accountId,
+                    })
+                    const sendEmail = await sgMail.send({
+                        to: mod.email,
+                        from: {
+                            email: 'admin@weco.io',
+                            name: 'we { collective }',
+                        },
+                        subject: 'New notification',
+                        text: `
+                            Hi ${mod.name}, ${accountName} just requested access to ${space.name}: ${config.appURL}/s/${space.handle} on weco.
+                            Log in and go to your notifications to respond to the request.
+                        `,
+                        html: `
+                            <p>
+                                Hi ${mod.name},
+                                <br/>
+                                <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                just requested access to
+                                <a href='${config.appURL}/s/${space.handle}'>${space.name}</a>
+                                on weco.
+                                <br/>
+                                Log in and go to your notifications to respond to the request.
+                            </p>
+                        `,
+                    })
+                    Promise.all([createNotification, sendEmail])
+                        .then(() => resolve())
+                        .catch((error) => resolve(error))
+                })
+        )
+    )
+
+    Promise.all([createAccessRealtionship, notifyMods])
+        .then(() => res.status(200).json({ message: 'Success' }))
+        .catch((error) => console.log(error))
+})
+
+router.post('/respond-to-space-access-request', authenticateToken, async (req, res) => {
+    const accountId = req.user.id
+    const {
+        accountHandle,
+        accountName,
+        notificationId,
+        spaceId,
+        spaceHandle,
+        spaceName,
+        userId,
+        response,
+    } = req.body
+    const accepted = response === 'accepted'
+
+    const updateAccess = await HolonUser.update(
+        { state: accepted ? 'active' : 'removed' },
+        { where: { relationship: 'access', state: 'pending', holonId: spaceId, userId } }
+    )
+
+    const followSpace = accepted
+        ? await HolonUser.create({
+              relationship: 'follower',
+              state: 'active',
+              holonId: spaceId,
+              userId,
+          })
+        : null
+
+    const updateNotification = await Notification.update(
+        { state: response, seen: true },
+        { where: { id: notificationId } }
+    )
+
+    const notifyRequestCreator = await new Promise(async (resolve) => {
+        const requestCreator = await User.findOne({
+            where: { id: userId },
+            attributes: ['id', 'name', 'email'],
+        })
+        const createNotification = await Notification.create({
+            ownerId: requestCreator.id,
+            type: 'space-access-response',
+            state: response,
+            seen: false,
+            holonAId: spaceId,
+            userId: accountId,
+        })
+        const sendEmail = await sgMail.send({
+            to: requestCreator.email,
+            from: {
+                email: 'admin@weco.io',
+                name: 'we { collective }',
+            },
+            subject: 'New notification',
+            text: `
+                Hi ${requestCreator.name}, ${accountName} just ${response} your invite to join ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
+            `,
+            html: `
+                <p>
+                    Hi ${requestCreator.name},
+                    <br/>
+                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                    just ${response} your invite to join
+                    <a href='${config.appURL}/s/${spaceHandle}'>${spaceName}</a>
+                    on weco.
+                    <br/>
+                </p>
+            `,
+        })
+        Promise.all([createNotification, sendEmail])
+            .then(() => resolve())
+            .catch((error) => resolve(error))
+    })
+
+    Promise.all([updateAccess, followSpace, updateNotification, notifyRequestCreator])
+        .then(() => res.status(200).json({ message: 'Success' }))
+        .catch((error) => console.log(error))
 })
 
 router.post('/invite-space-moderator', authenticateToken, async (req, res) => {
