@@ -47,6 +47,7 @@ const spaceAttributes = [
     'handle',
     'name',
     'description',
+    'privacy',
     'flagImagePath',
     'coverImagePath',
     'createdAt',
@@ -335,6 +336,7 @@ router.get('/space-data', async (req, res) => {
         where: { handle: handle, state: 'active' },
         attributes: [
             'id',
+            'privacy',
             'handle',
             'name',
             'description',
@@ -404,6 +406,12 @@ router.get('/space-data', async (req, res) => {
                 as: 'Moderators',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
+            },
+            {
+                model: User,
+                as: 'UsersWithAccess',
+                attributes: ['id'],
+                through: { where: { relationship: 'access', state: 'active' }, attributes: [] },
             },
         ],
     })
@@ -631,7 +639,8 @@ router.get('/space-posts', (req, res) => {
             createdAt: { [Op.between]: [startDate, Date.now()] },
             type,
             [Op.or]: [
-                { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                // todo: update with new null logic
+                { text: searchQuery ? { [Op.like]: `%${searchQuery}%` } : { [Op.or]: ['', null] } },
                 { urlTitle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
                 { urlDescription: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
                 { urlDomain: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
@@ -1468,7 +1477,11 @@ router.get('/space-map-data', async (req, res) => {
             findTotalSpaceResults(depth, searchQuery, timeRange),
         ]
         parent.children = []
-        if (!parent.isExpander && parent.totalResults > 0) {
+        if (
+            !parent.isExpander &&
+            parent.totalResults > 0 &&
+            (generation === 1 || parent.privacy !== 'private')
+        ) {
             const nextGeneration = await Holon.findAll({
                 where: findSpaceWhere(parent.id, depth, timeRange, searchQuery),
                 attributes: childAttributes,
@@ -1610,7 +1623,7 @@ router.get('/parent-space-blacklist', async (req, res) => {
 })
 
 // POST
-router.post('/create-space', authenticateToken, (req, res) => {
+router.post('/create-space', authenticateToken, async (req, res) => {
     const accountId = req.user.id
     const {
         accountName,
@@ -1620,78 +1633,96 @@ router.post('/create-space', authenticateToken, (req, res) => {
         handle,
         name,
         description,
+        private,
     } = req.body
 
-    Holon.findOne({ where: { handle, state: 'active' } }).then((space) => {
-        if (space) res.send('handle-taken')
-        else {
-            Holon.create({
-                creatorId: accountId,
-                handle,
-                name,
-                description,
-                state: 'active',
-            }).then(async (newSpace) => {
-                // inherit unique id
-                HolonHandle.create({
-                    // posts to spaceA appear within spaceB
-                    holonAId: newSpace.id,
-                    holonBId: newSpace.id,
-                    state: 'open',
-                })
-                // create mod relationship
-                HolonUser.create({
-                    relationship: 'moderator',
-                    state: 'active',
-                    holonId: newSpace.id,
-                    userId: accountId,
-                })
+    const handleTaken = await Holon.findOne({ where: { handle, state: 'active' } })
+    if (handleTaken) res.status(409).json({ message: 'handle-taken' })
+    else {
+        const newSpace = await Holon.create({
+            creatorId: accountId,
+            handle,
+            name,
+            description,
+            state: 'active',
+            privacy: private ? 'private' : 'public',
+        })
+
+        const addIdToInheritedIds = await HolonHandle.create({
+            // posts to spaceA appear within spaceB
+            holonAId: newSpace.id,
+            holonBId: newSpace.id,
+            state: 'open',
+        })
+
+        const createModRelationship = HolonUser.create({
+            relationship: 'moderator',
+            state: 'active',
+            holonId: newSpace.id,
+            userId: accountId,
+        })
+
+        const createAccessRelationship = HolonUser.create({
+            relationship: 'access',
+            state: 'active',
+            holonId: newSpace.id,
+            userId: accountId,
+        })
+
+        Promise.all([addIdToInheritedIds, createModRelationship, createAccessRelationship]).then(
+            async () => {
                 if (authorizedToAttachParent) {
-                    // create vertical relationship
                     const createVerticalRelationship = await VerticalHolonRelationship.create({
                         state: 'open',
                         holonAId: parentId, // parent
                         holonBId: newSpace.id, // child
                     })
-                    const addParentSpaceIdsToNewSpace = await Holon.findOne({
-                        // find parent spaces's inherited ids
-                        where: { id: parentId },
-                        attributes: [],
-                        include: {
-                            model: Holon,
-                            as: 'HolonHandles',
-                            attributes: ['id'],
-                            through: { attributes: [], where: { state: 'open' } },
-                        },
-                    }).then((parentSpace) => {
-                        // add inherited ids to new space
-                        parentSpace.HolonHandles.forEach((space) => {
-                            HolonHandle.create({
-                                // posts to spaceA appear within spaceB
-                                holonAId: newSpace.id,
-                                holonBId: space.id,
-                                state: 'open',
-                            })
-                        })
-                    })
+
+                    const addParentSpaceIdsToNewSpace = private
+                        ? null
+                        : await Holon.findOne({
+                              // find parent spaces's inherited ids
+                              where: { id: parentId },
+                              attributes: [],
+                              include: {
+                                  model: Holon,
+                                  as: 'HolonHandles',
+                                  attributes: ['id'],
+                                  through: { attributes: [], where: { state: 'open' } },
+                              },
+                          }).then((parentSpace) => {
+                              // add inherited ids to new space
+                              parentSpace.HolonHandles.forEach((space) => {
+                                  HolonHandle.create({
+                                      // posts to spaceA appear within spaceB
+                                      holonAId: newSpace.id,
+                                      holonBId: space.id,
+                                      state: 'open',
+                                  })
+                              })
+                          })
+
                     Promise.all([createVerticalRelationship, addParentSpaceIdsToNewSpace])
-                        .then(res.send('success'))
+                        .then(() =>
+                            res.status(200).json({ spaceId: newSpace.id, message: 'success' })
+                        )
                         .catch((error) => console.log(error))
                 } else {
-                    // attach to root
                     const attachToRoot = await VerticalHolonRelationship.create({
                         state: 'open',
                         holonAId: 1, // parent
                         holonBId: newSpace.id, // child
                     })
-                    // inherit root id
-                    const inheritRootId = await HolonHandle.create({
-                        // posts to spaceA appear within spaceB
-                        holonAId: newSpace.id,
-                        holonBId: 1,
-                        state: 'open',
-                    })
-                    // create space notification
+
+                    const inheritRootId = private
+                        ? null
+                        : await HolonHandle.create({
+                              // posts to spaceA appear within spaceB
+                              holonAId: newSpace.id,
+                              holonBId: 1,
+                              state: 'open',
+                          })
+
                     const createSpaceNotification = await SpaceNotification.create({
                         ownerId: parentId,
                         type: 'parent-space-request',
@@ -1700,7 +1731,7 @@ router.post('/create-space', authenticateToken, (req, res) => {
                         userId: accountId,
                         seen: false,
                     })
-                    // get parent space data, inlcude mods
+
                     const parentSpace = await Holon.findOne({
                         where: { id: parentId },
                         attributes: ['id', 'handle', 'name'],
@@ -1714,7 +1745,7 @@ router.post('/create-space', authenticateToken, (req, res) => {
                             },
                         },
                     })
-                    // send account notification and email to each of the mods
+
                     const notifyMods = await parentSpace.Moderators.forEach((moderator) => {
                         Notification.create({
                             ownerId: moderator.id,
@@ -1733,36 +1764,41 @@ router.post('/create-space', authenticateToken, (req, res) => {
                                 },
                                 subject: 'New notification',
                                 text: `
-                                        Hi ${moderator.name}, ${accountName} wants to make ${name} a child space of ${parentSpace.name} on weco.
-                                    `,
+                                    Hi ${moderator.name}, ${accountName} wants to make ${name} a child space of ${parentSpace.name} on weco.
+                                `,
                                 html: `
-                                        <p>
-                                            Hi ${moderator.name},
-                                            <br/>
-                                            <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                                            wants to make
-                                            <a href='${config.appURL}/s/${handle}'>${name}</a>
-                                            a child space of
-                                            <a href='${config.appURL}/s/${parentSpace.handle}'>${parentSpace.name}</a>
-                                            on weco.
-                                            <br/>
-                                            Log in and navigate
-                                            <a href='${config.appURL}/u/${moderator.handle}/notifications'>here</a>
-                                            or
-                                            <a href='${config.appURL}/s/${parentSpace.handle}/settings'>here</a>
-                                            to accept or reject the request.
-                                        </p>
-                                    `,
+                                    <p>
+                                        Hi ${moderator.name},
+                                        <br/>
+                                        <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                        wants to make
+                                        <a href='${config.appURL}/s/${handle}'>${name}</a>
+                                        a child space of
+                                        <a href='${config.appURL}/s/${parentSpace.handle}'>${parentSpace.name}</a>
+                                        on weco.
+                                        <br/>
+                                        Log in and navigate
+                                        <a href='${config.appURL}/u/${moderator.handle}/notifications'>here</a>
+                                        or
+                                        <a href='${config.appURL}/s/${parentSpace.handle}/settings'>here</a>
+                                        to accept or reject the request.
+                                    </p>
+                                `,
                             })
                         })
                     })
+
                     Promise.all([attachToRoot, inheritRootId, createSpaceNotification, notifyMods])
-                        .then(res.send('pending-acceptance'))
+                        .then(() =>
+                            res
+                                .status(200)
+                                .json({ spaceId: newSpace.id, message: 'pending-acceptance' })
+                        )
                         .catch((error) => console.log(error))
                 }
-            })
-        }
-    })
+            }
+        )
+    }
 })
 
 async function isAuthorizedModerator(accountId, spaceId) {
