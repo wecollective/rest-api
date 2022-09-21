@@ -633,31 +633,38 @@ router.get('/space-posts', (req, res) => {
         return through
     }
 
+    function findWhere() {
+        let where = {
+            '$AllIncludedSpaces.id$': spaceId,
+            state: 'visible',
+            createdAt: { [Op.between]: [startDate, Date.now()] },
+            type,
+        }
+        if (searchQuery) {
+            where[Op.or] = [
+                { text: { [Op.like]: `%${searchQuery}%` } },
+                { urlTitle: { [Op.like]: `%${searchQuery}%` } },
+                { urlDescription: { [Op.like]: `%${searchQuery}%` } },
+                { urlDomain: { [Op.like]: `%${searchQuery}%` } },
+                { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery}%` } },
+            ]
+        }
+        return where
+    }
+
     let startDate = findStartDate()
     let type = findType()
     let order = findOrder()
     let firstAttributes = findFirstAttributes()
     let through = findThrough()
+    let where = findWhere()
 
     // Double query required to to prevent results and pagination being effected by top level where clause.
     // Intial query used to find correct posts with calculated stats and pagination applied.
     // Second query used to return related models.
     Post.findAll({
         subQuery: false,
-        where: {
-            '$AllIncludedSpaces.id$': spaceId,
-            state: 'visible',
-            createdAt: { [Op.between]: [startDate, Date.now()] },
-            type,
-            [Op.or]: [
-                // todo: update with new null logic
-                { text: searchQuery ? { [Op.like]: `%${searchQuery}%` } : { [Op.or]: ['', null] } },
-                { urlTitle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { urlDescription: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { urlDomain: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            ],
-        },
+        where,
         order,
         limit: Number(limit),
         offset: Number(offset),

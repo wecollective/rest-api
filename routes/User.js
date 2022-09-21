@@ -303,10 +303,30 @@ router.get('/user-posts', (req, res) => {
         return firstAttributes
     }
 
+    function findWhere() {
+        let where = {
+            creatorId: userId,
+            state: 'visible',
+            createdAt: { [Op.between]: [startDate, Date.now()] },
+            type,
+        }
+        if (searchQuery) {
+            where[Op.or] = [
+                { text: { [Op.like]: `%${searchQuery}%` } },
+                { urlTitle: { [Op.like]: `%${searchQuery}%` } },
+                { urlDescription: { [Op.like]: `%${searchQuery}%` } },
+                { urlDomain: { [Op.like]: `%${searchQuery}%` } },
+                { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery}%` } },
+            ]
+        }
+        return where
+    }
+
     let startDate = findStartDate()
     let type = findType()
     let order = findOrder()
     let firstAttributes = findFirstAttributes()
+    let where = findWhere()
 
     // Double query required to to prevent results and pagination being effected by top level where clause.
     // Intial query used to find correct posts with calculated stats and pagination applied.
@@ -314,20 +334,18 @@ router.get('/user-posts', (req, res) => {
     // Final function used to replace PostHolons object with a simpler array.
     Post.findAll({
         subQuery: false,
-        where: {
-            creatorId: userId,
-            state: 'visible',
-            createdAt: { [Op.between]: [startDate, Date.now()] },
-            type,
-            [Op.or]: [
-                { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { text: null },
-            ],
-        },
+        where,
         order,
         limit: Number(limit),
         offset: Number(offset),
         attributes: firstAttributes,
+        include: [
+            {
+                model: GlassBeadGame,
+                required: false,
+                attributes: ['topic'],
+            },
+        ],
     })
         .then((posts) => {
             // Add account reaction data to post attributes
