@@ -2205,7 +2205,6 @@ router.post('/add-like', authenticateToken, async (req, res) => {
 
     const createReaction = await Reaction.create({
         type: 'like',
-        value: null,
         state: 'active',
         holonId,
         userId: accountId,
@@ -2235,19 +2234,19 @@ router.post('/add-like', authenticateToken, async (req, res) => {
               },
               subject: 'New notification',
               text: `
-            Hi ${post.Creator.name}, ${accountName} just liked your post on weco:
-            http://${config.appURL}/p/${postId}
-        `,
+                    Hi ${post.Creator.name}, ${accountName} just liked your post on weco:
+                    http://${config.appURL}/p/${postId}
+                `,
               html: `
-            <p>
-                Hi ${post.Creator.name},
-                <br/>
-                <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                just liked your
-                <a href='${config.appURL}/p/${postId}'>post</a>
-                on weco
-            </p>
-        `,
+                    <p>
+                        Hi ${post.Creator.name},
+                        <br/>
+                        <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                        just liked your
+                        <a href='${config.appURL}/p/${postId}'>post</a>
+                        on weco
+                    </p>
+                `,
           })
 
     Promise.all([createReaction, createNotification, sendEmail])
@@ -2830,11 +2829,7 @@ router.post('/find-spaces', (req, res) => {
     let where = {
         state: 'active',
         [Op.not]: [{ id: [0, ...blacklist] }],
-        [Op.or]: [
-            { handle: { [Op.like]: `%${query}%` } },
-            { name: { [Op.like]: `%${query}%` } },
-            { description: { [Op.like]: `%${query}%` } },
-        ],
+        [Op.or]: [{ handle: { [Op.like]: `%${query}%` } }, { name: { [Op.like]: `%${query}%` } }],
     }
     let include = []
     if (spaceId) {
