@@ -733,7 +733,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     include: [
                         {
                             model: Holon,
-                            as: 'HolonHandles',
+                            as: 'SpaceAncestors',
                             attributes: ['id'],
                             through: { where: { state: 'open' }, attributes: [] },
                         },
@@ -743,7 +743,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                         // todo: include space handles and flag images
                         const ids = []
                         spaces.forEach((space) =>
-                            ids.push(...space.HolonHandles.map((holon) => holon.id))
+                            ids.push(...space.SpaceAncestors.map((holon) => holon.id))
                         )
                         const filteredIds = [...new Set(ids)].filter((id) => !spaceIds.includes(id))
                         resolve(filteredIds)
@@ -2140,7 +2140,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                     include: [
                         {
                             model: Holon,
-                            as: 'HolonHandles',
+                            as: 'SpaceAncestors',
                             attributes: ['id'],
                             through: { where: { state: 'open' }, attributes: [] },
                         },
@@ -2149,7 +2149,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
             )
         ).then((spaces) => {
             const ids = []
-            spaces.forEach((space) => ids.push(...space.HolonHandles.map((holon) => holon.id)))
+            spaces.forEach((space) => ids.push(...space.SpaceAncestors.map((holon) => holon.id)))
             const filteredIds = [...new Set(ids)].filter((id) => !selectedSpaceIds.includes(id))
             resolve(filteredIds)
         })
@@ -2833,11 +2833,11 @@ router.post('/find-spaces', (req, res) => {
     }
     let include = []
     if (spaceId) {
-        where['$HolonHandles.id$'] = spaceId
+        where['$SpaceAncestors.id$'] = spaceId
         where.id = { [Op.ne]: [spaceId] }
         include.push({
             model: Holon,
-            as: 'HolonHandles',
+            as: 'SpaceAncestors',
             attributes: [],
             through: { attributes: [], where: { state: 'open' } },
         })

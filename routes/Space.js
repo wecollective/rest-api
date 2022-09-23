@@ -11,7 +11,7 @@ const authenticateToken = require('../middleware/authenticateToken')
 const {
     Holon,
     VerticalHolonRelationship,
-    HolonHandle, // InheritedSpaceId
+    SpaceAncestor, // InheritedSpaceId
     HolonUser, // SpaceUserRelationship
     User,
     UserEvent,
@@ -132,7 +132,7 @@ function findSpaceWhere(spaceId, depth, timeRange, searchQuery) {
     let where
     if (depth === 'All Contained Spaces') {
         where = {
-            '$HolonHandles.id$': spaceId,
+            '$SpaceAncestors.id$': spaceId,
             id: { [Op.ne]: [spaceId] },
             state: 'active',
             createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
@@ -164,7 +164,7 @@ function findSpaceInclude(depth) {
         include = [
             {
                 model: Holon,
-                as: 'HolonHandles',
+                as: 'SpaceAncestors',
                 attributes: [],
                 through: { attributes: [], where: { state: 'open' } },
             },
@@ -205,12 +205,12 @@ function findTotalSpaceResults(depth, searchQuery, timeRange) {
                 FROM Holons s
                 WHERE s.id != Holon.id
                 AND s.id IN (
-                    SELECT HolonHandles.holonAId
-                    FROM HolonHandles
+                    SELECT SpaceAncestors.spaceBId
+                    FROM SpaceAncestors
                     RIGHT JOIN Holons
-                    ON HolonHandles.holonAId = Holons.id
-                    WHERE HolonHandles.holonBId = Holon.id
-                    AND HolonHandles.state = 'open'
+                    ON SpaceAncestors.spaceBId = Holons.id
+                    WHERE SpaceAncestors.spaceAId = Holon.id
+                    AND SpaceAncestors.state = 'open'
                 ) AND (
                     s.handle LIKE '%${searchQuery}%'
                     OR s.name LIKE '%${searchQuery}%'
@@ -350,11 +350,11 @@ router.get('/space-data', async (req, res) => {
                     WHERE Holons.handle != Holon.handle
                     AND Holons.state = 'active'
                     AND Holons.id IN (
-                        SELECT HolonHandles.holonAId
-                        FROM HolonHandles
+                        SELECT SpaceAncestors.spaceBId
+                        FROM SpaceAncestors
                         RIGHT JOIN Holons
-                        ON HolonHandles.holonAId = Holons.id
-                        WHERE HolonHandles.holonBId = Holon.id
+                        ON SpaceAncestors.spaceBId = Holons.id
+                        WHERE SpaceAncestors.spaceAId = Holon.id
                     )
                 )`),
                 'totalSpaces',
@@ -402,7 +402,7 @@ router.get('/space-data', async (req, res) => {
             },
             {
                 model: Holon,
-                as: 'HolonHandles',
+                as: 'SpaceAncestors',
                 attributes: ['handle'],
                 through: { attributes: [] },
             },
@@ -1623,10 +1623,10 @@ router.get('/parent-space-blacklist', async (req, res) => {
 
     Holon.findAll({
         attributes: ['id'],
-        where: { '$HolonHandles.id$': spaceId, state: 'active' },
+        where: { '$SpaceAncestors.id$': spaceId, state: 'active' },
         include: {
             model: Holon,
-            as: 'HolonHandles',
+            as: 'SpaceAncestors',
             attributes: [],
             through: { attributes: [], where: { state: 'open' } },
         },
@@ -1666,10 +1666,11 @@ router.post('/create-space', authenticateToken, async (req, res) => {
             privacy: private ? 'private' : 'public',
         })
 
-        const addIdToInheritedIds = await HolonHandle.create({
-            // posts to spaceA appear within spaceB
-            holonAId: newSpace.id,
-            holonBId: newSpace.id,
+        const addIdToInheritedIds = await SpaceAncestor.create({
+            // space A contains space B
+            // todo: remove as shouldn't be required for same space
+            spaceAId: newSpace.id,
+            spaceBId: newSpace.id,
             state: 'open',
         })
 
@@ -1715,17 +1716,17 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                           attributes: [],
                           include: {
                               model: Holon,
-                              as: 'HolonHandles',
+                              as: 'SpaceAncestors',
                               attributes: ['id'],
                               through: { attributes: [], where: { state: 'open' } },
                           },
                       }).then((parentSpace) => {
                           // add inherited ids to new space
-                          parentSpace.HolonHandles.forEach((space) => {
-                              HolonHandle.create({
-                                  // posts to spaceA appear within spaceB
-                                  holonAId: newSpace.id,
-                                  holonBId: space.id,
+                          parentSpace.SpaceAncestors.forEach((space) => {
+                              SpaceAncestor.create({
+                                  // space A contains space B
+                                  spaceAId: space.id,
+                                  spaceBId: newSpace.id,
                                   state: 'open',
                               })
                           })
@@ -1743,10 +1744,10 @@ router.post('/create-space', authenticateToken, async (req, res) => {
 
                 const inheritRootId = private
                     ? null
-                    : await HolonHandle.create({
-                          // posts to spaceA appear within spaceB
-                          holonAId: newSpace.id,
-                          holonBId: 1,
+                    : await SpaceAncestor.create({
+                          // space A contains space B
+                          spaceAId: 1,
+                          spaceBId: newSpace.id,
                           state: 'open',
                       })
 
@@ -2506,19 +2507,19 @@ router.post('/add-parent-space', authenticateToken, async (req, res) => {
             attributes: [],
             include: {
                 model: Holon,
-                as: 'HolonHandles',
+                as: 'SpaceAncestors',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
             },
         })
-        const parentSpaceInheritedIds = parentSpace.HolonHandles.map((h) => h.id)
+        const parentSpaceInheritedIds = parentSpace.SpaceAncestors.map((h) => h.id)
         // find effected spaces
         const effectedSpaces = await Holon.findAll({
             attributes: ['id'],
-            where: { '$HolonHandles.id$': spaceId },
+            where: { '$SpaceAncestors.id$': spaceId },
             include: {
                 model: Holon,
-                as: 'HolonHandles',
+                as: 'SpaceAncestors',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
             },
@@ -2529,7 +2530,7 @@ router.post('/add-parent-space', authenticateToken, async (req, res) => {
             include: [
                 {
                     model: Holon,
-                    as: 'HolonHandles',
+                    as: 'SpaceAncestors',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
@@ -2538,13 +2539,13 @@ router.post('/add-parent-space', authenticateToken, async (req, res) => {
         // add parent spaces inherited ids to effected spaces inherited ids (if not already present)
         const inheritIds = await effectedSpacesWithInhertedIds.forEach((effectedSpace) => {
             parentSpaceInheritedIds.forEach((id) => {
-                const match = effectedSpace.HolonHandles.some((h) => h.id === id)
+                const match = effectedSpace.SpaceAncestors.some((h) => h.id === id)
                 if (!match) {
-                    // posts to A appear within B
-                    HolonHandle.create({
+                    // space A contains space B
+                    SpaceAncestor.create({
                         state: 'open',
-                        holonAId: effectedSpace.id,
-                        holonBId: id,
+                        spaceAId: id,
+                        spaceBId: effectedSpace.id,
                     })
                 }
             })
@@ -2611,19 +2612,19 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                 attributes: [],
                 include: {
                     model: Holon,
-                    as: 'HolonHandles',
+                    as: 'SpaceAncestors',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
             })
-            const parentSpaceInheritedIds = parentSpace2.HolonHandles.map((h) => h.id)
+            const parentSpaceInheritedIds = parentSpace2.SpaceAncestors.map((h) => h.id)
             // find effected spaces
             const effectedSpaces = await Holon.findAll({
                 attributes: ['id'],
-                where: { '$HolonHandles.id$': childSpace.id },
+                where: { '$SpaceAncestors.id$': childSpace.id },
                 include: {
                     model: Holon,
-                    as: 'HolonHandles',
+                    as: 'SpaceAncestors',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
@@ -2634,7 +2635,7 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                 include: [
                     {
                         model: Holon,
-                        as: 'HolonHandles',
+                        as: 'SpaceAncestors',
                         attributes: ['id'],
                         through: { attributes: [] },
                     },
@@ -2643,13 +2644,13 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
             // add parent spaces inherited ids to effected spaces inherited ids (if not already present)
             const inheritIds = await effectedSpacesWithInhertedIds.forEach((effectedSpace) => {
                 parentSpaceInheritedIds.forEach((id) => {
-                    const match = effectedSpace.HolonHandles.some((h) => h.id === id)
+                    const match = effectedSpace.SpaceAncestors.some((h) => h.id === id)
                     if (!match) {
                         // posts to A appear within B
-                        HolonHandle.create({
+                        SpaceAncestor.create({
                             state: 'open',
-                            holonAId: effectedSpace.id,
-                            holonBId: id,
+                            spaceAId: id,
+                            spaceBId: effectedSpace.id,
                         })
                     }
                 })
@@ -2761,7 +2762,7 @@ async function removeIds(childId, parentId, idsToRemove) {
             {
                 // inherited ids
                 model: Holon,
-                as: 'HolonHandles',
+                as: 'SpaceAncestors',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
             },
@@ -2773,7 +2774,7 @@ async function removeIds(childId, parentId, idsToRemove) {
                 through: { attributes: [], where: { state: 'open' } },
                 include: {
                     model: Holon,
-                    as: 'HolonHandles',
+                    as: 'SpaceAncestors',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
@@ -2791,7 +2792,7 @@ async function removeIds(childId, parentId, idsToRemove) {
     // include 1 (the root id) by default to prevent it being removed
     let otherParentsIds = [1]
     selectedSpace.DirectParentHolons.forEach((parent) => {
-        if (parent.id !== parentId) otherParentsIds.push(...parent.HolonHandles.map((s) => s.id))
+        if (parent.id !== parentId) otherParentsIds.push(...parent.SpaceAncestors.map((s) => s.id))
     })
     // remove duplicates
     otherParentsIds = [...new Set(otherParentsIds)]
@@ -2800,7 +2801,10 @@ async function removeIds(childId, parentId, idsToRemove) {
     // if any remaining idsToRemove, remove those ids from the selected space then run the same function for each of its children
     if (filteredIdsToRemove.length) {
         filteredIdsToRemove.forEach((id) => {
-            HolonHandle.update({ state: 'closed' }, { where: { holonAId: childId, holonBId: id } })
+            SpaceAncestor.update(
+                { state: 'closed' },
+                { where: { spaceBId: childId, spaceAId: id } }
+            )
         })
         selectedSpace.DirectChildHolons.forEach((child) => {
             // the current child becomes the parent in the next iteration
@@ -2820,13 +2824,13 @@ async function removeParentSpace(childId, parentId, callBack) {
             {
                 // inherited ids
                 model: Holon,
-                as: 'HolonHandles',
+                as: 'SpaceAncestors',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
             },
         ],
     })
-    const idsToRemove = parentToRemove.HolonHandles.map((s) => s.id)
+    const idsToRemove = parentToRemove.SpaceAncestors.map((s) => s.id)
     removeIds(childId, parentId, idsToRemove)
     // if the parent being removed is the only parent of the child, attach the child to the root space
     const connectToRootIfRequired = await Holon.findOne({

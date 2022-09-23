@@ -32,14 +32,14 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'holonAId',
         })
         Holon.belongsToMany(models.Holon, {
-            through: models.HolonHandle,
+            through: models.SpaceAncestor,
             as: 'A', // ?
-            foreignKey: 'holonBId',
+            foreignKey: 'spaceAId',
         })
         Holon.belongsToMany(models.Holon, {
-            through: models.HolonHandle,
-            as: 'HolonHandles',
-            foreignKey: 'holonAId',
+            through: models.SpaceAncestor,
+            as: 'SpaceAncestors',
+            foreignKey: 'spaceBId',
         })
         // HolonPosts relationship
         Holon.belongsToMany(models.Post, {
