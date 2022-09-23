@@ -317,19 +317,19 @@ router.get('/space-data', async (req, res) => {
               ]
             : [
                   sequelize.literal(`(
-            SELECT COUNT(*)
-                FROM Users
-                WHERE Users.emailVerified = true
-                AND Users.state = 'active'
-                AND Users.id IN (
-                    SELECT HolonUsers.userId
-                    FROM HolonUsers
-                    RIGHT JOIN Users
-                    ON HolonUsers.userId = Users.id
-                    WHERE HolonUsers.holonId = Holon.id
-                    AND HolonUsers.state = 'active'
-                )
-            )`),
+                        SELECT COUNT(*)
+                            FROM Users
+                            WHERE Users.emailVerified = true
+                            AND Users.state = 'active'
+                            AND Users.id IN (
+                                SELECT HolonUsers.userId
+                                FROM HolonUsers
+                                RIGHT JOIN Users
+                                ON HolonUsers.userId = Users.id
+                                WHERE HolonUsers.holonId = Holon.id
+                                AND HolonUsers.state = 'active'
+                            )
+                        )`),
                   'totalUsers',
               ]
     const spaceData = await Holon.findOne({
@@ -1680,6 +1680,13 @@ router.post('/create-space', authenticateToken, async (req, res) => {
             userId: accountId,
         })
 
+        const createFollowerRelationship = HolonUser.create({
+            relationship: 'follower',
+            state: 'active',
+            holonId: newSpace.id,
+            userId: accountId,
+        })
+
         const createAccessRelationship = HolonUser.create({
             relationship: 'access',
             state: 'active',
@@ -1687,104 +1694,106 @@ router.post('/create-space', authenticateToken, async (req, res) => {
             userId: accountId,
         })
 
-        Promise.all([addIdToInheritedIds, createModRelationship, createAccessRelationship]).then(
-            async () => {
-                if (authorizedToAttachParent) {
-                    const createVerticalRelationship = await VerticalHolonRelationship.create({
-                        state: 'open',
-                        holonAId: parentId, // parent
-                        holonBId: newSpace.id, // child
-                    })
+        Promise.all([
+            addIdToInheritedIds,
+            createModRelationship,
+            createFollowerRelationship,
+            createAccessRelationship,
+        ]).then(async () => {
+            if (authorizedToAttachParent) {
+                const createVerticalRelationship = await VerticalHolonRelationship.create({
+                    state: 'open',
+                    holonAId: parentId, // parent
+                    holonBId: newSpace.id, // child
+                })
 
-                    const addParentSpaceIdsToNewSpace = private
-                        ? null
-                        : await Holon.findOne({
-                              // find parent spaces's inherited ids
-                              where: { id: parentId },
-                              attributes: [],
-                              include: {
-                                  model: Holon,
-                                  as: 'HolonHandles',
-                                  attributes: ['id'],
-                                  through: { attributes: [], where: { state: 'open' } },
-                              },
-                          }).then((parentSpace) => {
-                              // add inherited ids to new space
-                              parentSpace.HolonHandles.forEach((space) => {
-                                  HolonHandle.create({
-                                      // posts to spaceA appear within spaceB
-                                      holonAId: newSpace.id,
-                                      holonBId: space.id,
-                                      state: 'open',
-                                  })
+                const addParentSpaceIdsToNewSpace = private
+                    ? null
+                    : await Holon.findOne({
+                          // find parent spaces's inherited ids
+                          where: { id: parentId },
+                          attributes: [],
+                          include: {
+                              model: Holon,
+                              as: 'HolonHandles',
+                              attributes: ['id'],
+                              through: { attributes: [], where: { state: 'open' } },
+                          },
+                      }).then((parentSpace) => {
+                          // add inherited ids to new space
+                          parentSpace.HolonHandles.forEach((space) => {
+                              HolonHandle.create({
+                                  // posts to spaceA appear within spaceB
+                                  holonAId: newSpace.id,
+                                  holonBId: space.id,
+                                  state: 'open',
                               })
                           })
+                      })
 
-                    Promise.all([createVerticalRelationship, addParentSpaceIdsToNewSpace])
-                        .then(() =>
-                            res.status(200).json({ spaceId: newSpace.id, message: 'success' })
-                        )
-                        .catch((error) => console.log(error))
-                } else {
-                    const attachToRoot = await VerticalHolonRelationship.create({
-                        state: 'open',
-                        holonAId: 1, // parent
-                        holonBId: newSpace.id, // child
-                    })
+                Promise.all([createVerticalRelationship, addParentSpaceIdsToNewSpace])
+                    .then(() => res.status(200).json({ spaceId: newSpace.id, message: 'success' }))
+                    .catch((error) => console.log(error))
+            } else {
+                const attachToRoot = await VerticalHolonRelationship.create({
+                    state: 'open',
+                    holonAId: 1, // parent
+                    holonBId: newSpace.id, // child
+                })
 
-                    const inheritRootId = private
-                        ? null
-                        : await HolonHandle.create({
-                              // posts to spaceA appear within spaceB
-                              holonAId: newSpace.id,
-                              holonBId: 1,
-                              state: 'open',
-                          })
+                const inheritRootId = private
+                    ? null
+                    : await HolonHandle.create({
+                          // posts to spaceA appear within spaceB
+                          holonAId: newSpace.id,
+                          holonBId: 1,
+                          state: 'open',
+                      })
 
-                    const createSpaceNotification = await SpaceNotification.create({
-                        ownerId: parentId,
+                const createSpaceNotification = await SpaceNotification.create({
+                    ownerId: parentId,
+                    type: 'parent-space-request',
+                    state: 'pending',
+                    holonAId: newSpace.id,
+                    userId: accountId,
+                    seen: false,
+                })
+
+                const parentSpace = await Holon.findOne({
+                    where: { id: parentId },
+                    attributes: ['id', 'handle', 'name'],
+                    include: {
+                        model: User,
+                        as: 'Moderators',
+                        attributes: ['id', 'handle', 'name', 'email'],
+                        through: {
+                            where: { relationship: 'moderator', state: 'active' },
+                            attributes: [],
+                        },
+                    },
+                })
+
+                const notifyMods = await parentSpace.Moderators.forEach((moderator) => {
+                    Notification.create({
+                        ownerId: moderator.id,
                         type: 'parent-space-request',
                         state: 'pending',
                         holonAId: newSpace.id,
+                        holonBId: parentSpace.id,
                         userId: accountId,
                         seen: false,
-                    })
-
-                    const parentSpace = await Holon.findOne({
-                        where: { id: parentId },
-                        attributes: ['id', 'handle', 'name'],
-                        include: {
-                            model: User,
-                            as: 'Moderators',
-                            attributes: ['id', 'handle', 'name', 'email'],
-                            through: {
-                                where: { relationship: 'moderator', state: 'active' },
-                                attributes: [],
+                    }).then(() => {
+                        sgMail.send({
+                            to: moderator.email,
+                            from: {
+                                email: 'admin@weco.io',
+                                name: 'we { collective }',
                             },
-                        },
-                    })
-
-                    const notifyMods = await parentSpace.Moderators.forEach((moderator) => {
-                        Notification.create({
-                            ownerId: moderator.id,
-                            type: 'parent-space-request',
-                            state: 'pending',
-                            holonAId: newSpace.id,
-                            holonBId: parentSpace.id,
-                            userId: accountId,
-                            seen: false,
-                        }).then(() => {
-                            sgMail.send({
-                                to: moderator.email,
-                                from: {
-                                    email: 'admin@weco.io',
-                                    name: 'we { collective }',
-                                },
-                                subject: 'New notification',
-                                text: `
+                            subject: 'New notification',
+                            text: `
                                     Hi ${moderator.name}, ${accountName} wants to make ${name} a child space of ${parentSpace.name} on weco.
                                 `,
-                                html: `
+                            html: `
                                     <p>
                                         Hi ${moderator.name},
                                         <br/>
@@ -1802,20 +1811,19 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                                         to accept or reject the request.
                                     </p>
                                 `,
-                            })
                         })
                     })
+                })
 
-                    Promise.all([attachToRoot, inheritRootId, createSpaceNotification, notifyMods])
-                        .then(() =>
-                            res
-                                .status(200)
-                                .json({ spaceId: newSpace.id, message: 'pending-acceptance' })
-                        )
-                        .catch((error) => console.log(error))
-                }
+                Promise.all([attachToRoot, inheritRootId, createSpaceNotification, notifyMods])
+                    .then(() =>
+                        res
+                            .status(200)
+                            .json({ spaceId: newSpace.id, message: 'pending-acceptance' })
+                    )
+                    .catch((error) => console.log(error))
             }
-        )
+        })
     }
 })
 
