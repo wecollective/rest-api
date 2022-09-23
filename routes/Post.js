@@ -671,7 +671,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
     const accountId = req.user.id
     const { uploadType } = req.query
     const audioMBLimit = 5
-    const imageMBLimit = 4
+    const imageMBLimit = 6
 
     function createPost(postData, files, imageData, stringData) {
         const {
@@ -1504,7 +1504,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
     const accountId = req.user.id
     const { uploadType } = req.query
     const audioMBLimit = 5
-    const imageMBLimit = 4
+    const imageMBLimit = 6
 
     function createBead(beadData, files, imageData) {
         const {
