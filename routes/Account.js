@@ -6,7 +6,7 @@ const sequelize = require('sequelize')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
-const { Holon, User, Notification, HolonUser, UserPost, Post, Weave } = require('../models')
+const { Holon, User, Notification, SpaceUser, UserPost, Post, Weave } = require('../models')
 const { totalUserPosts } = require('../GlobalConstants')
 const ScheduledTasks = require('../ScheduledTasks')
 
@@ -32,7 +32,7 @@ router.get('/account-data', authenticateToken, (req, res) => {
         include: [
             {
                 model: Holon,
-                as: 'FollowedHolons',
+                as: 'FollowedSpaces',
                 where: { state: 'active' },
                 required: false,
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
@@ -40,7 +40,7 @@ router.get('/account-data', authenticateToken, (req, res) => {
             },
             {
                 model: Holon,
-                as: 'ModeratedHolons',
+                as: 'ModeratedSpaces',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
             },
@@ -128,10 +128,10 @@ router.post('/respond-to-mod-invite', authenticateToken, async (req, res) => {
 
     if (response === 'accepted') {
         // create moderator relationship
-        HolonUser.create({
+        SpaceUser.create({
             relationship: 'moderator',
             state: 'active',
-            holonId: spaceId,
+            spaceId,
             userId: accountId,
         })
             .then(() => {

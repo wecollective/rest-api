@@ -12,7 +12,7 @@ const {
     Holon,
     VerticalHolonRelationship,
     SpaceAncestor, // InheritedSpaceId
-    HolonUser, // SpaceUserRelationship
+    SpaceUser, // SpaceUserRelationship
     User,
     UserEvent,
     Post,
@@ -322,12 +322,12 @@ router.get('/space-data', async (req, res) => {
                             WHERE Users.emailVerified = true
                             AND Users.state = 'active'
                             AND Users.id IN (
-                                SELECT HolonUsers.userId
-                                FROM HolonUsers
+                                SELECT SpaceUsers.userId
+                                FROM SpaceUsers
                                 RIGHT JOIN Users
-                                ON HolonUsers.userId = Users.id
-                                WHERE HolonUsers.holonId = Holon.id
-                                AND HolonUsers.state = 'active'
+                                ON SpaceUsers.userId = Users.id
+                                WHERE SpaceUsers.spaceId = Holon.id
+                                AND SpaceUsers.state = 'active'
                             )
                         )`),
                   'totalUsers',
@@ -378,10 +378,10 @@ router.get('/space-data', async (req, res) => {
             [
                 sequelize.literal(`(
                 SELECT COUNT(*)
-                    FROM HolonUsers
-                    WHERE HolonUsers.userId = ${accountId}
-                    AND HolonUsers.relationship = 'access'
-                    AND HolonUsers.state = 'pending'
+                    FROM SpaceUsers
+                    WHERE SpaceUsers.userId = ${accountId}
+                    AND SpaceUsers.relationship = 'access'
+                    AND SpaceUsers.state = 'pending'
                 )`),
                 'accessPending',
             ],
@@ -469,7 +469,7 @@ router.get('/space-data', async (req, res) => {
         } else {
             // get latest 3 users for other spaces
             const latestUsers = await User.findAll({
-                where: { '$UserHolons.id$': spaceData.id, state: 'active', emailVerified: true },
+                where: { '$UserSpaces.id$': spaceData.id, state: 'active', emailVerified: true },
                 attributes: ['flagImagePath', 'createdAt'],
                 order: [['createdAt', 'DESC']],
                 // mods added to limit to prevent duplicate results causing issues (unable to get 'distinct' setting working)
@@ -478,7 +478,7 @@ router.get('/space-data', async (req, res) => {
                 include: [
                     {
                         model: Holon,
-                        as: 'UserHolons',
+                        as: 'UserSpaces',
                         attributes: [],
                         through: { where: { state: 'active' }, attributes: [] },
                     },
@@ -1381,7 +1381,7 @@ router.get('/space-people', (req, res) => {
 
     User.findAll({
         where: {
-            '$FollowedHolons.id$': spaceId,
+            '$FollowedSpaces.id$': spaceId,
             state: 'active',
             emailVerified: true,
             createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
@@ -1399,7 +1399,7 @@ router.get('/space-people', (req, res) => {
         include: [
             {
                 model: Holon,
-                as: 'FollowedHolons',
+                as: 'FollowedSpaces',
                 attributes: [],
                 through: { where: { state: 'active' }, attributes: [] },
             },
@@ -1674,24 +1674,24 @@ router.post('/create-space', authenticateToken, async (req, res) => {
             state: 'open',
         })
 
-        const createModRelationship = HolonUser.create({
+        const createModRelationship = SpaceUser.create({
             relationship: 'moderator',
             state: 'active',
-            holonId: newSpace.id,
+            spaceId: newSpace.id,
             userId: accountId,
         })
 
-        const createFollowerRelationship = HolonUser.create({
+        const createFollowerRelationship = SpaceUser.create({
             relationship: 'follower',
             state: 'active',
-            holonId: newSpace.id,
+            spaceId: newSpace.id,
             userId: accountId,
         })
 
-        const createAccessRelationship = HolonUser.create({
+        const createAccessRelationship = SpaceUser.create({
             relationship: 'access',
             state: 'active',
-            holonId: newSpace.id,
+            spaceId: newSpace.id,
             userId: accountId,
         })
 
@@ -1836,13 +1836,13 @@ async function isAuthorizedModerator(accountId, spaceId) {
         include: [
             {
                 model: Holon,
-                as: 'ModeratedHolons',
+                as: 'ModeratedSpaces',
                 attributes: ['id'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
             },
         ],
     }).then((user) => {
-        return user.ModeratedHolons.find((space) => space.id === spaceId) ? true : false
+        return user.ModeratedSpaces.find((space) => space.id === spaceId) ? true : false
     })
 }
 
@@ -1960,19 +1960,19 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
     const accepted = response === 'accepted'
 
     const grantAccess = accepted
-        ? await HolonUser.create({
+        ? await SpaceUser.create({
               relationship: 'access',
               state: 'active',
-              holonId: spaceId,
+              spaceId,
               userId: accountId,
           })
         : null
 
     const followSpace = accepted
-        ? await HolonUser.create({
+        ? await SpaceUser.create({
               relationship: 'follower',
               state: 'active',
-              holonId: spaceId,
+              spaceId,
               userId: accountId,
           })
         : null
@@ -2042,10 +2042,10 @@ router.post('/request-space-access', authenticateToken, async (req, res) => {
         },
     })
 
-    const createAccessRealtionship = await HolonUser.create({
+    const createAccessRealtionship = await SpaceUser.create({
         relationship: 'access',
         state: 'pending',
-        holonId: spaceId,
+        spaceId,
         userId: accountId,
     })
 
@@ -2111,16 +2111,16 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
     } = req.body
     const accepted = response === 'accepted'
 
-    const updateAccess = await HolonUser.update(
+    const updateAccess = await SpaceUser.update(
         { state: accepted ? 'active' : 'removed' },
-        { where: { relationship: 'access', state: 'pending', holonId: spaceId, userId } }
+        { where: { relationship: 'access', state: 'pending', spaceId, userId } }
     )
 
     const followSpace = accepted
-        ? await HolonUser.create({
+        ? await SpaceUser.create({
               relationship: 'follower',
               state: 'active',
-              holonId: spaceId,
+              spaceId,
               userId,
           })
         : null
@@ -2246,10 +2246,10 @@ router.post('/remove-space-moderator', authenticateToken, async (req, res) => {
             attributes: ['id', 'name', 'email'],
         })
             .then((user) => {
-                HolonUser.update(
+                SpaceUser.update(
                     { state: 'removed' },
                     {
-                        where: { relationship: 'moderator', userId: user.id, holonId: spaceId },
+                        where: { relationship: 'moderator', userId: user.id, spaceId },
                     }
                 )
                     .then(() => {
@@ -2321,16 +2321,16 @@ router.post('/toggle-join-space', authenticateToken, (req, res) => {
     const accountId = req.user.id
     const { spaceId, isFollowing } = req.body
     if (isFollowing) {
-        HolonUser.update(
+        SpaceUser.update(
             { state: 'removed' },
-            { where: { userId: accountId, holonId: spaceId, relationship: 'follower' } }
+            { where: { userId: accountId, spaceId, relationship: 'follower' } }
         )
             .then(res.status(200).json({ message: 'Success' }))
             .catch((err) => console.log(err))
     } else {
-        HolonUser.create({
+        SpaceUser.create({
             userId: accountId,
-            holonId: spaceId,
+            spaceId,
             relationship: 'follower',
             state: 'active',
         })
@@ -2344,9 +2344,9 @@ router.post('/join-spaces', authenticateToken, (req, res) => {
     const spaceIds = req.body
     Promise.all(
         spaceIds.map((spaceId) =>
-            HolonUser.create({
+            SpaceUser.create({
                 userId: accountId,
-                holonId: spaceId,
+                spaceId,
                 relationship: 'follower',
                 state: 'active',
             })

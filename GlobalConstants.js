@@ -65,13 +65,13 @@ const totalSpaceFollowers = [
     SELECT COUNT(*)
         FROM Users
         WHERE Users.id IN (
-            SELECT HolonUsers.userId
-            FROM HolonUsers
+            SELECT SpaceUsers.userId
+            FROM SpaceUsers
             RIGHT JOIN Users
-            ON HolonUsers.userId = Users.id
-            WHERE HolonUsers.HolonId = Holon.id
-            AND HolonUsers.relationship = 'follower'
-            AND HolonUsers.state = 'active'
+            ON SpaceUsers.userId = Users.id
+            WHERE SpaceUsers.spaceId = Holon.id
+            AND SpaceUsers.relationship = 'follower'
+            AND SpaceUsers.state = 'active'
         )
     )`),
     'totalFollowers',

@@ -158,13 +158,13 @@ router.get('/user-data', (req, res) => {
         include: [
             {
                 model: Holon,
-                as: 'FollowedHolons',
+                as: 'FollowedSpaces',
                 attributes: ['handle', 'name', 'flagImagePath'],
                 through: { where: { relationship: 'follower', state: 'active' }, attributes: [] },
             },
             {
                 model: Holon,
-                as: 'ModeratedHolons',
+                as: 'ModeratedSpaces',
                 attributes: ['handle', 'name', 'flagImagePath'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
             },
@@ -649,10 +649,10 @@ router.post('/find-people', (req, res) => {
     }
     let include = []
     if (spaceId) {
-        where['$FollowedHolons.id$'] = spaceId
+        where['$FollowedSpaces.id$'] = spaceId
         include.push({
             model: Holon,
-            as: 'FollowedHolons',
+            as: 'FollowedSpaces',
             attributes: [],
             through: { where: { state: 'active' }, attributes: [] },
         })
