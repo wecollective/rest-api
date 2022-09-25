@@ -83,11 +83,11 @@ const totalSpaceComments = [
         FROM Comments
         WHERE Comments.state = 'visible'
         AND Comments.postId IN (
-            SELECT PostHolons.postId
-            FROM PostHolons
+            SELECT SpacePosts.postId
+            FROM SpacePosts
             RIGHT JOIN Posts
-            ON PostHolons.postId = Posts.id
-            WHERE PostHolons.HolonId = Holon.id
+            ON SpacePosts.postId = Posts.id
+            WHERE SpacePosts.spaceId = Holon.id
         )
     )`),
     'totalComments',
@@ -100,11 +100,11 @@ const totalSpaceReactions = [
         WHERE Reactions.state = 'active'
         AND Reactions.type != 'vote'
         AND Reactions.postId IN (
-            SELECT PostHolons.postId
-            FROM PostHolons
+            SELECT SpacePosts.postId
+            FROM SpacePosts
             RIGHT JOIN Posts
-            ON PostHolons.postId = Posts.id
-            WHERE PostHolons.HolonId = Holon.id
+            ON SpacePosts.postId = Posts.id
+            WHERE SpacePosts.spaceId = Holon.id
         )
     )`),
     'totalReactions',
@@ -117,11 +117,11 @@ const totalSpaceLikes = [
         WHERE Reactions.state = 'active'
         AND Reactions.type = 'like'
         AND Reactions.postId IN (
-            SELECT PostHolons.postId
-            FROM PostHolons
+            SELECT SpacePosts.postId
+            FROM SpacePosts
             RIGHT JOIN Posts
-            ON PostHolons.postId = Posts.id
-            WHERE PostHolons.HolonId = Holon.id
+            ON SpacePosts.postId = Posts.id
+            WHERE SpacePosts.spaceId = Holon.id
         )
     )`),
     'totalLikes',
@@ -134,11 +134,11 @@ const totalSpaceRatings = [
         WHERE Reactions.state = 'active'
         AND Reactions.type = 'rating'
         AND Reactions.postId IN (
-            SELECT PostHolons.postId
-            FROM PostHolons
+            SELECT SpacePosts.postId
+            FROM SpacePosts
             RIGHT JOIN Posts
-            ON PostHolons.postId = Posts.id
-            WHERE PostHolons.HolonId = Holon.id
+            ON SpacePosts.postId = Posts.id
+            WHERE SpacePosts.spaceId = Holon.id
         )
     )`),
     'totalRatings',
@@ -150,11 +150,11 @@ const totalSpacePosts = [
         FROM Posts
         WHERE Posts.state = 'visible'
         AND Posts.id IN (
-            SELECT PostHolons.postId
-            FROM PostHolons
+            SELECT SpacePosts.postId
+            FROM SpacePosts
             RIGHT JOIN Posts
-            ON PostHolons.postId = Posts.id
-            WHERE PostHolons.HolonId = Holon.id
+            ON SpacePosts.postId = Posts.id
+            WHERE SpacePosts.spaceId = Holon.id
         )
     )`),
     'totalPosts',

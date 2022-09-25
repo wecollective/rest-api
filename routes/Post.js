@@ -25,7 +25,7 @@ const authenticateToken = require('../middleware/authenticateToken')
 const { postAttributes, asyncForEach } = require('../GlobalConstants')
 const {
     Holon,
-    PostHolon,
+    SpacePost,
     User,
     Post,
     Comment,
@@ -78,12 +78,12 @@ router.get('/post-data', (req, res) => {
         [
             sequelize.literal(`(
             SELECT COUNT(*) > 0
-            FROM PostHolons
-            AS PostHolon
-            WHERE  PostHolon.postId = Post.id
-            AND PostHolon.creatorId = ${accountId}
-            AND PostHolon.type = 'repost'
-            AND PostHolon.relationship = 'direct'
+            FROM SpacePosts
+            AS SpacePost
+            WHERE  SpacePost.postId = Post.id
+            AND SpacePost.creatorId = ${accountId}
+            AND SpacePost.type = 'repost'
+            AND SpacePost.relationship = 'direct'
             )`),
             'accountRepost',
         ],
@@ -312,12 +312,12 @@ router.get('/post-data', (req, res) => {
             else if (post.state === 'deleted') res.status(401).json({ message: 'Post deleted' })
             else {
                 post.DirectSpaces.forEach((space) => {
-                    space.setDataValue('type', space.dataValues.PostHolon.type)
-                    delete space.dataValues.PostHolon
+                    space.setDataValue('type', space.dataValues.SpacePost.type)
+                    delete space.dataValues.SpacePost
                 })
                 post.IndirectSpaces.forEach((space) => {
-                    space.setDataValue('type', space.dataValues.PostHolon.type)
-                    delete space.dataValues.PostHolon
+                    space.setDataValue('type', space.dataValues.SpacePost.type)
+                    delete space.dataValues.SpacePost
                 })
                 // convert SQL numeric booleans to JS booleans
                 post.setDataValue('accountLike', !!post.dataValues.accountLike)
@@ -753,24 +753,24 @@ router.post('/create-post', authenticateToken, (req, res) => {
 
             const createDirectRelationships = await Promise.all(
                 spaceIds.map((id) =>
-                    PostHolon.create({
+                    SpacePost.create({
                         type: 'post',
                         relationship: 'direct',
                         creatorId: accountId,
                         postId: post.id,
-                        holonId: id,
+                        spaceId: id,
                     })
                 )
             )
 
             const createIndirectRelationships = await Promise.all(
                 indirectSpaceIds.map((id) =>
-                    PostHolon.create({
+                    SpacePost.create({
                         type: 'post',
                         relationship: 'indirect',
                         creatorId: accountId,
                         postId: post.id,
-                        holonId: id,
+                        spaceId: id,
                     })
                 )
             )
@@ -1307,7 +1307,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
         })
     } else if (uploadType === 'string') {
         multer({
-            limits: { fileSize: audioMBLimit * 1024 * 1024 },
+            limits: { fileSize: imageMBLimit * 1024 * 1024 },
             dest: './stringData',
         }).any()(req, res, (error) => {
             const { files, body } = req
@@ -1394,11 +1394,16 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                     .run()
                             } else if (file.fieldname === 'image') {
                                 fs.readFile(`stringData/${file.filename}`, function (err, data) {
+                                    const name = file.originalname
+                                        .replace(/[^A-Za-z0-9]/g, '-')
+                                        .substring(0, 30)
+                                    const date = Date.now().toString()
+                                    const fileName = `post-image-upload-${accountId}-${name}-${date}`
                                     s3.putObject(
                                         {
                                             Bucket: `weco-${process.env.NODE_ENV}-post-images`,
                                             ACL: 'public-read',
-                                            Key: file.filename,
+                                            Key: fileName,
                                             Body: data,
                                             ContentType: file.mimetype,
                                             Metadata: { mimetype: file.mimetype },
@@ -1411,7 +1416,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                     fieldname: file.fieldname,
                                                     beadIndex: +indexes[0],
                                                     imageIndex: +indexes[1],
-                                                    location: `${baseUrl}post-images${s3Url}/${file.filename}`,
+                                                    location: `${baseUrl}post-images${s3Url}/${fileName}`,
                                                 })
                                                 fs.unlink(`stringData/${file.filename}`, (err) => {
                                                     if (err) console.log(err)
@@ -2121,12 +2126,12 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
 
     const createDirectRelationships = Promise.all(
         selectedSpaceIds.map((id) =>
-            PostHolon.create({
+            SpacePost.create({
                 type: 'repost',
                 relationship: 'direct',
                 creatorId: accountId,
                 postId: postId,
-                holonId: id,
+                spaceId: id,
             })
         )
     )
@@ -2158,15 +2163,15 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
     const createIndirectRelationships = Promise.all(
         indirectSpaceIds.map((id) => {
             return new Promise((resolve, reject) => {
-                PostHolon.findOne({ where: { postId, holonId: id } }).then((postHolon) => {
-                    if (!postHolon) {
-                        PostHolon.create({
+                SpacePost.findOne({ where: { postId, spaceId: id } }).then((spacePost) => {
+                    if (!spacePost) {
+                        SpacePost.create({
                             type: 'repost',
                             relationship: 'indirect',
                             // state: 'active',
                             creatorId: accountId,
                             postId: postId,
-                            holonId: id,
+                            spaceId: id,
                         }).then(() => resolve(id))
                     } else resolve()
                 })

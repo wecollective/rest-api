@@ -331,7 +331,7 @@ router.get('/user-posts', (req, res) => {
     // Double query required to to prevent results and pagination being effected by top level where clause.
     // Intial query used to find correct posts with calculated stats and pagination applied.
     // Second query used to return related models.
-    // Final function used to replace PostHolons object with a simpler array.
+    // Final function used to replace SpacePosts object with a simpler array.
     Post.findAll({
         subQuery: false,
         where,
@@ -617,12 +617,12 @@ router.get('/user-posts', (req, res) => {
             }).then((posts) => {
                 posts.forEach((post) => {
                     post.DirectSpaces.forEach((space) => {
-                        space.setDataValue('type', space.dataValues.PostHolon.type)
-                        delete space.dataValues.PostHolon
+                        space.setDataValue('type', space.dataValues.SpacePost.type)
+                        delete space.dataValues.SpacePost
                     })
                     post.IndirectSpaces.forEach((space) => {
-                        space.setDataValue('type', space.dataValues.PostHolon.type)
-                        delete space.dataValues.PostHolon
+                        space.setDataValue('type', space.dataValues.SpacePost.type)
+                        delete space.dataValues.SpacePost
                     })
                     // convert SQL numeric booleans to JS booleans
                     post.setDataValue('accountLike', !!post.dataValues.accountLike)

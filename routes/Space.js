@@ -365,11 +365,11 @@ router.get('/space-data', async (req, res) => {
                     FROM Posts
                     WHERE Posts.state = 'visible'
                     AND Posts.id IN (
-                        SELECT PostHolons.postId
-                        FROM PostHolons
+                        SELECT SpacePosts.postId
+                        FROM SpacePosts
                         RIGHT JOIN Posts
-                        ON PostHolons.postId = Posts.id
-                        WHERE PostHolons.HolonId = Holon.id
+                        ON SpacePosts.postId = Posts.id
+                        WHERE SpacePosts.spaceId = Holon.id
                     )
                 )`),
                 'totalPosts',
@@ -965,14 +965,14 @@ router.get('/space-posts', (req, res) => {
                 ],
             }).then((posts) => {
                 posts.forEach((post) => {
-                    // save type and remove redundant PostHolon objects
+                    // save type and remove redundant SpacePost objects
                     post.DirectSpaces.forEach((space) => {
-                        space.setDataValue('type', space.dataValues.PostHolon.type)
-                        delete space.dataValues.PostHolon
+                        space.setDataValue('type', space.dataValues.SpacePost.type)
+                        delete space.dataValues.SpacePost
                     })
                     post.IndirectSpaces.forEach((space) => {
-                        space.setDataValue('type', space.dataValues.PostHolon.type)
-                        delete space.dataValues.PostHolon
+                        space.setDataValue('type', space.dataValues.SpacePost.type)
+                        delete space.dataValues.SpacePost
                     })
                     // convert SQL numeric booleans to JS booleans
                     post.setDataValue('accountLike', !!post.dataValues.accountLike)
