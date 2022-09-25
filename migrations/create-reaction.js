@@ -17,7 +17,7 @@ module.exports = {
             state: {
                 type: Sequelize.STRING,
             },
-            holonId: {
+            spaceId: {
                 type: Sequelize.INTEGER,
             },
             userId: {

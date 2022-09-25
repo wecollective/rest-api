@@ -10,7 +10,7 @@ module.exports = (sequelize, DataTypes) => {
             },
             state: DataTypes.STRING,
             creatorId: DataTypes.INTEGER,
-            holonId: DataTypes.INTEGER,
+            spaceId: DataTypes.INTEGER,
             postId: DataTypes.INTEGER,
             parentCommentId: DataTypes.INTEGER,
             text: DataTypes.TEXT,

@@ -163,9 +163,9 @@ const totalSpacePosts = [
 const totalSpaceChildren = [
     sequelize.literal(`(
     SELECT COUNT(*)
-        FROM VerticalHolonRelationships
+        FROM SpaceParents
         AS VHR
-        WHERE VHR.holonAId = Space.id
+        WHERE VHR.spaceAId = Space.id
         AND VHR.state = 'open'
     )`),
     'totalChildren',

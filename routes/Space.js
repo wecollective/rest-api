@@ -10,7 +10,7 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 const {
     Space,
-    VerticalHolonRelationship,
+    SpaceParent,
     SpaceAncestor, // InheritedSpaceId
     SpaceUser, // SpaceUserRelationship
     User,
@@ -145,7 +145,7 @@ function findSpaceWhere(spaceId, depth, timeRange, searchQuery) {
     }
     if (depth === 'Only Direct Descendants') {
         where = {
-            '$DirectParentHolons.id$': spaceId,
+            '$DirectParentSpaces.id$': spaceId,
             state: 'active',
             createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
             [Op.or]: [
@@ -174,7 +174,7 @@ function findSpaceInclude(depth) {
         include = [
             {
                 model: Space,
-                as: 'DirectParentHolons',
+                as: 'DirectParentSpaces',
                 attributes: [],
                 through: { attributes: [], where: { state: 'open' } },
             },
@@ -225,10 +225,10 @@ function findTotalSpaceResults(depth, searchQuery, timeRange) {
             SELECT COUNT(*)
                 FROM Spaces s
                 WHERE s.id IN (
-                    SELECT vhr.holonBId
-                    FROM VerticalHolonRelationships vhr
+                    SELECT vhr.spaceBId
+                    FROM SpaceParents vhr
                     RIGHT JOIN Spaces
-                    ON vhr.holonAId = Space.id
+                    ON vhr.spaceAId = Space.id
                     WHERE vhr.state = 'open'
                 ) AND (
                     s.handle LIKE '%${searchQuery}%'
@@ -389,7 +389,7 @@ router.get('/space-data', async (req, res) => {
         include: [
             {
                 model: Space,
-                as: 'DirectParentHolons',
+                as: 'DirectParentSpaces',
                 attributes: [
                     'id',
                     'handle',
@@ -432,7 +432,7 @@ router.get('/space-data', async (req, res) => {
         // todo: potentially retreive after space data has loaded so posts can start loading quicker
         // child spaces and latest users retrieved seperately so limit and order can be applied (not allowed for M:M includes in Sequelize)
         const childSpaces = await Space.findAll({
-            where: { '$DirectParentHolons.id$': spaceData.id, state: 'active' },
+            where: { '$DirectParentSpaces.id$': spaceData.id, state: 'active' },
             attributes: [
                 'id',
                 'handle',
@@ -450,13 +450,13 @@ router.get('/space-data', async (req, res) => {
             include: [
                 {
                     model: Space,
-                    as: 'DirectParentHolons',
+                    as: 'DirectParentSpaces',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
             ],
         })
-        spaceData.setDataValue('DirectChildHolons', childSpaces)
+        spaceData.setDataValue('DirectChildSpaces', childSpaces)
         if (spaceData.id === 1) {
             // get latest 3 users for root space
             const latestUsers = await User.findAll({
@@ -981,11 +981,11 @@ router.get('/space-posts', (req, res) => {
                     post.setDataValue('accountLink', !!post.dataValues.accountLink)
                     // post.setDataValue('accountFollowingEvent', !!post.dataValues.accountFollowingEvent)
                 })
-                let holonPosts = {
+                let spacePosts = {
                     // totalMatchingPosts,
                     posts,
                 }
-                return holonPosts
+                return spacePosts
             })
         })
         .then((data) => {
@@ -1354,9 +1354,9 @@ router.get('/space-spaces', (req, res) => {
         offset: Number(offset),
         subQuery: false,
     })
-        .then((holons) => {
+        .then((spaces) => {
             Space.findAll({
-                where: { id: holons.map((holon) => holon.id) },
+                where: { id: spaces.map((space) => space.id) },
                 order: findOrder(sortOrder, sortBy),
                 attributes: spaceAttributes,
             }).then((data) => {
@@ -1452,10 +1452,10 @@ router.get('/space-events', (req, res) => {
         .catch((err) => console.log(err))
 })
 
-router.get('/holon-requests', (req, res) => {
-    const { holonId } = req.query
+router.get('/space-requests', (req, res) => {
+    const { spaceId } = req.query
     SpaceNotification.findAll({
-        where: { type: 'parent-space-request', ownerId: holonId },
+        where: { type: 'parent-space-request', ownerId: spaceId },
         order: [['createdAt', 'DESC']],
         include: [
             {
@@ -1554,7 +1554,7 @@ router.get('/space-map-data', async (req, res) => {
         include: [
             {
                 model: Space,
-                as: 'DirectParentHolons',
+                as: 'DirectParentSpaces',
                 attributes: spaceAttributes,
                 through: { attributes: [], where: { state: 'open' } },
             },
@@ -1608,8 +1608,8 @@ router.get('/validate-space-handle', (req, res) => {
         where: { handle: searchQuery, state: 'active' },
         attributes: ['handle'],
     })
-        .then((holons) => {
-            if (holons.length > 0) {
+        .then((spaces) => {
+            if (spaces.length > 0) {
                 res.send('success')
             } else {
                 res.send('fail')
@@ -1702,10 +1702,10 @@ router.post('/create-space', authenticateToken, async (req, res) => {
             createAccessRelationship,
         ]).then(async () => {
             if (authorizedToAttachParent) {
-                const createVerticalRelationship = await VerticalHolonRelationship.create({
+                const createVerticalRelationship = await SpaceParent.create({
                     state: 'open',
-                    holonAId: parentId, // parent
-                    holonBId: newSpace.id, // child
+                    spaceAId: parentId, // parent
+                    spaceBId: newSpace.id, // child
                 })
 
                 const addParentSpaceIdsToNewSpace = private
@@ -1736,10 +1736,10 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                     .then(() => res.status(200).json({ spaceId: newSpace.id, message: 'success' }))
                     .catch((error) => console.log(error))
             } else {
-                const attachToRoot = await VerticalHolonRelationship.create({
+                const attachToRoot = await SpaceParent.create({
                     state: 'open',
-                    holonAId: 1, // parent
-                    holonBId: newSpace.id, // child
+                    spaceAId: 1, // parent
+                    spaceBId: newSpace.id, // child
                 })
 
                 const inheritRootId = private
@@ -1755,7 +1755,7 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                     ownerId: parentId,
                     type: 'parent-space-request',
                     state: 'pending',
-                    holonAId: newSpace.id,
+                    spaceAId: newSpace.id,
                     userId: accountId,
                     seen: false,
                 })
@@ -1779,8 +1779,8 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                         ownerId: moderator.id,
                         type: 'parent-space-request',
                         state: 'pending',
-                        holonAId: newSpace.id,
-                        holonBId: parentSpace.id,
+                        spaceAId: newSpace.id,
+                        spaceBId: parentSpace.id,
                         userId: accountId,
                         seen: false,
                     }).then(() => {
@@ -1908,7 +1908,7 @@ router.post('/invite-space-users', authenticateToken, async (req, res) => {
                         type: 'space-invite',
                         state: 'pending',
                         seen: false,
-                        holonAId: spaceId,
+                        spaceAId: spaceId,
                         userId: accountId,
                     })
                     const sendEmail = await sgMail.send({
@@ -1992,7 +1992,7 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
             type: 'space-invite-response',
             state: response,
             seen: false,
-            holonAId: spaceId,
+            spaceAId: spaceId,
             userId: accountId,
         })
         const sendEmail = await sgMail.send({
@@ -2058,7 +2058,7 @@ router.post('/request-space-access', authenticateToken, async (req, res) => {
                         type: 'space-access-request',
                         state: 'pending',
                         seen: false,
-                        holonAId: spaceId,
+                        spaceAId: spaceId,
                         userId: accountId,
                     })
                     const sendEmail = await sgMail.send({
@@ -2140,7 +2140,7 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
             type: 'space-access-response',
             state: response,
             seen: false,
-            holonAId: spaceId,
+            spaceAId: spaceId,
             userId: accountId,
         })
         const sendEmail = await sgMail.send({
@@ -2194,7 +2194,7 @@ router.post('/invite-space-moderator', authenticateToken, async (req, res) => {
                     type: 'mod-invite',
                     state: 'pending',
                     seen: false,
-                    holonAId: spaceId,
+                    spaceAId: spaceId,
                     userId: accountId,
                 })
                     .then(() => {
@@ -2259,7 +2259,7 @@ router.post('/remove-space-moderator', authenticateToken, async (req, res) => {
                             type: 'mod-removed',
                             state: null,
                             seen: false,
-                            holonAId: spaceId,
+                            spaceAId: spaceId,
                             userId: accountId,
                         })
                             .then(() => {
@@ -2311,8 +2311,8 @@ router.post('/toggle-space-notification-seen', (req, res) => {
 })
 
 router.post('/mark-all-space-notifications-seen', (req, res) => {
-    let { holonId } = req.body
-    SpaceNotification.update({ seen: true }, { where: { ownerId: holonId } }).then(
+    let { spaceId } = req.body
+    SpaceNotification.update({ seen: true }, { where: { ownerId: spaceId } }).then(
         res.send('success')
     )
 })
@@ -2409,7 +2409,7 @@ router.post('/send-parent-space-request', authenticateToken, async (req, res) =>
             ownerId: parentSpace.id,
             type: 'parent-space-request',
             state: 'pending',
-            holonAId: spaceId,
+            spaceAId: spaceId,
             userId: accountId,
             seen: false,
         })
@@ -2420,8 +2420,8 @@ router.post('/send-parent-space-request', authenticateToken, async (req, res) =>
                     ownerId: moderator.id,
                     type: 'parent-space-request',
                     state: 'pending',
-                    holonAId: spaceId,
-                    holonBId: parentSpace.id,
+                    spaceAId: spaceId,
+                    spaceBId: parentSpace.id,
                     userId: accountId,
                     seen: false,
                 }).then(() => {
@@ -2473,10 +2473,10 @@ router.post('/add-parent-space', authenticateToken, async (req, res) => {
     if (!authorized) res.send('unauthorized')
     else {
         // create vertical relationship
-        const createVerticalRelationship = await VerticalHolonRelationship.create({
+        const createVerticalRelationship = await SpaceParent.create({
             state: 'open',
-            holonAId: parentSpaceId, // parent
-            holonBId: spaceId, // child
+            spaceAId: parentSpaceId, // parent
+            spaceBId: spaceId, // child
         })
         // remove old vertical relationship with root if present
         const removeVerticalRelationshipWithRoot = await Space.findOne({
@@ -2484,18 +2484,18 @@ router.post('/add-parent-space', authenticateToken, async (req, res) => {
             attributes: [],
             include: {
                 model: Space,
-                as: 'DirectParentHolons',
+                as: 'DirectParentSpaces',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
             },
         }).then((space) => {
-            if (space.DirectParentHolons.some((h) => h.id === 1)) {
-                VerticalHolonRelationship.update(
+            if (space.DirectParentSpaces.some((h) => h.id === 1)) {
+                SpaceParent.update(
                     { state: 'closed' },
                     {
                         where: {
-                            holonAId: 1, // parent
-                            holonBId: spaceId, // child
+                            spaceAId: 1, // parent
+                            spaceBId: spaceId, // child
                         },
                     }
                 )
@@ -2578,10 +2578,10 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
             // attach child to parent
             // todo: check connection not yet made first
             // create vertical relationship
-            const createVerticalRelationship = await VerticalHolonRelationship.create({
+            const createVerticalRelationship = await SpaceParent.create({
                 state: 'open',
-                holonAId: parentSpace.id, // parent
-                holonBId: childSpace.id, // child
+                spaceAId: parentSpace.id, // parent
+                spaceBId: childSpace.id, // child
             })
             // remove old vertical relationship with root if present
             const removeVerticalRelationshipWithRoot = await Space.findOne({
@@ -2589,18 +2589,18 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                 attributes: [],
                 include: {
                     model: Space,
-                    as: 'DirectParentHolons',
+                    as: 'DirectParentSpaces',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
             }).then((space) => {
-                if (space.DirectParentHolons.some((h) => h.id === 1)) {
-                    VerticalHolonRelationship.update(
+                if (space.DirectParentSpaces.some((h) => h.id === 1)) {
+                    SpaceParent.update(
                         { state: 'closed' },
                         {
                             where: {
-                                holonAId: 1, // parent
-                                holonBId: childSpace.id, // child
+                                spaceAId: 1, // parent
+                                spaceBId: childSpace.id, // child
                             },
                         }
                     )
@@ -2663,8 +2663,8 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                         // ownerId: accountId,
                         type: 'parent-space-request',
                         state: 'pending',
-                        holonAId: childSpace.id,
-                        holonBId: parentSpace.id,
+                        spaceAId: childSpace.id,
+                        spaceBId: parentSpace.id,
                     },
                 }
             )
@@ -2676,7 +2676,7 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                         ownerId: parentSpace.id,
                         type: 'parent-space-request',
                         state: 'pending',
-                        holonAId: childSpace.id,
+                        spaceAId: childSpace.id,
                     },
                 }
             )
@@ -2685,8 +2685,8 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                 ownerId: triggerUser.id,
                 type: `parent-space-request-response`,
                 state: response,
-                holonAId: childSpace.id,
-                holonBId: parentSpace.id,
+                spaceAId: childSpace.id,
+                spaceBId: parentSpace.id,
                 userId: accountId,
                 seen: false,
             })
@@ -2709,8 +2709,8 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                         // ownerId: accountId,
                         type: 'parent-space-request',
                         state: 'pending',
-                        holonAId: childSpace.id,
-                        holonBId: parentSpace.id,
+                        spaceAId: childSpace.id,
+                        spaceBId: parentSpace.id,
                     },
                 }
             )
@@ -2722,7 +2722,7 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                         ownerId: parentSpace.id,
                         type: 'parent-space-request',
                         state: 'pending',
-                        holonAId: childSpace.id,
+                        spaceAId: childSpace.id,
                     },
                 }
             )
@@ -2731,8 +2731,8 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                 ownerId: triggerUser.id,
                 type: `parent-space-request-response`,
                 state: response,
-                holonAId: childSpace.id,
-                holonBId: parentSpace.id,
+                spaceAId: childSpace.id,
+                spaceBId: parentSpace.id,
                 userId: accountId,
                 seen: false,
             })
@@ -2769,7 +2769,7 @@ async function removeIds(childId, parentId, idsToRemove) {
             {
                 // direct parents with their inherited ids
                 model: Space,
-                as: 'DirectParentHolons',
+                as: 'DirectParentSpaces',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
                 include: {
@@ -2782,7 +2782,7 @@ async function removeIds(childId, parentId, idsToRemove) {
             {
                 // direct children
                 model: Space,
-                as: 'DirectChildHolons',
+                as: 'DirectChildSpaces',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
             },
@@ -2791,7 +2791,7 @@ async function removeIds(childId, parentId, idsToRemove) {
     // gather other parents ids (excluding parent from previous iteration)
     // include 1 (the root id) by default to prevent it being removed
     let otherParentsIds = [1]
-    selectedSpace.DirectParentHolons.forEach((parent) => {
+    selectedSpace.DirectParentSpaces.forEach((parent) => {
         if (parent.id !== parentId) otherParentsIds.push(...parent.SpaceAncestors.map((s) => s.id))
     })
     // remove duplicates
@@ -2806,7 +2806,7 @@ async function removeIds(childId, parentId, idsToRemove) {
                 { where: { spaceBId: childId, spaceAId: id } }
             )
         })
-        selectedSpace.DirectChildHolons.forEach((child) => {
+        selectedSpace.DirectChildSpaces.forEach((child) => {
             // the current child becomes the parent in the next iteration
             removeIds(child.id, childId, filteredIdsToRemove)
         })
@@ -2837,23 +2837,23 @@ async function removeParentSpace(childId, parentId, callBack) {
         where: { id: childId },
         include: {
             model: Space,
-            as: 'DirectParentHolons',
+            as: 'DirectParentSpaces',
             attributes: ['id'],
             through: { attributes: [], where: { state: 'open' } },
         },
     }).then((childSpace) => {
-        if (childSpace.DirectParentHolons.length === 1) {
-            VerticalHolonRelationship.create({
+        if (childSpace.DirectParentSpaces.length === 1) {
+            SpaceParent.create({
                 state: 'open',
-                holonAId: 1,
-                holonBId: childId,
+                spaceAId: 1,
+                spaceBId: childId,
             })
         }
     })
     // remove the old vertical relationship with the parent
-    const removeVerticalRelationship = await VerticalHolonRelationship.update(
+    const removeVerticalRelationship = await SpaceParent.update(
         { state: 'closed' },
-        { where: { holonAId: parentId, holonBId: childId } }
+        { where: { spaceAId: parentId, spaceBId: childId } }
     )
     // todo: send notifications? (if fromChild, send notification to parent mods, else to child mods)
     Promise.all([connectToRootIfRequired, removeVerticalRelationship]).then(() => {
@@ -2890,31 +2890,31 @@ router.post('/delete-space', authenticateToken, async (req, res) => {
                 {
                     // direct parents
                     model: Space,
-                    as: 'DirectParentHolons',
+                    as: 'DirectParentSpaces',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
                 {
                     // direct children
                     model: Space,
-                    as: 'DirectChildHolons',
+                    as: 'DirectChildSpaces',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
             ],
         })
         // for each child, run remove parent logic (remove inherited ids, detach vertical relationships etc.)
-        selectedSpace.DirectChildHolons.forEach((child) => {
+        selectedSpace.DirectChildSpaces.forEach((child) => {
             removeParentSpace(child.id, spaceId)
         })
         // for each parent, remove vertical relationship
-        selectedSpace.DirectParentHolons.forEach((parent) => {
-            VerticalHolonRelationship.update(
+        selectedSpace.DirectParentSpaces.forEach((parent) => {
+            SpaceParent.update(
                 { state: 'closed' },
                 {
                     where: {
-                        holonAId: parent.id, // parent
-                        holonBId: spaceId, // child
+                        spaceAId: parent.id, // parent
+                        spaceBId: spaceId, // child
                     },
                 }
             )

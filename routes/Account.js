@@ -147,7 +147,7 @@ router.post('/respond-to-mod-invite', authenticateToken, async (req, res) => {
                             type: 'mod-invite-response',
                             state: 'accepted',
                             seen: false,
-                            holonAId: spaceId,
+                            spaceAId: spaceId,
                             userId: accountId,
                         })
                             .then(() => {
@@ -178,7 +178,7 @@ router.post('/respond-to-mod-invite', authenticateToken, async (req, res) => {
                     type: 'mod-invite-response',
                     state: 'rejected',
                     seen: false,
-                    holonAId: spaceId,
+                    spaceAId: spaceId,
                     userId: accountId,
                 })
                     .then(() => {

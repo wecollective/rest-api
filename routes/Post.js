@@ -743,7 +743,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                         // todo: include space handles and flag images
                         const ids = []
                         spaces.forEach((space) =>
-                            ids.push(...space.SpaceAncestors.map((holon) => holon.id))
+                            ids.push(...space.SpaceAncestors.map((space) => space.id))
                         )
                         const filteredIds = [...new Set(ids)].filter((id) => !spaceIds.includes(id))
                         resolve(filteredIds)
@@ -2082,7 +2082,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
               ownerId: post.Creator.id,
               type: 'post-repost',
               seen: false,
-              holonAId: spaceId,
+              spaceAId: spaceId,
               userId: accountId,
               postId,
           })
@@ -2117,7 +2117,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
             Reaction.create({
                 type: 'repost',
                 state: 'active',
-                holonId: id,
+                spaceId: id,
                 userId: accountId,
                 postId: postId,
             })
@@ -2154,7 +2154,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
             )
         ).then((spaces) => {
             const ids = []
-            spaces.forEach((space) => ids.push(...space.SpaceAncestors.map((holon) => holon.id)))
+            spaces.forEach((space) => ids.push(...space.SpaceAncestors.map((space) => space.id)))
             const filteredIds = [...new Set(ids)].filter((id) => !selectedSpaceIds.includes(id))
             resolve(filteredIds)
         })
@@ -2194,7 +2194,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
 
 router.post('/add-like', authenticateToken, async (req, res) => {
     const accountId = req.user.id
-    const { accountHandle, accountName, postId, holonId } = req.body
+    const { accountHandle, accountName, postId, spaceId } = req.body
 
     const post = await Post.findOne({
         where: { id: postId },
@@ -2211,7 +2211,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
     const createReaction = await Reaction.create({
         type: 'like',
         state: 'active',
-        holonId,
+        spaceId,
         userId: accountId,
         postId,
     })
@@ -2224,7 +2224,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
               ownerId: post.Creator.id,
               type: 'post-like',
               seen: false,
-              holonAId: holonId,
+              spaceAId: spaceId,
               userId: accountId,
               postId,
           })
@@ -2299,7 +2299,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
         type: 'rating',
         value: newRating,
         state: 'active',
-        holonId: spaceId,
+        spaceId,
         userId: accountId,
         postId,
     })
@@ -2310,7 +2310,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
               ownerId: post.Creator.id,
               type: 'post-rating',
               seen: false,
-              holonAId: spaceId,
+              spaceAId: spaceId,
               userId: accountId,
               postId,
           })
@@ -2412,7 +2412,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                   ownerId: itemA.Creator.id,
                   type: 'post-link',
                   seen: false,
-                  holonAId: spaceId,
+                  spaceAId: spaceId,
                   userId: accountId,
                   postId: itemAId,
               })
@@ -2490,7 +2490,7 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
     const createComment = await Comment.create({
         state: 'visible',
         creatorId: accountId,
-        holonId: spaceId,
+        spaceId,
         postId,
         parentCommentId,
         text,
@@ -2503,7 +2503,7 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                       ownerId: post.Creator.id,
                       type: 'post-comment',
                       seen: false,
-                      holonAId: spaceId,
+                      spaceAId: spaceId,
                       userId: accountId,
                       postId,
                       commentId: createComment.id,
@@ -2543,7 +2543,7 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                       ownerId: parentComment.Creator.id,
                       type: 'comment-reply',
                       seen: false,
-                      holonAId: spaceId,
+                      spaceAId: spaceId,
                       userId: accountId,
                       postId,
                       commentId: createComment.id,
@@ -2719,7 +2719,7 @@ router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
                 type: 'inquiry-vote',
                 value: answer.value || null,
                 state: 'active',
-                holonId: spaceId,
+                spaceId,
                 userId: accountId,
                 postId,
                 inquiryAnswerId: answer.id,

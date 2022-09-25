@@ -20,16 +20,15 @@ module.exports = (sequelize, DataTypes) => {
         {}
     )
     Space.associate = function (models) {
-        // VHR relationship
         Space.belongsToMany(models.Space, {
-            through: models.VerticalHolonRelationship,
-            as: 'DirectParentHolons',
-            foreignKey: 'holonBId',
+            through: models.SpaceParent,
+            as: 'DirectParentSpaces',
+            foreignKey: 'spaceBId',
         })
         Space.belongsToMany(models.Space, {
-            through: models.VerticalHolonRelationship,
-            as: 'DirectChildHolons',
-            foreignKey: 'holonAId',
+            through: models.SpaceParent,
+            as: 'DirectChildSpaces',
+            foreignKey: 'spaceAId',
         })
         Space.belongsToMany(models.Space, {
             through: models.SpaceAncestor,
@@ -41,10 +40,10 @@ module.exports = (sequelize, DataTypes) => {
             as: 'SpaceAncestors',
             foreignKey: 'spaceBId',
         })
-        // HolonPosts relationship
+        // SpacePosts relationship
         Space.belongsToMany(models.Post, {
             through: models.SpacePost,
-            as: 'HolonPosts',
+            as: 'SpacePosts',
             foreignKey: 'spaceId',
         })
         // SpaceUsers relationships

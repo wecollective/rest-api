@@ -11,7 +11,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING,
             value: DataTypes.STRING, // update to number
             state: DataTypes.STRING,
-            holonId: DataTypes.INTEGER,
+            spaceId: DataTypes.INTEGER,
             userId: DataTypes.INTEGER,
             postId: DataTypes.INTEGER,
             commentId: DataTypes.INTEGER,
@@ -29,7 +29,7 @@ module.exports = (sequelize, DataTypes) => {
             as: 'Creator',
         })
         Reaction.belongsTo(models.Space, {
-            foreignKey: 'holonId',
+            foreignKey: 'spaceId',
             as: 'Space',
         })
         Reaction.belongsTo(models.InquiryAnswer, {

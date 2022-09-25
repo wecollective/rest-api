@@ -14,7 +14,7 @@ module.exports = {
             creatorId: {
                 type: Sequelize.INTEGER,
             },
-            holonId: {
+            spaceId: {
                 type: Sequelize.INTEGER,
             },
             postId: {
