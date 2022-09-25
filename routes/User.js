@@ -8,7 +8,7 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 const { postAttributes } = require('../GlobalConstants')
 const {
-    Holon,
+    Space,
     User,
     Post,
     Reaction,
@@ -157,13 +157,13 @@ router.get('/user-data', (req, res) => {
         attributes: ['id', 'handle', 'name', 'bio', 'flagImagePath', 'coverImagePath', 'createdAt'],
         include: [
             {
-                model: Holon,
+                model: Space,
                 as: 'FollowedSpaces',
                 attributes: ['handle', 'name', 'flagImagePath'],
                 through: { where: { relationship: 'follower', state: 'active' }, attributes: [] },
             },
             {
-                model: Holon,
+                model: Space,
                 as: 'ModeratedSpaces',
                 attributes: ['handle', 'name', 'flagImagePath'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
@@ -411,13 +411,13 @@ router.get('/user-posts', (req, res) => {
                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     },
                     {
-                        model: Holon,
+                        model: Space,
                         as: 'DirectSpaces',
                         attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
                         through: { where: { relationship: 'direct' }, attributes: ['type'] },
                     },
                     {
-                        model: Holon,
+                        model: Space,
                         as: 'IndirectSpaces',
                         attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
                         through: { where: { relationship: 'indirect' }, attributes: ['type'] },
@@ -651,7 +651,7 @@ router.post('/find-people', (req, res) => {
     if (spaceId) {
         where['$FollowedSpaces.id$'] = spaceId
         include.push({
-            model: Holon,
+            model: Space,
             as: 'FollowedSpaces',
             attributes: [],
             through: { where: { state: 'active' }, attributes: [] },

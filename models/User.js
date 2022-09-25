@@ -51,19 +51,19 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'userId',
         })
 
-        User.belongsToMany(models.Holon, {
+        User.belongsToMany(models.Space, {
             through: models.SpaceUser,
             as: 'UserSpaces',
             foreignKey: 'userId',
         })
 
-        User.belongsToMany(models.Holon, {
+        User.belongsToMany(models.Space, {
             through: models.SpaceUser,
             as: 'FollowedSpaces',
             foreignKey: 'userId',
         })
 
-        User.belongsToMany(models.Holon, {
+        User.belongsToMany(models.Space, {
             through: models.SpaceUser,
             as: 'ModeratedSpaces',
             foreignKey: 'userId',

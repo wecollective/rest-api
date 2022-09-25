@@ -28,7 +28,7 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'userId',
             as: 'Creator',
         })
-        Reaction.belongsTo(models.Holon, {
+        Reaction.belongsTo(models.Space, {
             foreignKey: 'holonId',
             as: 'Space',
         })

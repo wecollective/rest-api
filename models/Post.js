@@ -28,25 +28,25 @@ module.exports = (sequelize, DataTypes) => {
             as: 'Creator',
         })
 
-        Post.belongsToMany(models.Holon, {
+        Post.belongsToMany(models.Space, {
             through: models.SpacePost,
             as: 'AllIncludedSpaces',
             foreignKey: 'postId',
         })
 
-        Post.belongsToMany(models.Holon, {
+        Post.belongsToMany(models.Space, {
             through: models.SpacePost,
             as: 'DirectSpaces',
             foreignKey: 'postId',
         })
 
-        Post.belongsToMany(models.Holon, {
+        Post.belongsToMany(models.Space, {
             through: models.SpacePost,
             as: 'IndirectSpaces',
             foreignKey: 'postId',
         })
 
-        Post.belongsToMany(models.Holon, {
+        Post.belongsToMany(models.Space, {
             through: models.SpacePost,
             as: 'Reposts',
             foreignKey: 'postId',

@@ -6,7 +6,7 @@ var aws = require('aws-sdk')
 var multer = require('multer')
 var multerS3 = require('multer-s3')
 
-const { User, Holon, GlassBeadGame } = require('../models')
+const { User, Space, GlassBeadGame } = require('../models')
 
 const authenticateToken = require('../middleware/authenticateToken')
 
@@ -41,12 +41,12 @@ router.post('/image-upload', authenticateToken, (req, res) => {
                 )
                 break
             case 'space-flag':
-                Holon.update({ flagImagePath: url }, { where: { id } }).then(
+                Space.update({ flagImagePath: url }, { where: { id } }).then(
                     res.status(200).json({ message: 'Success', imageURL: url })
                 )
                 break
             case 'space-cover':
-                Holon.update({ coverImagePath: url }, { where: { id } }).then(
+                Space.update({ coverImagePath: url }, { where: { id } }).then(
                     res.status(200).json({ message: 'Success', imageURL: url })
                 )
                 break

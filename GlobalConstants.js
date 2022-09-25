@@ -69,7 +69,7 @@ const totalSpaceFollowers = [
             FROM SpaceUsers
             RIGHT JOIN Users
             ON SpaceUsers.userId = Users.id
-            WHERE SpaceUsers.spaceId = Holon.id
+            WHERE SpaceUsers.spaceId = Space.id
             AND SpaceUsers.relationship = 'follower'
             AND SpaceUsers.state = 'active'
         )
@@ -87,7 +87,7 @@ const totalSpaceComments = [
             FROM SpacePosts
             RIGHT JOIN Posts
             ON SpacePosts.postId = Posts.id
-            WHERE SpacePosts.spaceId = Holon.id
+            WHERE SpacePosts.spaceId = Space.id
         )
     )`),
     'totalComments',
@@ -104,7 +104,7 @@ const totalSpaceReactions = [
             FROM SpacePosts
             RIGHT JOIN Posts
             ON SpacePosts.postId = Posts.id
-            WHERE SpacePosts.spaceId = Holon.id
+            WHERE SpacePosts.spaceId = Space.id
         )
     )`),
     'totalReactions',
@@ -121,7 +121,7 @@ const totalSpaceLikes = [
             FROM SpacePosts
             RIGHT JOIN Posts
             ON SpacePosts.postId = Posts.id
-            WHERE SpacePosts.spaceId = Holon.id
+            WHERE SpacePosts.spaceId = Space.id
         )
     )`),
     'totalLikes',
@@ -138,7 +138,7 @@ const totalSpaceRatings = [
             FROM SpacePosts
             RIGHT JOIN Posts
             ON SpacePosts.postId = Posts.id
-            WHERE SpacePosts.spaceId = Holon.id
+            WHERE SpacePosts.spaceId = Space.id
         )
     )`),
     'totalRatings',
@@ -154,7 +154,7 @@ const totalSpacePosts = [
             FROM SpacePosts
             RIGHT JOIN Posts
             ON SpacePosts.postId = Posts.id
-            WHERE SpacePosts.spaceId = Holon.id
+            WHERE SpacePosts.spaceId = Space.id
         )
     )`),
     'totalPosts',
@@ -165,7 +165,7 @@ const totalSpaceChildren = [
     SELECT COUNT(*)
         FROM VerticalHolonRelationships
         AS VHR
-        WHERE VHR.holonAId = Holon.id
+        WHERE VHR.holonAId = Space.id
         AND VHR.state = 'open'
     )`),
     'totalChildren',

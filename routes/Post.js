@@ -24,7 +24,7 @@ ffmpeg.setFfmpegPath(ffmpegPath)
 const authenticateToken = require('../middleware/authenticateToken')
 const { postAttributes, asyncForEach } = require('../GlobalConstants')
 const {
-    Holon,
+    Space,
     SpacePost,
     User,
     Post,
@@ -110,13 +110,13 @@ router.get('/post-data', (req, res) => {
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
             {
-                model: Holon,
+                model: Space,
                 as: 'DirectSpaces',
                 attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
                 through: { where: { relationship: 'direct' }, attributes: ['type'] },
             },
             {
-                model: Holon,
+                model: Space,
                 as: 'IndirectSpaces',
                 attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
                 through: { where: { relationship: 'indirect' }, attributes: ['type'] },
@@ -361,7 +361,7 @@ router.get('/post-reposts', async (req, res) => {
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
             {
-                model: Holon,
+                model: Space,
                 as: 'Space',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
@@ -727,12 +727,12 @@ router.post('/create-post', authenticateToken, (req, res) => {
             urlDescription,
         }).then(async (post) => {
             const indirectSpaceIds = await new Promise((resolve) => {
-                Holon.findAll({
+                Space.findAll({
                     where: { id: spaceIds, state: 'active' },
                     attributes: [],
                     include: [
                         {
-                            model: Holon,
+                            model: Space,
                             as: 'SpaceAncestors',
                             attributes: ['id'],
                             through: { where: { state: 'open' }, attributes: [] },
@@ -2139,12 +2139,12 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
     const indirectSpaceIds = await new Promise((resolve, reject) => {
         Promise.all(
             selectedSpaceIds.map((id) =>
-                Holon.findOne({
+                Space.findOne({
                     where: { id, state: 'active' },
                     attributes: [],
                     include: [
                         {
-                            model: Holon,
+                            model: Space,
                             as: 'SpaceAncestors',
                             attributes: ['id'],
                             through: { where: { state: 'open' }, attributes: [] },
@@ -2841,13 +2841,13 @@ router.post('/find-spaces', (req, res) => {
         where['$SpaceAncestors.id$'] = spaceId
         where.id = { [Op.ne]: [spaceId] }
         include.push({
-            model: Holon,
+            model: Space,
             as: 'SpaceAncestors',
             attributes: [],
             through: { attributes: [], where: { state: 'open' } },
         })
     }
-    Holon.findAll({
+    Space.findAll({
         where,
         include,
         limit: 20,

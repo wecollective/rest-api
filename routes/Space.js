@@ -9,7 +9,7 @@ const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 const {
-    Holon,
+    Space,
     VerticalHolonRelationship,
     SpaceAncestor, // InheritedSpaceId
     SpaceUser, // SpaceUserRelationship
@@ -163,7 +163,7 @@ function findSpaceInclude(depth) {
     if (depth === 'All Contained Spaces') {
         include = [
             {
-                model: Holon,
+                model: Space,
                 as: 'SpaceAncestors',
                 attributes: [],
                 through: { attributes: [], where: { state: 'open' } },
@@ -173,7 +173,7 @@ function findSpaceInclude(depth) {
     if (depth === 'Only Direct Descendants') {
         include = [
             {
-                model: Holon,
+                model: Space,
                 as: 'DirectParentHolons',
                 attributes: [],
                 through: { attributes: [], where: { state: 'open' } },
@@ -202,14 +202,14 @@ function findTotalSpaceResults(depth, searchQuery, timeRange) {
         return [
             sequelize.literal(`(
             SELECT COUNT(*)
-                FROM Holons s
-                WHERE s.id != Holon.id
+                FROM Spaces s
+                WHERE s.id != Space.id
                 AND s.id IN (
                     SELECT SpaceAncestors.spaceBId
                     FROM SpaceAncestors
-                    RIGHT JOIN Holons
-                    ON SpaceAncestors.spaceBId = Holons.id
-                    WHERE SpaceAncestors.spaceAId = Holon.id
+                    RIGHT JOIN Spaces
+                    ON SpaceAncestors.spaceBId = Spaces.id
+                    WHERE SpaceAncestors.spaceAId = Space.id
                     AND SpaceAncestors.state = 'open'
                 ) AND (
                     s.handle LIKE '%${searchQuery}%'
@@ -223,12 +223,12 @@ function findTotalSpaceResults(depth, searchQuery, timeRange) {
         return [
             sequelize.literal(`(
             SELECT COUNT(*)
-                FROM Holons s
+                FROM Spaces s
                 WHERE s.id IN (
                     SELECT vhr.holonBId
                     FROM VerticalHolonRelationships vhr
-                    RIGHT JOIN Holons
-                    ON vhr.holonAId = Holon.id
+                    RIGHT JOIN Spaces
+                    ON vhr.holonAId = Space.id
                     WHERE vhr.state = 'open'
                 ) AND (
                     s.handle LIKE '%${searchQuery}%'
@@ -243,7 +243,7 @@ function findTotalSpaceResults(depth, searchQuery, timeRange) {
 
 // GET
 router.get('/homepage-highlights', async (req, res) => {
-    const totals = Holon.findOne({
+    const totals = Space.findOne({
         where: { id: 1 },
         attributes: [
             [
@@ -251,7 +251,7 @@ router.get('/homepage-highlights', async (req, res) => {
                 'totalPosts',
             ],
             [
-                sequelize.literal(`(SELECT COUNT(*) FROM Holons WHERE Holons.state = 'active')`),
+                sequelize.literal(`(SELECT COUNT(*) FROM Spaces WHERE Spaces.state = 'active')`),
                 'totalSpaces',
             ],
             [
@@ -273,7 +273,7 @@ router.get('/homepage-highlights', async (req, res) => {
         limit: 3,
     })
 
-    const spaces = Holon.findAll({
+    const spaces = Space.findAll({
         where: {
             // id: { [Op.ne]: [1] },
             state: 'active',
@@ -326,13 +326,13 @@ router.get('/space-data', async (req, res) => {
                                 FROM SpaceUsers
                                 RIGHT JOIN Users
                                 ON SpaceUsers.userId = Users.id
-                                WHERE SpaceUsers.spaceId = Holon.id
+                                WHERE SpaceUsers.spaceId = Space.id
                                 AND SpaceUsers.state = 'active'
                             )
                         )`),
                   'totalUsers',
               ]
-    const spaceData = await Holon.findOne({
+    const spaceData = await Space.findOne({
         where: { handle: handle, state: 'active' },
         attributes: [
             'id',
@@ -346,15 +346,15 @@ router.get('/space-data', async (req, res) => {
             [
                 sequelize.literal(`(
                 SELECT COUNT(*)
-                    FROM Holons
-                    WHERE Holons.handle != Holon.handle
-                    AND Holons.state = 'active'
-                    AND Holons.id IN (
+                    FROM Spaces
+                    WHERE Spaces.handle != Space.handle
+                    AND Spaces.state = 'active'
+                    AND Spaces.id IN (
                         SELECT SpaceAncestors.spaceBId
                         FROM SpaceAncestors
-                        RIGHT JOIN Holons
-                        ON SpaceAncestors.spaceBId = Holons.id
-                        WHERE SpaceAncestors.spaceAId = Holon.id
+                        RIGHT JOIN Spaces
+                        ON SpaceAncestors.spaceBId = Spaces.id
+                        WHERE SpaceAncestors.spaceAId = Space.id
                     )
                 )`),
                 'totalSpaces',
@@ -369,7 +369,7 @@ router.get('/space-data', async (req, res) => {
                         FROM SpacePosts
                         RIGHT JOIN Posts
                         ON SpacePosts.postId = Posts.id
-                        WHERE SpacePosts.spaceId = Holon.id
+                        WHERE SpacePosts.spaceId = Space.id
                     )
                 )`),
                 'totalPosts',
@@ -388,7 +388,7 @@ router.get('/space-data', async (req, res) => {
         ],
         include: [
             {
-                model: Holon,
+                model: Space,
                 as: 'DirectParentHolons',
                 attributes: [
                     'id',
@@ -401,7 +401,7 @@ router.get('/space-data', async (req, res) => {
                 through: { attributes: [], where: { state: 'open' } },
             },
             {
-                model: Holon,
+                model: Space,
                 as: 'SpaceAncestors',
                 attributes: ['handle'],
                 through: { attributes: [] },
@@ -431,7 +431,7 @@ router.get('/space-data', async (req, res) => {
         spaceData.setDataValue('accessPending', !!spaceData.dataValues.accessPending)
         // todo: potentially retreive after space data has loaded so posts can start loading quicker
         // child spaces and latest users retrieved seperately so limit and order can be applied (not allowed for M:M includes in Sequelize)
-        const childSpaces = await Holon.findAll({
+        const childSpaces = await Space.findAll({
             where: { '$DirectParentHolons.id$': spaceData.id, state: 'active' },
             attributes: [
                 'id',
@@ -449,7 +449,7 @@ router.get('/space-data', async (req, res) => {
             subQuery: false,
             include: [
                 {
-                    model: Holon,
+                    model: Space,
                     as: 'DirectParentHolons',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
@@ -477,7 +477,7 @@ router.get('/space-data', async (req, res) => {
                 subQuery: false,
                 include: [
                     {
-                        model: Holon,
+                        model: Space,
                         as: 'UserSpaces',
                         attributes: [],
                         through: { where: { state: 'active' }, attributes: [] },
@@ -671,7 +671,7 @@ router.get('/space-posts', (req, res) => {
         attributes: firstAttributes,
         include: [
             {
-                model: Holon,
+                model: Space,
                 as: 'AllIncludedSpaces',
                 attributes: [],
                 through,
@@ -747,13 +747,13 @@ router.get('/space-posts', (req, res) => {
                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     },
                     {
-                        model: Holon,
+                        model: Space,
                         as: 'DirectSpaces',
                         attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
                         through: { where: { relationship: 'direct' }, attributes: ['type'] },
                     },
                     {
-                        model: Holon,
+                        model: Space,
                         as: 'IndirectSpaces',
                         attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
                         through: { where: { relationship: 'indirect' }, attributes: ['type'] },
@@ -1161,7 +1161,7 @@ router.get('/post-map-data', async (req, res) => {
         attributes: firstAttributes,
         include: [
             {
-                model: Holon,
+                model: Space,
                 as: 'AllIncludedSpaces',
                 attributes: [],
                 through,
@@ -1198,7 +1198,7 @@ router.get('/post-map-data', async (req, res) => {
         attributes: firstAttributes,
         include: [
             {
-                model: Holon,
+                model: Space,
                 as: 'AllIncludedSpaces',
                 attributes: [],
                 through,
@@ -1345,7 +1345,7 @@ router.get('/space-spaces', (req, res) => {
     // Double query required to to prevent results and pagination being effected by top level where clause.
     // Intial query used to find correct posts with calculated stats and pagination applied.
     // Second query used to return related models.
-    Holon.findAll({
+    Space.findAll({
         where: findSpaceWhere(spaceId, depth, timeRange, searchQuery),
         order: findOrder(sortOrder, sortBy),
         attributes: findSpaceFirstAttributes(sortBy),
@@ -1355,7 +1355,7 @@ router.get('/space-spaces', (req, res) => {
         subQuery: false,
     })
         .then((holons) => {
-            Holon.findAll({
+            Space.findAll({
                 where: { id: holons.map((holon) => holon.id) },
                 order: findOrder(sortOrder, sortBy),
                 attributes: spaceAttributes,
@@ -1398,7 +1398,7 @@ router.get('/space-people', (req, res) => {
         subQuery: false,
         include: [
             {
-                model: Holon,
+                model: Space,
                 as: 'FollowedSpaces',
                 attributes: [],
                 through: { where: { state: 'active' }, attributes: [] },
@@ -1434,7 +1434,7 @@ router.get('/space-events', (req, res) => {
         attributes: ['id', 'type'],
         include: [
             {
-                model: Holon,
+                model: Space,
                 as: 'DirectSpaces',
                 where: { state: 'active' },
             },
@@ -1464,12 +1464,12 @@ router.get('/holon-requests', (req, res) => {
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
             {
-                model: Holon,
+                model: Space,
                 as: 'triggerSpace',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
             // {
-            //     model: Holon,
+            //     model: Space,
             //     as: 'secondarySpace',
             //     attributes: ['id', 'handle', 'name', 'flagImagePath'],
             // }
@@ -1500,7 +1500,7 @@ router.get('/space-map-data', async (req, res) => {
             parent.totalResults > 0 &&
             (generation === 1 || parent.privacy !== 'private')
         ) {
-            const nextGeneration = await Holon.findAll({
+            const nextGeneration = await Space.findAll({
                 where: findSpaceWhere(parent.id, depth, timeRange, searchQuery),
                 attributes: childAttributes,
                 limit,
@@ -1548,12 +1548,12 @@ router.get('/space-map-data', async (req, res) => {
         ...spaceAttributes,
         findTotalSpaceResults(depth, searchQuery, timeRange),
     ]
-    const findRoot = await Holon.findOne({
+    const findRoot = await Space.findOne({
         where: { id: spaceId },
         attributes: rootAttributes,
         include: [
             {
-                model: Holon,
+                model: Space,
                 as: 'DirectParentHolons',
                 attributes: spaceAttributes,
                 through: { attributes: [], where: { state: 'open' } },
@@ -1592,7 +1592,7 @@ router.get('/space-map-data', async (req, res) => {
 
 router.get('/suggested-space-handles', (req, res) => {
     const { searchQuery } = req.query
-    Holon.findAll({
+    Space.findAll({
         where: { state: 'active', handle: { [Op.like]: `%${searchQuery}%` } },
         attributes: ['handle'],
     })
@@ -1604,7 +1604,7 @@ router.get('/suggested-space-handles', (req, res) => {
 
 router.get('/validate-space-handle', (req, res) => {
     const { searchQuery } = req.query
-    Holon.findAll({
+    Space.findAll({
         where: { handle: searchQuery, state: 'active' },
         attributes: ['handle'],
     })
@@ -1621,11 +1621,11 @@ router.get('/validate-space-handle', (req, res) => {
 router.get('/parent-space-blacklist', async (req, res) => {
     const { spaceId } = req.query
 
-    Holon.findAll({
+    Space.findAll({
         attributes: ['id'],
         where: { '$SpaceAncestors.id$': spaceId, state: 'active' },
         include: {
-            model: Holon,
+            model: Space,
             as: 'SpaceAncestors',
             attributes: [],
             through: { attributes: [], where: { state: 'open' } },
@@ -1654,10 +1654,10 @@ router.post('/create-space', authenticateToken, async (req, res) => {
         private,
     } = req.body
 
-    const handleTaken = await Holon.findOne({ where: { handle, state: 'active' } })
+    const handleTaken = await Space.findOne({ where: { handle, state: 'active' } })
     if (handleTaken) res.status(409).json({ message: 'handle-taken' })
     else {
-        const newSpace = await Holon.create({
+        const newSpace = await Space.create({
             creatorId: accountId,
             handle,
             name,
@@ -1710,12 +1710,12 @@ router.post('/create-space', authenticateToken, async (req, res) => {
 
                 const addParentSpaceIdsToNewSpace = private
                     ? null
-                    : await Holon.findOne({
+                    : await Space.findOne({
                           // find parent spaces's inherited ids
                           where: { id: parentId },
                           attributes: [],
                           include: {
-                              model: Holon,
+                              model: Space,
                               as: 'SpaceAncestors',
                               attributes: ['id'],
                               through: { attributes: [], where: { state: 'open' } },
@@ -1760,7 +1760,7 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                     seen: false,
                 })
 
-                const parentSpace = await Holon.findOne({
+                const parentSpace = await Space.findOne({
                     where: { id: parentId },
                     attributes: ['id', 'handle', 'name'],
                     include: {
@@ -1835,7 +1835,7 @@ async function isAuthorizedModerator(accountId, spaceId) {
         where: { id: accountId },
         include: [
             {
-                model: Holon,
+                model: Space,
                 as: 'ModeratedSpaces',
                 attributes: ['id'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
@@ -1853,10 +1853,10 @@ router.post('/update-space-handle', authenticateToken, async (req, res) => {
 
     if (!authorized) res.send('unauthorized')
     else {
-        Holon.findOne({ where: { handle: payload } }).then((handleTaken) => {
+        Space.findOne({ where: { handle: payload } }).then((handleTaken) => {
             if (handleTaken) res.send('handle-taken')
             else {
-                Holon.update({ handle: payload }, { where: { id: spaceId } })
+                Space.update({ handle: payload }, { where: { id: spaceId } })
                     .then(res.send('success'))
                     .catch((err) => console.log(err))
             }
@@ -1871,7 +1871,7 @@ router.post('/update-space-name', authenticateToken, async (req, res) => {
 
     if (!authorized) res.send('unauthorized')
     else {
-        Holon.update({ name: payload }, { where: { id: spaceId } })
+        Space.update({ name: payload }, { where: { id: spaceId } })
             .then(res.send('success'))
             .catch((err) => console.log(err))
     }
@@ -1884,7 +1884,7 @@ router.post('/update-space-description', authenticateToken, async (req, res) => 
 
     if (!authorized) res.send('unauthorized')
     else {
-        Holon.update({ description: payload }, { where: { id: spaceId } })
+        Space.update({ description: payload }, { where: { id: spaceId } })
             .then(res.send('success'))
             .catch((err) => console.log(err))
     }
@@ -2031,7 +2031,7 @@ router.post('/request-space-access', authenticateToken, async (req, res) => {
     const accountId = req.user.id
     const { accountHandle, accountName, spaceId } = req.body
 
-    const space = await Holon.findOne({
+    const space = await Space.findOne({
         where: { id: spaceId },
         attributes: ['handle', 'name'],
         include: {
@@ -2363,7 +2363,7 @@ router.post('/viable-parent-spaces', authenticateToken, async (req, res) => {
 
     if (!authorized) res.send('unauthorized')
     else {
-        Holon.findAll({
+        Space.findAll({
             limit: 20,
             where: {
                 state: 'active',
@@ -2394,7 +2394,7 @@ router.post('/send-parent-space-request', authenticateToken, async (req, res) =>
     if (!authorized) res.send('unauthorized')
     else {
         // get parent space data and moderators
-        const parentSpace = await Holon.findOne({
+        const parentSpace = await Space.findOne({
             where: { id: parentSpaceId },
             attributes: ['id', 'handle', 'name'],
             include: {
@@ -2479,11 +2479,11 @@ router.post('/add-parent-space', authenticateToken, async (req, res) => {
             holonBId: spaceId, // child
         })
         // remove old vertical relationship with root if present
-        const removeVerticalRelationshipWithRoot = await Holon.findOne({
+        const removeVerticalRelationshipWithRoot = await Space.findOne({
             where: { id: spaceId },
             attributes: [],
             include: {
-                model: Holon,
+                model: Space,
                 as: 'DirectParentHolons',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
@@ -2502,11 +2502,11 @@ router.post('/add-parent-space', authenticateToken, async (req, res) => {
             }
         })
         // find parent spaces inherited ids
-        const parentSpace = await Holon.findOne({
+        const parentSpace = await Space.findOne({
             where: { id: parentSpaceId },
             attributes: [],
             include: {
-                model: Holon,
+                model: Space,
                 as: 'SpaceAncestors',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
@@ -2514,22 +2514,22 @@ router.post('/add-parent-space', authenticateToken, async (req, res) => {
         })
         const parentSpaceInheritedIds = parentSpace.SpaceAncestors.map((h) => h.id)
         // find effected spaces
-        const effectedSpaces = await Holon.findAll({
+        const effectedSpaces = await Space.findAll({
             attributes: ['id'],
             where: { '$SpaceAncestors.id$': spaceId },
             include: {
-                model: Holon,
+                model: Space,
                 as: 'SpaceAncestors',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
             },
         })
         // find effected spaces inherited ids
-        const effectedSpacesWithInhertedIds = await Holon.findAll({
+        const effectedSpacesWithInhertedIds = await Space.findAll({
             where: { id: effectedSpaces.map((s) => s.id) },
             include: [
                 {
-                    model: Holon,
+                    model: Space,
                     as: 'SpaceAncestors',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
@@ -2584,11 +2584,11 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                 holonBId: childSpace.id, // child
             })
             // remove old vertical relationship with root if present
-            const removeVerticalRelationshipWithRoot = await Holon.findOne({
+            const removeVerticalRelationshipWithRoot = await Space.findOne({
                 where: { id: childSpace.id },
                 attributes: [],
                 include: {
-                    model: Holon,
+                    model: Space,
                     as: 'DirectParentHolons',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
@@ -2607,11 +2607,11 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                 }
             })
             // find parent spaces inherited ids
-            const parentSpace2 = await Holon.findOne({
+            const parentSpace2 = await Space.findOne({
                 where: { id: parentSpace.id },
                 attributes: [],
                 include: {
-                    model: Holon,
+                    model: Space,
                     as: 'SpaceAncestors',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
@@ -2619,22 +2619,22 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
             })
             const parentSpaceInheritedIds = parentSpace2.SpaceAncestors.map((h) => h.id)
             // find effected spaces
-            const effectedSpaces = await Holon.findAll({
+            const effectedSpaces = await Space.findAll({
                 attributes: ['id'],
                 where: { '$SpaceAncestors.id$': childSpace.id },
                 include: {
-                    model: Holon,
+                    model: Space,
                     as: 'SpaceAncestors',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
             })
             // find effected spaces inherited ids
-            const effectedSpacesWithInhertedIds = await Holon.findAll({
+            const effectedSpacesWithInhertedIds = await Space.findAll({
                 where: { id: effectedSpaces.map((s) => s.id) },
                 include: [
                     {
-                        model: Holon,
+                        model: Space,
                         as: 'SpaceAncestors',
                         attributes: ['id'],
                         through: { attributes: [] },
@@ -2756,24 +2756,24 @@ async function removeIds(childId, parentId, idsToRemove) {
     // only return a success message once the full operation is complete
 
     // get selected space data (include inherited ids, direct parents with their inherited ids, and direct children)
-    const selectedSpace = await Holon.findOne({
+    const selectedSpace = await Space.findOne({
         where: { id: childId },
         include: [
             {
                 // inherited ids
-                model: Holon,
+                model: Space,
                 as: 'SpaceAncestors',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
             },
             {
                 // direct parents with their inherited ids
-                model: Holon,
+                model: Space,
                 as: 'DirectParentHolons',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
                 include: {
-                    model: Holon,
+                    model: Space,
                     as: 'SpaceAncestors',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
@@ -2781,7 +2781,7 @@ async function removeIds(childId, parentId, idsToRemove) {
             },
             {
                 // direct children
-                model: Holon,
+                model: Space,
                 as: 'DirectChildHolons',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
@@ -2817,13 +2817,13 @@ async function removeIds(childId, parentId, idsToRemove) {
 
 async function removeParentSpace(childId, parentId, callBack) {
     // fetch the parent spaces's inherited ids and pass them into the recursive removeIds function
-    const parentToRemove = await Holon.findOne({
+    const parentToRemove = await Space.findOne({
         where: { id: parentId },
         attributes: [],
         include: [
             {
                 // inherited ids
-                model: Holon,
+                model: Space,
                 as: 'SpaceAncestors',
                 attributes: ['id'],
                 through: { attributes: [], where: { state: 'open' } },
@@ -2833,10 +2833,10 @@ async function removeParentSpace(childId, parentId, callBack) {
     const idsToRemove = parentToRemove.SpaceAncestors.map((s) => s.id)
     removeIds(childId, parentId, idsToRemove)
     // if the parent being removed is the only parent of the child, attach the child to the root space
-    const connectToRootIfRequired = await Holon.findOne({
+    const connectToRootIfRequired = await Space.findOne({
         where: { id: childId },
         include: {
-            model: Holon,
+            model: Space,
             as: 'DirectParentHolons',
             attributes: ['id'],
             through: { attributes: [], where: { state: 'open' } },
@@ -2884,19 +2884,19 @@ router.post('/delete-space', authenticateToken, async (req, res) => {
     if (!authorized) res.send('unauthorized')
     else {
         // find selected space, include direct parents and direct children
-        const selectedSpace = await Holon.findOne({
+        const selectedSpace = await Space.findOne({
             where: { id: spaceId },
             include: [
                 {
                     // direct parents
-                    model: Holon,
+                    model: Space,
                     as: 'DirectParentHolons',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
                 {
                     // direct children
-                    model: Holon,
+                    model: Space,
                     as: 'DirectChildHolons',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
@@ -2920,7 +2920,7 @@ router.post('/delete-space', authenticateToken, async (req, res) => {
             )
         })
         // delete space
-        Holon.update({ state: 'removed-by-mod' }, { where: { id: spaceId } }).then(
+        Space.update({ state: 'removed-by-mod' }, { where: { id: spaceId } }).then(
             res.send('success')
         )
     }

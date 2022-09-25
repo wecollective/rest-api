@@ -6,7 +6,7 @@ const sequelize = require('sequelize')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
-const { Holon, User, Notification, SpaceUser, UserPost, Post, Weave } = require('../models')
+const { Space, User, Notification, SpaceUser, UserPost, Post, Weave } = require('../models')
 const { totalUserPosts } = require('../GlobalConstants')
 const ScheduledTasks = require('../ScheduledTasks')
 
@@ -31,7 +31,7 @@ router.get('/account-data', authenticateToken, (req, res) => {
         ],
         include: [
             {
-                model: Holon,
+                model: Space,
                 as: 'FollowedSpaces',
                 where: { state: 'active' },
                 required: false,
@@ -39,7 +39,7 @@ router.get('/account-data', authenticateToken, (req, res) => {
                 through: { where: { relationship: 'follower', state: 'active' }, attributes: [] },
             },
             {
-                model: Holon,
+                model: Space,
                 as: 'ModeratedSpaces',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
@@ -61,12 +61,12 @@ router.get('/account-notifications', authenticateToken, (req, res) => {
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
             {
-                model: Holon,
+                model: Space,
                 as: 'triggerSpace',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
             {
-                model: Holon,
+                model: Space,
                 as: 'secondarySpace',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },

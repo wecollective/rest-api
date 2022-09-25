@@ -25,11 +25,11 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'userId',
             as: 'triggerUser',
         })
-        SpaceNotification.belongsTo(models.Holon, {
+        SpaceNotification.belongsTo(models.Space, {
             foreignKey: 'holonAId',
             as: 'triggerSpace',
         })
-        SpaceNotification.belongsTo(models.Holon, {
+        SpaceNotification.belongsTo(models.Space, {
             foreignKey: 'ownerId',
             as: 'owner',
         })

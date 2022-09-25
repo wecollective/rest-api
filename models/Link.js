@@ -41,7 +41,7 @@ module.exports = (sequelize, DataTypes) => {
         //   //foreignKey: 'creatorId',
         //   //as: 'creator'
         // })
-        // Link.belongsTo(models.Holon, {
+        // Link.belongsTo(models.Space, {
         //   //foreignKey: 'creatorId',
         //   //as: 'creator'
         // })
