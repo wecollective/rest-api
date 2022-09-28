@@ -2492,101 +2492,86 @@ router.post('/send-parent-space-request', authenticateToken, async (req, res) =>
     }
 })
 
-// todo: create general purpose addParentSpace function/promise that resolves when complete to avoid code duplication
+async function attachParentSpace(childId, parentId) {
+    // remove old parent relationship with root if present to reduce clutter
+    const removeRoot = await SpaceParent.update(
+        { state: 'closed' },
+        { where: { spaceAId: 1, spaceBId: childId, state: 'open' } }
+    )
 
-router.post('/add-parent-space', authenticateToken, async (req, res) => {
-    const accountId = req.user.id
-    const { spaceId, parentSpaceId } = req.body
-    const authorized = await isAuthorizedModerator(accountId, parentSpaceId)
+    const createNewParentRelationship = await SpaceParent.create({
+        spaceAId: parentId,
+        spaceBId: childId,
+        state: 'open',
+    })
 
-    if (!authorized) res.send('unauthorized')
-    else {
-        // remove old parent relationship with root if present to reduce clutter
-        const removeRoot = await new Promise(async (resolve) => {
-            const space = await Space.findOne({
-                where: { id: spaceId },
-                attributes: [],
-                include: {
-                    model: Space,
-                    as: 'DirectParentSpaces',
-                    attributes: ['id'],
-                    through: { attributes: [], where: { state: 'open' } },
-                },
-            })
-            const childOfRoot = space.DirectParentSpaces.find((s) => s.id === 1)
-            if (!childOfRoot) resolve()
-            else {
-                SpaceParent.update(
-                    { state: 'closed' },
-                    { where: { spaceAId: 1, spaceBId: spaceId } }
-                )
-                    .then(() => resolve())
-                    .catch((error) => resolve(error))
-            }
-        })
-
-        const createNewParentRelationship = await SpaceParent.create({
-            spaceAId: parentSpaceId, // parent
-            spaceBId: spaceId, // child
-            state: 'open',
-        })
-
-        const parent = await Space.findOne({
-            where: { id: parentSpaceId },
+    const parent = await Space.findOne({
+        where: { id: parentId },
+        attributes: ['id'],
+        include: {
+            model: Space,
+            as: 'SpaceAncestors',
             attributes: ['id'],
-            include: {
-                model: Space,
-                as: 'SpaceAncestors',
-                attributes: ['id'],
-                through: { attributes: [], where: { state: 'open' } },
-            },
-        })
+            through: { attributes: [], where: { state: 'open' } },
+        },
+    })
 
-        const descendents = await Space.findAll({
+    const descendents = await Space.findAll({
+        attributes: ['id'],
+        where: {
+            [Op.or]: {
+                '$SpaceAncestors.id$': childId,
+                id: childId,
+            },
+            state: 'active',
+        },
+        include: {
+            model: Space,
+            as: 'SpaceAncestors',
             attributes: ['id'],
-            where: {
-                [Op.or]: {
-                    '$SpaceAncestors.id$': spaceId,
-                    id: spaceId,
-                },
-                state: 'active',
-            },
-            include: {
-                model: Space,
-                as: 'SpaceAncestors',
-                attributes: ['id'],
-                through: { attributes: [], where: { state: 'open' } },
-            },
-        })
+            through: { attributes: [], where: { state: 'open' } },
+        },
+    })
 
-        // for each descendent, check the new parents ancestors against its own ancestors, if no match add new ancestor
-        const addNewAncestorsToDescendents = await Promise.all(
-            descendents.map((descendent) =>
-                Promise.all(
-                    [parent, ...parent.SpaceAncestors].map(
-                        (ancestor) =>
-                            new Promise((resolve) => {
-                                const match = descendent.SpaceAncestors.find(
-                                    (a) => a.id === ancestor.id
-                                )
-                                if (match) resolve()
-                                else {
-                                    SpaceAncestor.create({
-                                        spaceAId: ancestor.id,
-                                        spaceBId: descendent.id,
-                                        state: 'open',
-                                    })
-                                        .then(() => resolve())
-                                        .catch((error) => resolve(error))
-                                }
-                            })
-                    )
+    // for each descendent, check the new parents ancestors against its own ancestors, if no match add new ancestor
+    const addNewAncestorsToDescendents = await Promise.all(
+        descendents.map((descendent) =>
+            Promise.all(
+                [parent, ...parent.SpaceAncestors].map(
+                    (ancestor) =>
+                        new Promise((resolve) => {
+                            const match = descendent.SpaceAncestors.find(
+                                (a) => a.id === ancestor.id
+                            )
+                            if (match) resolve()
+                            else {
+                                SpaceAncestor.create({
+                                    spaceAId: ancestor.id,
+                                    spaceBId: descendent.id,
+                                    state: 'open',
+                                })
+                                    .then(() => resolve())
+                                    .catch((error) => resolve(error))
+                            }
+                        })
                 )
             )
         )
-        Promise.all([removeRoot, createNewParentRelationship, addNewAncestorsToDescendents])
+    )
+
+    return Promise.all([removeRoot, createNewParentRelationship, addNewAncestorsToDescendents])
+}
+
+router.post('/add-parent-space', authenticateToken, async (req, res) => {
+    const accountId = req.user.id
+    const { childId, parentId } = req.body
+    const authorized = await isAuthorizedModerator(accountId, parentId)
+
+    if (!authorized) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        attachParentSpace(childId, parentId)
             .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => console.log(error))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
