@@ -11,10 +11,9 @@ const authenticateToken = require('../middleware/authenticateToken')
 const {
     Space,
     SpaceParent,
-    SpaceAncestor, // InheritedSpaceId
-    SpaceUser, // SpaceUserRelationship
+    SpaceAncestor,
+    SpaceUser,
     User,
-    UserEvent,
     Post,
     Reaction,
     Link,
@@ -306,32 +305,60 @@ router.get('/homepage-highlights', async (req, res) => {
 })
 
 router.get('/space-data', async (req, res) => {
+    // todo: change to post request, use optional authenticate token to grab accountID
     const { handle, accountId } = req.query
-    const totalUsers =
+    const totalSpaces = [
+        sequelize.literal(`(
+        SELECT COUNT(*)
+            FROM Spaces
+            WHERE Spaces.handle != Space.handle
+            AND Spaces.state = 'active'
+            AND Spaces.id IN (
+                SELECT SpaceAncestors.spaceBId
+                FROM SpaceAncestors
+                RIGHT JOIN Spaces
+                ON SpaceAncestors.spaceBId = Spaces.id
+                WHERE SpaceAncestors.spaceAId = Space.id
+            )
+        )`),
+        'totalSpaces',
+    ]
+    const totalPosts = [
+        sequelize.literal(`(
+        SELECT COUNT(*)
+            FROM Posts
+            WHERE Posts.state = 'visible'
+            AND Posts.id IN (
+                SELECT SpacePosts.postId
+                FROM SpacePosts
+                RIGHT JOIN Posts
+                ON SpacePosts.postId = Posts.id
+                WHERE SpacePosts.spaceId = Space.id
+            )
+        )`),
+        'totalPosts',
+    ]
+    const totalUsers = [
         handle === 'all'
-            ? [
-                  sequelize.literal(
-                      `(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true AND Users.state = 'active')`
-                  ),
-                  'totalUsers',
-              ]
-            : [
-                  sequelize.literal(`(
-                        SELECT COUNT(*)
-                            FROM Users
-                            WHERE Users.emailVerified = true
-                            AND Users.state = 'active'
-                            AND Users.id IN (
-                                SELECT SpaceUsers.userId
-                                FROM SpaceUsers
-                                RIGHT JOIN Users
-                                ON SpaceUsers.userId = Users.id
-                                WHERE SpaceUsers.spaceId = Space.id
-                                AND SpaceUsers.state = 'active'
-                            )
-                        )`),
-                  'totalUsers',
-              ]
+            ? sequelize.literal(
+                  `(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true AND Users.state = 'active')`
+              )
+            : sequelize.literal(`(
+        SELECT COUNT(*)
+            FROM Users
+            WHERE Users.emailVerified = true
+            AND Users.state = 'active'
+            AND Users.id IN (
+                SELECT SpaceUsers.userId
+                FROM SpaceUsers
+                RIGHT JOIN Users
+                ON SpaceUsers.userId = Users.id
+                WHERE SpaceUsers.spaceId = Space.id
+                AND SpaceUsers.state = 'active'
+            )
+        )`),
+        'totalUsers',
+    ]
     const spaceData = await Space.findOne({
         where: { handle: handle, state: 'active' },
         attributes: [
@@ -343,50 +370,12 @@ router.get('/space-data', async (req, res) => {
             'flagImagePath',
             'coverImagePath',
             'createdAt',
-            [
-                sequelize.literal(`(
-                SELECT COUNT(*)
-                    FROM Spaces
-                    WHERE Spaces.handle != Space.handle
-                    AND Spaces.state = 'active'
-                    AND Spaces.id IN (
-                        SELECT SpaceAncestors.spaceBId
-                        FROM SpaceAncestors
-                        RIGHT JOIN Spaces
-                        ON SpaceAncestors.spaceBId = Spaces.id
-                        WHERE SpaceAncestors.spaceAId = Space.id
-                    )
-                )`),
-                'totalSpaces',
-            ],
-            [
-                sequelize.literal(`(
-                SELECT COUNT(*)
-                    FROM Posts
-                    WHERE Posts.state = 'visible'
-                    AND Posts.id IN (
-                        SELECT SpacePosts.postId
-                        FROM SpacePosts
-                        RIGHT JOIN Posts
-                        ON SpacePosts.postId = Posts.id
-                        WHERE SpacePosts.spaceId = Space.id
-                    )
-                )`),
-                'totalPosts',
-            ],
+            totalSpaces,
+            totalPosts,
             totalUsers,
-            [
-                sequelize.literal(`(
-                SELECT COUNT(*)
-                    FROM SpaceUsers
-                    WHERE SpaceUsers.userId = ${accountId}
-                    AND SpaceUsers.relationship = 'access'
-                    AND SpaceUsers.state = 'pending'
-                )`),
-                'accessPending',
-            ],
         ],
         include: [
+            // todo: remove DirectParentSpaces and retrieve seperately where needed
             {
                 model: Space,
                 as: 'DirectParentSpaces',
@@ -403,34 +392,84 @@ router.get('/space-data', async (req, res) => {
             {
                 model: Space,
                 as: 'SpaceAncestors',
-                attributes: ['handle'],
+                attributes: ['id', 'privacy'],
                 through: { attributes: [] },
             },
+            // todo: remove and retrieve on about page
             {
                 model: User,
                 as: 'Creator',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
+            // todo: remove and retrieve on necissary pages/modals
             {
                 model: User,
                 as: 'Moderators',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
             },
-            {
-                model: User,
-                as: 'UsersWithAccess',
-                attributes: ['id'],
-                through: { where: { relationship: 'access', state: 'active' }, attributes: [] },
-            },
         ],
     })
 
     if (!spaceData) res.status(404).send({ message: 'Space not found' })
     else {
-        spaceData.setDataValue('accessPending', !!spaceData.dataValues.accessPending)
-        // todo: potentially retreive after space data has loaded so posts can start loading quicker
-        // child spaces and latest users retrieved seperately so limit and order can be applied (not allowed for M:M includes in Sequelize)
+        // check user access (returns 'granted', 'pending', 'blocked', or 'blocked-by-ancestor')
+        const access = await new Promise(async (resolve) => {
+            if (spaceData.privacy === 'private') {
+                // check space access
+                if (!accountId) resolve('blocked')
+                else {
+                    const spaceAccess = await SpaceUser.findOne({
+                        where: {
+                            spaceId: spaceData.id,
+                            userId: accountId,
+                            relationship: 'access',
+                            state: {
+                                [Op.or]: ['active', 'pending'],
+                            },
+                        },
+                        attributes: ['state'],
+                    })
+                    if (spaceAccess) resolve(spaceAccess.state === 'active' ? 'granted' : 'pending')
+                    else resolve('blocked')
+                }
+            } else {
+                // check ancestor access
+                const privateAncestors = spaceData.SpaceAncestors.filter(
+                    (s) => s.privacy === 'private'
+                )
+                if (!privateAncestors.length) resolve('granted')
+                else {
+                    if (!accountId) resolve('blocked')
+                    else {
+                        Promise.all(
+                            privateAncestors.map(
+                                (space) =>
+                                    new Promise(async (reso) => {
+                                        const spaceAccess = await SpaceUser.findOne({
+                                            where: {
+                                                spaceId: space.id,
+                                                userId: accountId,
+                                                relationship: 'access',
+                                                state: 'active',
+                                            },
+                                            attributes: ['id'],
+                                        })
+                                        reso(!!spaceAccess)
+                                    })
+                            )
+                        )
+                            .then((results) =>
+                                resolve(results.includes(false) ? 'blocked-by-ancestor' : 'granted')
+                            )
+                            .catch((error) => console.log('error: ', error))
+                    }
+                }
+            }
+        })
+        spaceData.setDataValue('access', access)
+        // todo: retreive after space data has loaded and only when side bar nav visible or needed in modals
+        // child spaces retrieved seperately so limit and order can be applied (not allowed for M:M includes in Sequelize)
         const childSpaces = await Space.findAll({
             where: { '$DirectParentSpaces.id$': spaceData.id, state: 'active' },
             attributes: [
@@ -457,35 +496,6 @@ router.get('/space-data', async (req, res) => {
             ],
         })
         spaceData.setDataValue('DirectChildSpaces', childSpaces)
-        if (spaceData.id === 1) {
-            // get latest 3 users for root space
-            const latestUsers = await User.findAll({
-                where: { state: 'active', emailVerified: true, flagImagePath: { [Op.ne]: null } },
-                attributes: ['flagImagePath'],
-                order: [['createdAt', 'DESC']],
-                limit: 3,
-            })
-            spaceData.setDataValue('LatestUsers', latestUsers)
-        } else {
-            // get latest 3 users for other spaces
-            const latestUsers = await User.findAll({
-                where: { '$UserSpaces.id$': spaceData.id, state: 'active', emailVerified: true },
-                attributes: ['flagImagePath', 'createdAt'],
-                order: [['createdAt', 'DESC']],
-                // mods added to limit to prevent duplicate results causing issues (unable to get 'distinct' setting working)
-                limit: 3 + spaceData.Moderators.length,
-                subQuery: false,
-                include: [
-                    {
-                        model: Space,
-                        as: 'UserSpaces',
-                        attributes: [],
-                        through: { where: { state: 'active' }, attributes: [] },
-                    },
-                ],
-            })
-            spaceData.setDataValue('LatestUsers', latestUsers)
-        }
         res.status(200).send(spaceData)
     }
 })
@@ -1638,6 +1648,26 @@ router.get('/parent-space-blacklist', async (req, res) => {
             res.send(blacklist)
         })
         .catch((err) => console.log(err))
+})
+
+router.get('/users-with-access', async (req, res) => {
+    const { spaceId } = req.query
+    Space.findOne({
+        where: { id: spaceId },
+        attributes: [],
+        include: [
+            {
+                model: User,
+                as: 'UsersWithAccess',
+                attributes: ['id'],
+                through: { where: { relationship: 'access', state: 'active' }, attributes: [] },
+            },
+        ],
+    })
+        .then((space) => {
+            res.status(200).send(space.UsersWithAccess.map((u) => u.id))
+        })
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 // POST
