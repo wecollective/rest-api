@@ -387,13 +387,29 @@ router.get('/space-data', async (req, res) => {
                     'flagImagePath',
                     totalSpaceChildren,
                 ],
-                through: { attributes: [], where: { state: 'open' } },
+                through: { where: { state: 'open' }, attributes: [] },
             },
             {
                 model: Space,
                 as: 'SpaceAncestors',
-                attributes: ['id', 'privacy'],
-                through: { attributes: [] },
+                where: { privacy: 'private' },
+                attributes: ['id'],
+                through: { where: { state: 'open' }, attributes: [] },
+                include: [
+                    {
+                        model: User,
+                        as: 'UsersWithAccess',
+                        attributes: ['id'],
+                        through: {
+                            where: {
+                                relationship: { [Op.or]: ['access', 'pending'] },
+                                state: 'active',
+                            },
+                            attributes: [],
+                        },
+                    },
+                ],
+                required: false,
             },
             // todo: remove and retrieve on about page
             {
@@ -435,15 +451,12 @@ router.get('/space-data', async (req, res) => {
                 }
             } else {
                 // check ancestor access
-                const privateAncestors = spaceData.SpaceAncestors.filter(
-                    (s) => s.privacy === 'private'
-                )
-                if (!privateAncestors.length) resolve('granted')
+                if (!spaceData.SpaceAncestors.length) resolve('granted')
                 else {
                     if (!accountId) resolve('blocked')
                     else {
                         Promise.all(
-                            privateAncestors.map(
+                            spaceData.SpaceAncestors.map(
                                 (space) =>
                                     new Promise(async (reso) => {
                                         const spaceAccess = await SpaceUser.findOne({
@@ -1696,14 +1709,6 @@ router.post('/create-space', authenticateToken, async (req, res) => {
             privacy: private ? 'private' : 'public',
         })
 
-        const addIdToInheritedIds = await SpaceAncestor.create({
-            // space A contains space B
-            // todo: remove as shouldn't be required for same space
-            spaceAId: newSpace.id,
-            spaceBId: newSpace.id,
-            state: 'open',
-        })
-
         const createModRelationship = SpaceUser.create({
             relationship: 'moderator',
             state: 'active',
@@ -1726,69 +1731,63 @@ router.post('/create-space', authenticateToken, async (req, res) => {
         })
 
         Promise.all([
-            addIdToInheritedIds,
             createModRelationship,
             createFollowerRelationship,
             createAccessRelationship,
         ]).then(async () => {
             if (authorizedToAttachParent) {
-                const createVerticalRelationship = await SpaceParent.create({
-                    state: 'open',
+                const createParentRelationship = await SpaceParent.create({
                     spaceAId: parentId, // parent
                     spaceBId: newSpace.id, // child
+                    state: 'open',
                 })
 
-                const addParentSpaceIdsToNewSpace = private
+                // todo: might be required even if private but with different state
+                const createAncestorRelationships = private
                     ? null
-                    : await Space.findOne({
-                          // find parent spaces's inherited ids
-                          where: { id: parentId },
-                          attributes: [],
-                          include: {
-                              model: Space,
-                              as: 'SpaceAncestors',
+                    : await new Promise(async (resolve) => {
+                          const parentSpace = await Space.findOne({
+                              where: { id: parentId },
                               attributes: ['id'],
-                              through: { attributes: [], where: { state: 'open' } },
-                          },
-                      }).then((parentSpace) => {
-                          // add inherited ids to new space
-                          parentSpace.SpaceAncestors.forEach((space) => {
-                              SpaceAncestor.create({
-                                  // space A contains space B
-                                  spaceAId: space.id,
-                                  spaceBId: newSpace.id,
-                                  state: 'open',
-                              })
+                              include: {
+                                  model: Space,
+                                  as: 'SpaceAncestors',
+                                  attributes: ['id'],
+                                  through: { attributes: [], where: { state: 'open' } },
+                              },
                           })
+                          const ancestors = [parentSpace, ...parentSpace.SpaceAncestors]
+                          Promise.all(
+                              ancestors.map((ancestor) =>
+                                  SpaceAncestor.create({
+                                      spaceAId: ancestor.id, // ancestor
+                                      spaceBId: newSpace.id, // descendent
+                                      state: 'open',
+                                  })
+                              )
+                          )
+                              .then(() => resolve())
+                              .catch((error) => resolve(error))
                       })
 
-                Promise.all([createVerticalRelationship, addParentSpaceIdsToNewSpace])
+                Promise.all([createParentRelationship, createAncestorRelationships])
                     .then(() => res.status(200).json({ spaceId: newSpace.id, message: 'success' }))
                     .catch((error) => console.log(error))
             } else {
+                // if not authorized to attach to parent
                 const attachToRoot = await SpaceParent.create({
-                    state: 'open',
                     spaceAId: 1, // parent
                     spaceBId: newSpace.id, // child
+                    state: 'open',
                 })
 
-                const inheritRootId = private
+                const creatAncestorRelationship = private
                     ? null
                     : await SpaceAncestor.create({
-                          // space A contains space B
-                          spaceAId: 1,
-                          spaceBId: newSpace.id,
+                          spaceAId: 1, // ancestor
+                          spaceBId: newSpace.id, // descendent
                           state: 'open',
                       })
-
-                const createSpaceNotification = await SpaceNotification.create({
-                    ownerId: parentId,
-                    type: 'parent-space-request',
-                    state: 'pending',
-                    spaceAId: newSpace.id,
-                    userId: accountId,
-                    seen: false,
-                })
 
                 const parentSpace = await Space.findOne({
                     where: { id: parentId },
@@ -1804,49 +1803,55 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                     },
                 })
 
-                const notifyMods = await parentSpace.Moderators.forEach((moderator) => {
-                    Notification.create({
-                        ownerId: moderator.id,
-                        type: 'parent-space-request',
-                        state: 'pending',
-                        spaceAId: newSpace.id,
-                        spaceBId: parentSpace.id,
-                        userId: accountId,
-                        seen: false,
-                    }).then(() => {
-                        sgMail.send({
-                            to: moderator.email,
-                            from: {
-                                email: 'admin@weco.io',
-                                name: 'we { collective }',
-                            },
-                            subject: 'New notification',
-                            text: `
-                                    Hi ${moderator.name}, ${accountName} wants to make ${name} a child space of ${parentSpace.name} on weco.
-                                `,
-                            html: `
-                                    <p>
-                                        Hi ${moderator.name},
-                                        <br/>
-                                        <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                                        wants to make
-                                        <a href='${config.appURL}/s/${handle}'>${name}</a>
-                                        a child space of
-                                        <a href='${config.appURL}/s/${parentSpace.handle}'>${parentSpace.name}</a>
-                                        on weco.
-                                        <br/>
-                                        Log in and navigate
-                                        <a href='${config.appURL}/u/${moderator.handle}/notifications'>here</a>
-                                        or
-                                        <a href='${config.appURL}/s/${parentSpace.handle}/settings'>here</a>
-                                        to accept or reject the request.
-                                    </p>
-                                `,
-                        })
-                    })
-                })
+                const notifyMods = await Promise.all(
+                    parentSpace.Moderators.map(
+                        (mod) =>
+                            new Promise(async (resolve) => {
+                                const createNotification = await Notification.create({
+                                    ownerId: mod.id,
+                                    type: 'parent-space-request',
+                                    state: 'pending',
+                                    spaceAId: newSpace.id,
+                                    spaceBId: parentSpace.id,
+                                    userId: accountId,
+                                    seen: false,
+                                })
+                                const sendEmail = await sgMail.send({
+                                    to: mod.email,
+                                    from: {
+                                        email: 'admin@weco.io',
+                                        name: 'we { collective }',
+                                    },
+                                    subject: 'New notification',
+                                    text: `
+                                        Hi ${mod.name}, ${accountName} wants to make ${name} a child space of ${parentSpace.name} on weco.
+                                        Log in and go to your notification to accept or reject the request.
+                                    `,
+                                    html: `
+                                        <p>
+                                            Hi ${mod.name},
+                                            <br/>
+                                            <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                            wants to make
+                                            <a href='${config.appURL}/s/${handle}'>${name}</a>
+                                            a child space of
+                                            <a href='${config.appURL}/s/${parentSpace.handle}'>${parentSpace.name}</a>
+                                            on weco.
+                                            <br/>
+                                            Log in and go to your
+                                            <a href='${config.appURL}/u/${mod.handle}/notifications'>notifications</a>
+                                            to accept or reject the request.
+                                        </p>
+                                    `,
+                                })
+                                Promise.all([createNotification, sendEmail])
+                                    .then(() => resolve())
+                                    .catch((error) => resolve(error))
+                            })
+                    )
+                )
 
-                Promise.all([attachToRoot, inheritRootId, createSpaceNotification, notifyMods])
+                Promise.all([attachToRoot, creatAncestorRelationship, notifyMods])
                     .then(() =>
                         res
                             .status(200)
@@ -2659,6 +2664,7 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
                     through: { attributes: [], where: { state: 'open' } },
                 },
             })
+            // todo: why is this needed?
             // find effected spaces inherited ids
             const effectedSpacesWithInhertedIds = await Space.findAll({
                 where: { id: effectedSpaces.map((s) => s.id) },
