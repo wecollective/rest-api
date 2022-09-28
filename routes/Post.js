@@ -726,10 +726,22 @@ router.post('/create-post', authenticateToken, (req, res) => {
             urlTitle,
             urlDescription,
         }).then(async (post) => {
-            const indirectSpaceIds = await new Promise((resolve) => {
-                Space.findAll({
+            const createDirectRelationships = await Promise.all(
+                spaceIds.map((spaceId) =>
+                    SpacePost.create({
+                        type: 'post',
+                        relationship: 'direct',
+                        creatorId: accountId,
+                        postId: post.id,
+                        spaceId,
+                    })
+                )
+            )
+
+            const createIndirectRelationships = await new Promise(async (resolve) => {
+                const spaces = await Space.findAll({
                     where: { id: spaceIds, state: 'active' },
-                    attributes: [],
+                    attributes: ['id'],
                     include: [
                         {
                             model: Space,
@@ -739,41 +751,27 @@ router.post('/create-post', authenticateToken, (req, res) => {
                         },
                     ],
                 })
-                    .then((spaces) => {
-                        // todo: include space handles and flag images
-                        const ids = []
-                        spaces.forEach((space) =>
-                            ids.push(...space.SpaceAncestors.map((space) => space.id))
-                        )
-                        const filteredIds = [...new Set(ids)].filter((id) => !spaceIds.includes(id))
-                        resolve(filteredIds)
-                    })
-                    .catch(() => resolve([]))
+                // gather ancestor ids
+                const ids = []
+                spaces.forEach((space) =>
+                    ids.push(...space.SpaceAncestors.map((space) => space.id))
+                )
+                // remove duplicates and direct spaces
+                const filteredIds = [...new Set(ids)].filter((id) => !spaceIds.includes(id))
+                Promise.all(
+                    filteredIds.map((id) =>
+                        SpacePost.create({
+                            type: 'post',
+                            relationship: 'indirect',
+                            creatorId: accountId,
+                            postId: post.id,
+                            spaceId: id,
+                        })
+                    )
+                )
+                    .then((data) => resolve(data))
+                    .catch((error) => resolve(error))
             })
-
-            const createDirectRelationships = await Promise.all(
-                spaceIds.map((id) =>
-                    SpacePost.create({
-                        type: 'post',
-                        relationship: 'direct',
-                        creatorId: accountId,
-                        postId: post.id,
-                        spaceId: id,
-                    })
-                )
-            )
-
-            const createIndirectRelationships = await Promise.all(
-                indirectSpaceIds.map((id) =>
-                    SpacePost.create({
-                        type: 'post',
-                        relationship: 'indirect',
-                        creatorId: accountId,
-                        postId: post.id,
-                        spaceId: id,
-                    })
-                )
-            )
 
             const notifyMentions = await new Promise((resolve) => {
                 User.findAll({
@@ -2060,7 +2058,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
 
 router.post('/repost-post', authenticateToken, async (req, res) => {
     const accountId = req.user.id
-    const { accountHandle, accountName, postId, spaceId, selectedSpaceIds } = req.body
+    const { accountHandle, accountName, postId, spaceId, spaceIds } = req.body
 
     const post = await Post.findOne({
         where: { id: postId },
@@ -2112,72 +2110,77 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
         `,
           })
 
-    const createReactions = Promise.all(
-        selectedSpaceIds.map((id) =>
+    const createReactions = await Promise.all(
+        spaceIds.map((id) =>
             Reaction.create({
                 type: 'repost',
                 state: 'active',
                 spaceId: id,
                 userId: accountId,
-                postId: postId,
+                postId,
             })
         )
     )
 
-    const createDirectRelationships = Promise.all(
-        selectedSpaceIds.map((id) =>
+    const createDirectRelationships = await Promise.all(
+        spaceIds.map((id) =>
             SpacePost.create({
                 type: 'repost',
                 relationship: 'direct',
                 creatorId: accountId,
-                postId: postId,
+                postId,
                 spaceId: id,
             })
         )
     )
 
-    const indirectSpaceIds = await new Promise((resolve, reject) => {
+    const createIndirectRelationships = await new Promise(async (resolve) => {
+        const spaces = await Space.findAll({
+            where: { id: spaceIds, state: 'active' },
+            attributes: ['id'],
+            include: [
+                {
+                    model: Space,
+                    as: 'SpaceAncestors',
+                    attributes: ['id'],
+                    through: { where: { state: 'open' }, attributes: [] },
+                },
+            ],
+        })
+        // gather ancestor ids
+        const ancestorIds = []
+        spaces.forEach((space) =>
+            ancestorIds.push(...space.SpaceAncestors.map((space) => space.id))
+        )
+        // remove duplicates and direct spaces
+        const filteredIds = [...new Set(ancestorIds)].filter((id) => !spaceIds.includes(id))
         Promise.all(
-            selectedSpaceIds.map((id) =>
-                Space.findOne({
-                    where: { id, state: 'active' },
-                    attributes: [],
-                    include: [
-                        {
-                            model: Space,
-                            as: 'SpaceAncestors',
-                            attributes: ['id'],
-                            through: { where: { state: 'open' }, attributes: [] },
-                        },
-                    ],
-                })
+            filteredIds.map(
+                (id) =>
+                    new Promise(async (reso) => {
+                        // only create new relationship if none present
+                        // todo: include 'state' value in search (so they can be removed or reinstated by mods)
+                        const existingRelationship = await SpacePost.findOne({
+                            where: { postId, spaceId: id },
+                        })
+                        if (existingRelationship) reso()
+                        else {
+                            SpacePost.create({
+                                type: 'repost',
+                                relationship: 'indirect',
+                                creatorId: accountId,
+                                postId,
+                                spaceId: id,
+                            })
+                                .then(() => reso(id))
+                                .catch((error) => reso(error))
+                        }
+                    })
             )
-        ).then((spaces) => {
-            const ids = []
-            spaces.forEach((space) => ids.push(...space.SpaceAncestors.map((space) => space.id)))
-            const filteredIds = [...new Set(ids)].filter((id) => !selectedSpaceIds.includes(id))
-            resolve(filteredIds)
-        })
+        )
+            .then((data) => resolve(data))
+            .catch((error) => resolve(error))
     })
-
-    const createIndirectRelationships = Promise.all(
-        indirectSpaceIds.map((id) => {
-            return new Promise((resolve, reject) => {
-                SpacePost.findOne({ where: { postId, spaceId: id } }).then((spacePost) => {
-                    if (!spacePost) {
-                        SpacePost.create({
-                            type: 'repost',
-                            relationship: 'indirect',
-                            // state: 'active',
-                            creatorId: accountId,
-                            postId: postId,
-                            spaceId: id,
-                        }).then(() => resolve(id))
-                    } else resolve()
-                })
-            })
-        })
-    )
 
     Promise.all([
         sendNotification,
