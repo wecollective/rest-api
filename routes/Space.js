@@ -132,7 +132,6 @@ function findSpaceWhere(spaceId, depth, timeRange, searchQuery) {
     if (depth === 'All Contained Spaces') {
         where = {
             '$SpaceAncestors.id$': spaceId,
-            id: { [Op.ne]: [spaceId] },
             state: 'active',
             createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
             [Op.or]: [
@@ -1643,8 +1642,8 @@ router.get('/validate-space-handle', (req, res) => {
 
 router.get('/parent-space-blacklist', async (req, res) => {
     const { spaceId } = req.query
-
-    Space.findAll({
+    // block descendents to prevent loops
+    const descendents = await Space.findAll({
         attributes: ['id'],
         where: { '$SpaceAncestors.id$': spaceId, state: 'active' },
         include: {
@@ -1654,13 +1653,8 @@ router.get('/parent-space-blacklist', async (req, res) => {
             through: { attributes: [], where: { state: 'open' } },
         },
     })
-        .then((spaces) => {
-            const blacklist = spaces.map((s) => s.id)
-            // prevent users from adding the root space
-            blacklist.push(1)
-            res.send(blacklist)
-        })
-        .catch((err) => console.log(err))
+    const blacklist = [1, spaceId, ...descendents.map((s) => s.id)]
+    res.status(200).send(blacklist)
 })
 
 router.get('/users-with-access', async (req, res) => {
@@ -2507,86 +2501,91 @@ router.post('/add-parent-space', authenticateToken, async (req, res) => {
 
     if (!authorized) res.send('unauthorized')
     else {
-        // create vertical relationship
-        const createVerticalRelationship = await SpaceParent.create({
-            state: 'open',
-            spaceAId: parentSpaceId, // parent
-            spaceBId: spaceId, // child
-        })
-        // remove old vertical relationship with root if present
-        const removeVerticalRelationshipWithRoot = await Space.findOne({
-            where: { id: spaceId },
-            attributes: [],
-            include: {
-                model: Space,
-                as: 'DirectParentSpaces',
-                attributes: ['id'],
-                through: { attributes: [], where: { state: 'open' } },
-            },
-        }).then((space) => {
-            if (space.DirectParentSpaces.some((h) => h.id === 1)) {
-                SpaceParent.update(
-                    { state: 'closed' },
-                    {
-                        where: {
-                            spaceAId: 1, // parent
-                            spaceBId: spaceId, // child
-                        },
-                    }
-                )
-            }
-        })
-        // find parent spaces inherited ids
-        const parentSpace = await Space.findOne({
-            where: { id: parentSpaceId },
-            attributes: [],
-            include: {
-                model: Space,
-                as: 'SpaceAncestors',
-                attributes: ['id'],
-                through: { attributes: [], where: { state: 'open' } },
-            },
-        })
-        const parentSpaceInheritedIds = parentSpace.SpaceAncestors.map((h) => h.id)
-        // find effected spaces
-        const effectedSpaces = await Space.findAll({
-            attributes: ['id'],
-            where: { '$SpaceAncestors.id$': spaceId },
-            include: {
-                model: Space,
-                as: 'SpaceAncestors',
-                attributes: ['id'],
-                through: { attributes: [], where: { state: 'open' } },
-            },
-        })
-        // find effected spaces inherited ids
-        const effectedSpacesWithInhertedIds = await Space.findAll({
-            where: { id: effectedSpaces.map((s) => s.id) },
-            include: [
-                {
+        // remove old parent relationship with root if present to reduce clutter
+        const removeRoot = await new Promise(async (resolve) => {
+            const space = await Space.findOne({
+                where: { id: spaceId },
+                attributes: [],
+                include: {
                     model: Space,
-                    as: 'SpaceAncestors',
+                    as: 'DirectParentSpaces',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
-            ],
-        })
-        // add parent spaces inherited ids to effected spaces inherited ids (if not already present)
-        const inheritIds = await effectedSpacesWithInhertedIds.forEach((effectedSpace) => {
-            parentSpaceInheritedIds.forEach((id) => {
-                const match = effectedSpace.SpaceAncestors.some((h) => h.id === id)
-                if (!match) {
-                    // space A contains space B
-                    SpaceAncestor.create({
-                        state: 'open',
-                        spaceAId: id,
-                        spaceBId: effectedSpace.id,
-                    })
-                }
             })
+            const childOfRoot = space.DirectParentSpaces.find((s) => s.id === 1)
+            if (!childOfRoot) resolve()
+            else {
+                SpaceParent.update(
+                    { state: 'closed' },
+                    { where: { spaceAId: 1, spaceBId: spaceId } }
+                )
+                    .then(() => resolve())
+                    .catch((error) => resolve(error))
+            }
         })
-        Promise.all([createVerticalRelationship, removeVerticalRelationshipWithRoot, inheritIds])
-            .then(res.send('success'))
+
+        const createNewParentRelationship = await SpaceParent.create({
+            spaceAId: parentSpaceId, // parent
+            spaceBId: spaceId, // child
+            state: 'open',
+        })
+
+        const parent = await Space.findOne({
+            where: { id: parentSpaceId },
+            attributes: ['id'],
+            include: {
+                model: Space,
+                as: 'SpaceAncestors',
+                attributes: ['id'],
+                through: { attributes: [], where: { state: 'open' } },
+            },
+        })
+
+        const descendents = await Space.findAll({
+            attributes: ['id'],
+            where: {
+                [Op.or]: {
+                    '$SpaceAncestors.id$': spaceId,
+                    id: spaceId,
+                },
+                state: 'active',
+            },
+            include: {
+                model: Space,
+                as: 'SpaceAncestors',
+                attributes: ['id'],
+                through: { attributes: [], where: { state: 'open' } },
+            },
+        })
+
+        // for each descendent, check the new parents ancestors against its own ancestors, if no match add new ancestor
+        const addNewAncestorsToDescendents = await Promise.all(
+            descendents.map((descendent) =>
+                Promise.all(
+                    [parent, ...parent.SpaceAncestors].map(
+                        (ancestor) =>
+                            new Promise((resolve) => {
+                                const match = descendent.SpaceAncestors.find(
+                                    (a) => a.id === ancestor.id
+                                )
+                                if (match) resolve()
+                                else {
+                                    SpaceAncestor.create({
+                                        spaceAId: ancestor.id,
+                                        spaceBId: descendent.id,
+                                        state: 'open',
+                                    })
+                                        .then(() => resolve())
+                                        .catch((error) => resolve(error))
+                                }
+                            })
+                    )
+                )
+            )
+        )
+        Promise.all([removeRoot, createNewParentRelationship, addNewAncestorsToDescendents])
+            .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => console.log(error))
     }
 })

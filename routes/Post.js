@@ -2842,7 +2842,6 @@ router.post('/find-spaces', (req, res) => {
     let include = []
     if (spaceId) {
         where['$SpaceAncestors.id$'] = spaceId
-        where.id = { [Op.ne]: [spaceId] }
         include.push({
             model: Space,
             as: 'SpaceAncestors',
