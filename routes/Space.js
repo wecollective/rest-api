@@ -18,7 +18,6 @@ const {
     Reaction,
     Link,
     Notification,
-    SpaceNotification,
     GlassBeadGame,
     GlassBead,
     Event,
@@ -1474,33 +1473,6 @@ router.get('/space-events', (req, res) => {
         .catch((err) => console.log(err))
 })
 
-router.get('/space-requests', (req, res) => {
-    const { spaceId } = req.query
-    SpaceNotification.findAll({
-        where: { type: 'parent-space-request', ownerId: spaceId },
-        order: [['createdAt', 'DESC']],
-        include: [
-            {
-                model: User,
-                as: 'triggerUser',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-            },
-            {
-                model: Space,
-                as: 'triggerSpace',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-            },
-            // {
-            //     model: Space,
-            //     as: 'secondarySpace',
-            //     attributes: ['id', 'handle', 'name', 'flagImagePath'],
-            // }
-        ],
-    }).then((notifications) => {
-        res.send(notifications)
-    })
-})
-
 router.get('/space-map-data', async (req, res) => {
     const { spaceId, offset, sortBy, sortOrder, timeRange, depth, searchQuery } = req.query
 
@@ -2333,19 +2305,6 @@ router.post('/remove-space-moderator', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: add authenticateToken to all endpoints below
-router.post('/toggle-space-notification-seen', (req, res) => {
-    let { notificationId, seen } = req.body
-    SpaceNotification.update({ seen }, { where: { id: notificationId } }).then(res.send('success'))
-})
-
-router.post('/mark-all-space-notifications-seen', (req, res) => {
-    let { spaceId } = req.body
-    SpaceNotification.update({ seen: true }, { where: { ownerId: spaceId } }).then(
-        res.send('success')
-    )
-})
-
 router.post('/toggle-join-space', authenticateToken, (req, res) => {
     const accountId = req.user.id
     const { spaceId, isFollowing } = req.body
@@ -2417,14 +2376,13 @@ router.post('/viable-parent-spaces', authenticateToken, async (req, res) => {
 
 router.post('/send-parent-space-request', authenticateToken, async (req, res) => {
     const accountId = req.user.id
-    const { accountHandle, accountName, spaceId, spaceName, spaceHandle, parentSpaceId } = req.body
-    const authorized = await isAuthorizedModerator(accountId, spaceId)
+    const { accountHandle, accountName, childId, childName, childHandle, parentId } = req.body
+    const authorized = await isAuthorizedModerator(accountId, childId)
 
-    if (!authorized) res.send('unauthorized')
+    if (!authorized) res.status(401).json({ message: 'Unauthorized' })
     else {
-        // get parent space data and moderators
-        const parentSpace = await Space.findOne({
-            where: { id: parentSpaceId },
+        const parent = await Space.findOne({
+            where: { id: parentId },
             attributes: ['id', 'handle', 'name'],
             include: {
                 model: User,
@@ -2433,62 +2391,58 @@ router.post('/send-parent-space-request', authenticateToken, async (req, res) =>
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
             },
         })
-        // send space notification
-        const createSpaceNotification = await SpaceNotification.create({
-            ownerId: parentSpace.id,
-            type: 'parent-space-request',
-            state: 'pending',
-            spaceAId: spaceId,
-            userId: accountId,
-            seen: false,
-        })
-        // send account notification and email to each of the mods
-        const createAccountNotificationsAndEmails = await parentSpace.Moderators.forEach(
-            (moderator) => {
-                Notification.create({
-                    ownerId: moderator.id,
-                    type: 'parent-space-request',
-                    state: 'pending',
-                    spaceAId: spaceId,
-                    spaceBId: parentSpace.id,
-                    userId: accountId,
-                    seen: false,
-                }).then(() => {
-                    sgMail.send({
-                        to: moderator.email,
-                        from: {
-                            email: 'admin@weco.io',
-                            name: 'we { collective }',
-                        },
-                        subject: 'New notification',
-                        text: `
-                        Hi ${moderator.name}, ${accountName} wants to make ${spaceName} a child space of ${parentSpace.name} on weco.
-                    `,
-                        html: `
-                        <p>
-                            Hi ${moderator.name},
-                            <br/>
-                            <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                            wants to make
-                            <a href='${config.appURL}/s/${spaceHandle}'>${spaceName}</a>
-                            a child space of
-                            <a href='${config.appURL}/s/${parentSpace.handle}'>${parentSpace.name}</a>
-                            on weco.
-                            <br/>
-                            Log in and navigate
-                            <a href='${config.appURL}/u/${moderator.handle}/notifications'>here</a>
-                            or
-                            <a href='${config.appURL}/s/${parentSpace.handle}/settings'>here</a>
-                            to accept or reject the request.
-                        </p>
-                    `,
+
+        Promise.all(
+            parent.Moderators.map(
+                async (mod) =>
+                    await new Promise(async (resolve) => {
+                        const createNotification = await Notification.create({
+                            ownerId: mod.id,
+                            type: 'parent-space-request',
+                            state: 'pending',
+                            spaceAId: childId,
+                            spaceBId: parent.id,
+                            userId: accountId,
+                            seen: false,
+                        })
+
+                        const sendEmail = await sgMail.send({
+                            to: mod.email,
+                            from: {
+                                email: 'admin@weco.io',
+                                name: 'we { collective }',
+                            },
+                            subject: 'New notification',
+                            text: `
+                                Hi ${mod.name}, ${accountName} wants to make ${childName} a child space of ${parent.name} on weco.
+                                Log in and navigate to your notifications to accept or reject the request.
+                            `,
+                            html: `
+                                <p>
+                                    Hi ${mod.name},
+                                    <br/>
+                                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                    wants to make
+                                    <a href='${config.appURL}/s/${childHandle}'>${childName}</a>
+                                    a child space of
+                                    <a href='${config.appURL}/s/${parent.handle}'>${parent.name}</a>
+                                    on weco.
+                                    <br/>
+                                    Log in and navigate to your
+                                    <a href='${config.appURL}/u/${mod.handle}/notifications'>notifications</a>
+                                    to accept or reject the request.
+                                </p>
+                            `,
+                        })
+
+                        Promise.all([createNotification, sendEmail])
+                            .then(() => resolve())
+                            .catch((error) => resolve(error))
                     })
-                })
-            }
+            )
         )
-        Promise.all([createSpaceNotification, createAccountNotificationsAndEmails]).then(
-            res.send('success')
-        )
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
@@ -2520,8 +2474,8 @@ async function attachParentSpace(childId, parentId) {
         attributes: ['id'],
         where: {
             [Op.or]: {
-                '$SpaceAncestors.id$': childId,
                 id: childId,
+                '$SpaceAncestors.id$': childId,
             },
             state: 'active',
         },
@@ -2533,7 +2487,7 @@ async function attachParentSpace(childId, parentId) {
         },
     })
 
-    // for each descendent, check the new parents ancestors against its own ancestors, if no match add new ancestor
+    // for each descendent: check the new parents ancestors against its own ancestors and add if not already present
     const addNewAncestorsToDescendents = await Promise.all(
         descendents.map((descendent) =>
             Promise.all(
@@ -2562,6 +2516,125 @@ async function attachParentSpace(childId, parentId) {
     return Promise.all([removeRoot, createNewParentRelationship, addNewAncestorsToDescendents])
 }
 
+async function removeAncestors(childId, parentId, ancestorIds) {
+    // Recursive promise used to remove the correct ancestors from a space when one of its parents is detached and then apply the same logic to each of its descendents.
+    // Recursion required in order to confirm that the ancestors being removed at each level are not still present via other pathways up the tree.
+    // The child spaces other parents (excluding the parent passed in with parentId) are gathered at each level to check for matching ancestors.
+    // If a match is found, that ancestor is skipped and its id is no longer passed down to the next recursive function.
+    // If a match is not found, that ancestor is removed from the space and its id is passed on to the next recursive function.
+
+    return new Promise(async (resolve) => {
+        const child = await Space.findOne({
+            where: { id: childId },
+            include: [
+                {
+                    model: Space,
+                    as: 'SpaceAncestors',
+                    attributes: ['id'],
+                    through: { attributes: [], where: { state: 'open' } },
+                },
+                {
+                    model: Space,
+                    as: 'DirectParentSpaces',
+                    attributes: ['id'],
+                    where: { id: { [Op.not]: parentId } },
+                    through: { attributes: [], where: { state: 'open' } },
+                    include: {
+                        model: Space,
+                        as: 'SpaceAncestors',
+                        attributes: ['id'],
+                        through: { attributes: [], where: { state: 'open' } },
+                    },
+                    required: false,
+                },
+                {
+                    model: Space,
+                    as: 'DirectChildSpaces',
+                    attributes: ['id'],
+                    through: { attributes: [], where: { state: 'open' } },
+                },
+            ],
+        })
+        // gather the childs other parents ancestors (include the root id to prevent its removal)
+        let otherParentsAncestors = [1]
+        child.DirectParentSpaces.forEach((parent) =>
+            otherParentsAncestors.push(parent.id, ...parent.SpaceAncestors.map((s) => s.id))
+        )
+        // remove duplicates
+        otherParentsAncestors = [...new Set(otherParentsAncestors)]
+        // filter out otherParentsAncestors from ancestorIds to remove
+        const ancestorsToRemove = ancestorIds.filter((id) => !otherParentsAncestors.includes(id))
+        if (ancestorsToRemove.length) {
+            // remove ancestor relationships
+            Promise.all(
+                ancestorsToRemove.map(
+                    async (ancestorId) =>
+                        await SpaceAncestor.update(
+                            { state: 'closed' },
+                            { where: { spaceAId: ancestorId, spaceBId: childId, state: 'open' } }
+                        )
+                )
+            )
+                .then(() => {
+                    // re-run recurisve function for each child space
+                    Promise.all(
+                        child.DirectChildSpaces.map(
+                            async (child) =>
+                                await removeAncestors(child.id, childId, ancestorsToRemove)
+                        )
+                    )
+                        .then(() => resolve())
+                        .catch((error) => resolve(error))
+                })
+                .catch((error) => resolve(error))
+        } else resolve()
+    })
+}
+
+async function detachParentSpace(childId, parentId) {
+    // todo: send notifications? (if initiated from child, send notification to parent mods, else to child mods)
+
+    const parent = await Space.findOne({
+        where: { id: parentId },
+        include: {
+            model: Space,
+            as: 'SpaceAncestors',
+            attributes: ['id'],
+            through: { attributes: [], where: { state: 'open' } },
+        },
+    })
+
+    const child = await Space.findOne({
+        where: { id: childId },
+        include: {
+            model: Space,
+            as: 'DirectParentSpaces',
+            attributes: ['id'],
+            through: { attributes: [], where: { state: 'open' } },
+        },
+    })
+
+    const ancestorIds = [parentId, ...parent.SpaceAncestors.map((s) => s.id)]
+    const updateDescendentsAncestors = await removeAncestors(childId, parentId, ancestorIds)
+
+    // if the parent being removed is the only parent of the child, attach the child to the root space
+    const attachRoot =
+        child.DirectParentSpaces.length === 1
+            ? await SpaceParent.create({
+                  state: 'open',
+                  spaceAId: 1,
+                  spaceBId: childId,
+              })
+            : null
+
+    const removeOldParentRelationship = await SpaceParent.update(
+        { state: 'closed' },
+        { where: { spaceAId: parentId, spaceBId: childId, state: 'open' } }
+    )
+
+    return Promise.all([updateDescendentsAncestors, attachRoot, removeOldParentRelationship])
+}
+
 router.post('/add-parent-space', authenticateToken, async (req, res) => {
     const accountId = req.user.id
     const { childId, parentId } = req.body
@@ -2577,322 +2650,52 @@ router.post('/add-parent-space', authenticateToken, async (req, res) => {
 
 router.post('/respond-to-parent-space-request', authenticateToken, async (req, res) => {
     const accountId = req.user.id
-    const {
-        // notificationId,
-        // notificationType,
-        // accountHandle,
-        // accountName,
-        triggerUser,
-        childSpace,
-        parentSpace,
-        response,
-    } = req.body
-    const authorized = await isAuthorizedModerator(accountId, parentSpace.id)
+    const { requestorId, childId, parentId, response } = req.body
+    const authorized = await isAuthorizedModerator(accountId, parentId)
 
-    console.log(req.body)
-
-    if (!authorized) res.send('unauthorized')
+    if (!authorized) res.status(401).json({ message: 'Unauthorized' })
     else {
-        if (response === 'accepted') {
-            // attach child to parent
-            // todo: check connection not yet made first
-            // create vertical relationship
-            const createVerticalRelationship = await SpaceParent.create({
-                state: 'open',
-                spaceAId: parentSpace.id, // parent
-                spaceBId: childSpace.id, // child
-            })
-            // remove old vertical relationship with root if present
-            const removeVerticalRelationshipWithRoot = await Space.findOne({
-                where: { id: childSpace.id },
-                attributes: [],
-                include: {
-                    model: Space,
-                    as: 'DirectParentSpaces',
-                    attributes: ['id'],
-                    through: { attributes: [], where: { state: 'open' } },
+        const attachSpace =
+            response === 'accepted' ? await attachParentSpace(childId, parentId) : null
+
+        const updateModNotifications = await Notification.update(
+            { state: response },
+            {
+                where: {
+                    type: 'parent-space-request',
+                    state: 'pending',
+                    spaceAId: childId,
+                    spaceBId: parentId,
                 },
-            }).then((space) => {
-                if (space.DirectParentSpaces.some((h) => h.id === 1)) {
-                    SpaceParent.update(
-                        { state: 'closed' },
-                        {
-                            where: {
-                                spaceAId: 1, // parent
-                                spaceBId: childSpace.id, // child
-                            },
-                        }
-                    )
-                }
-            })
-            // find parent spaces inherited ids
-            const parentSpace2 = await Space.findOne({
-                where: { id: parentSpace.id },
-                attributes: [],
-                include: {
-                    model: Space,
-                    as: 'SpaceAncestors',
-                    attributes: ['id'],
-                    through: { attributes: [], where: { state: 'open' } },
-                },
-            })
-            const parentSpaceInheritedIds = parentSpace2.SpaceAncestors.map((h) => h.id)
-            // find effected spaces
-            const effectedSpaces = await Space.findAll({
-                attributes: ['id'],
-                where: { '$SpaceAncestors.id$': childSpace.id },
-                include: {
-                    model: Space,
-                    as: 'SpaceAncestors',
-                    attributes: ['id'],
-                    through: { attributes: [], where: { state: 'open' } },
-                },
-            })
-            // todo: why is this needed?
-            // find effected spaces inherited ids
-            const effectedSpacesWithInhertedIds = await Space.findAll({
-                where: { id: effectedSpaces.map((s) => s.id) },
-                include: [
-                    {
-                        model: Space,
-                        as: 'SpaceAncestors',
-                        attributes: ['id'],
-                        through: { attributes: [] },
-                    },
-                ],
-            })
-            // add parent spaces inherited ids to effected spaces inherited ids (if not already present)
-            const inheritIds = await effectedSpacesWithInhertedIds.forEach((effectedSpace) => {
-                parentSpaceInheritedIds.forEach((id) => {
-                    const match = effectedSpace.SpaceAncestors.some((h) => h.id === id)
-                    if (!match) {
-                        // posts to A appear within B
-                        SpaceAncestor.create({
-                            state: 'open',
-                            spaceAId: id,
-                            spaceBId: effectedSpace.id,
-                        })
-                    }
-                })
-            })
-            // update account notifications (for all mods who received the request)
-            const updateAccountNotifications = await Notification.update(
-                { state: response, seen: true },
-                {
-                    where: {
-                        // ownerId: accountId,
-                        type: 'parent-space-request',
-                        state: 'pending',
-                        spaceAId: childSpace.id,
-                        spaceBId: parentSpace.id,
-                    },
-                }
-            )
-            // update space notification
-            const updateSpaceNotification = await SpaceNotification.update(
-                { state: response, seen: true },
-                {
-                    where: {
-                        ownerId: parentSpace.id,
-                        type: 'parent-space-request',
-                        state: 'pending',
-                        spaceAId: childSpace.id,
-                    },
-                }
-            )
-            // send new notification to trigger user
-            const sendNotificationToTriggerUser = await Notification.create({
-                ownerId: triggerUser.id,
-                type: `parent-space-request-response`,
-                state: response,
-                spaceAId: childSpace.id,
-                spaceBId: parentSpace.id,
-                userId: accountId,
-                seen: false,
-            })
-            Promise.all([
-                createVerticalRelationship,
-                removeVerticalRelationshipWithRoot,
-                inheritIds,
-                updateAccountNotifications,
-                updateSpaceNotification,
-                sendNotificationToTriggerUser,
-            ])
-                .then(res.send('success'))
-                .catch((error) => console.log(error))
-        } else if (response === 'rejected') {
-            // update account notifications (for all mods who received the request)
-            const updateAccountNotifications = await Notification.update(
-                { state: response, seen: true },
-                {
-                    where: {
-                        // ownerId: accountId,
-                        type: 'parent-space-request',
-                        state: 'pending',
-                        spaceAId: childSpace.id,
-                        spaceBId: parentSpace.id,
-                    },
-                }
-            )
-            // update space notification
-            const updateSpaceNotification = await SpaceNotification.update(
-                { state: response, seen: true },
-                {
-                    where: {
-                        ownerId: parentSpace.id,
-                        type: 'parent-space-request',
-                        state: 'pending',
-                        spaceAId: childSpace.id,
-                    },
-                }
-            )
-            // send new notification to trigger user
-            const sendNotificationToTriggerUser = await Notification.create({
-                ownerId: triggerUser.id,
-                type: `parent-space-request-response`,
-                state: response,
-                spaceAId: childSpace.id,
-                spaceBId: parentSpace.id,
-                userId: accountId,
-                seen: false,
-            })
-            Promise.all([
-                updateAccountNotifications,
-                updateSpaceNotification,
-                sendNotificationToTriggerUser,
-            ])
-                .then(res.send('success'))
-                .catch((error) => console.log(error))
-        }
+            }
+        )
+
+        const notifyRequestor = await Notification.create({
+            ownerId: requestorId,
+            type: `parent-space-request-response`,
+            state: response,
+            spaceAId: childId,
+            spaceBId: parentId,
+            userId: accountId,
+            seen: false,
+        })
+
+        Promise.all([attachSpace, updateModNotifications, notifyRequestor])
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
-async function removeIds(childId, parentId, idsToRemove) {
-    // Recursive function used to remove the correct ids from a space then apply the same logic to each of its children recursively.
-    // The ids to remove are worked out by comparing the initial idsToRemove array passed into the function with
-    // the ids of the childs other parents. If any match they are excluded from the removal list so posts to the selected
-    // space still apear in those other parent spaces.
-    // todo: if possible, keep track of recursive function progress and
-    // only return a success message once the full operation is complete
-
-    // get selected space data (include inherited ids, direct parents with their inherited ids, and direct children)
-    const selectedSpace = await Space.findOne({
-        where: { id: childId },
-        include: [
-            {
-                // inherited ids
-                model: Space,
-                as: 'SpaceAncestors',
-                attributes: ['id'],
-                through: { attributes: [], where: { state: 'open' } },
-            },
-            {
-                // direct parents with their inherited ids
-                model: Space,
-                as: 'DirectParentSpaces',
-                attributes: ['id'],
-                through: { attributes: [], where: { state: 'open' } },
-                include: {
-                    model: Space,
-                    as: 'SpaceAncestors',
-                    attributes: ['id'],
-                    through: { attributes: [], where: { state: 'open' } },
-                },
-            },
-            {
-                // direct children
-                model: Space,
-                as: 'DirectChildSpaces',
-                attributes: ['id'],
-                through: { attributes: [], where: { state: 'open' } },
-            },
-        ],
-    })
-    // gather other parents ids (excluding parent from previous iteration)
-    // include 1 (the root id) by default to prevent it being removed
-    let otherParentsIds = [1]
-    selectedSpace.DirectParentSpaces.forEach((parent) => {
-        if (parent.id !== parentId) otherParentsIds.push(...parent.SpaceAncestors.map((s) => s.id))
-    })
-    // remove duplicates
-    otherParentsIds = [...new Set(otherParentsIds)]
-    // filter out otherParentsIds from idsToRemove
-    const filteredIdsToRemove = idsToRemove.filter((id) => !otherParentsIds.includes(id))
-    // if any remaining idsToRemove, remove those ids from the selected space then run the same function for each of its children
-    if (filteredIdsToRemove.length) {
-        filteredIdsToRemove.forEach((id) => {
-            SpaceAncestor.update(
-                { state: 'closed' },
-                { where: { spaceBId: childId, spaceAId: id } }
-            )
-        })
-        selectedSpace.DirectChildSpaces.forEach((child) => {
-            // the current child becomes the parent in the next iteration
-            removeIds(child.id, childId, filteredIdsToRemove)
-        })
-    } else {
-        // todo: emit event and track progress so success message can be send back to user on completion?
-    }
-}
-
-async function removeParentSpace(childId, parentId, callBack) {
-    // fetch the parent spaces's inherited ids and pass them into the recursive removeIds function
-    const parentToRemove = await Space.findOne({
-        where: { id: parentId },
-        attributes: [],
-        include: [
-            {
-                // inherited ids
-                model: Space,
-                as: 'SpaceAncestors',
-                attributes: ['id'],
-                through: { attributes: [], where: { state: 'open' } },
-            },
-        ],
-    })
-    const idsToRemove = parentToRemove.SpaceAncestors.map((s) => s.id)
-    removeIds(childId, parentId, idsToRemove)
-    // if the parent being removed is the only parent of the child, attach the child to the root space
-    const connectToRootIfRequired = await Space.findOne({
-        where: { id: childId },
-        include: {
-            model: Space,
-            as: 'DirectParentSpaces',
-            attributes: ['id'],
-            through: { attributes: [], where: { state: 'open' } },
-        },
-    }).then((childSpace) => {
-        if (childSpace.DirectParentSpaces.length === 1) {
-            SpaceParent.create({
-                state: 'open',
-                spaceAId: 1,
-                spaceBId: childId,
-            })
-        }
-    })
-    // remove the old vertical relationship with the parent
-    const removeVerticalRelationship = await SpaceParent.update(
-        { state: 'closed' },
-        { where: { spaceAId: parentId, spaceBId: childId } }
-    )
-    // todo: send notifications? (if fromChild, send notification to parent mods, else to child mods)
-    Promise.all([connectToRootIfRequired, removeVerticalRelationship]).then(() => {
-        if (callBack) callBack()
-    })
-}
-
 router.post('/remove-parent-space', authenticateToken, async (req, res) => {
     const accountId = req.user.id
-    const { childSpaceId, parentSpaceId, fromChild } = req.body
-    const authorized = await isAuthorizedModerator(
-        accountId,
-        fromChild ? childSpaceId : parentSpaceId
-    )
+    const { childId, parentId, fromChild } = req.body
+    const authorized = await isAuthorizedModerator(accountId, fromChild ? childId : parentId)
 
-    if (!authorized) res.send('unauthorized')
+    if (!authorized) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const callBack = () => res.send('success')
-        removeParentSpace(childSpaceId, parentSpaceId, callBack)
+        detachParentSpace(childId, parentId)
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
@@ -2901,21 +2704,18 @@ router.post('/delete-space', authenticateToken, async (req, res) => {
     const { spaceId } = req.body
     const authorized = await isAuthorizedModerator(accountId, spaceId)
 
-    if (!authorized) res.send('unauthorized')
+    if (!authorized) res.status(401).json({ message: 'Unauthorized' })
     else {
-        // find selected space, include direct parents and direct children
-        const selectedSpace = await Space.findOne({
+        const space = await Space.findOne({
             where: { id: spaceId },
             include: [
                 {
-                    // direct parents
                     model: Space,
                     as: 'DirectParentSpaces',
                     attributes: ['id'],
                     through: { attributes: [], where: { state: 'open' } },
                 },
                 {
-                    // direct children
                     model: Space,
                     as: 'DirectChildSpaces',
                     attributes: ['id'],
@@ -2923,26 +2723,34 @@ router.post('/delete-space', authenticateToken, async (req, res) => {
                 },
             ],
         })
-        // for each child, run remove parent logic (remove inherited ids, detach vertical relationships etc.)
-        selectedSpace.DirectChildSpaces.forEach((child) => {
-            removeParentSpace(child.id, spaceId)
-        })
-        // for each parent, remove vertical relationship
-        selectedSpace.DirectParentSpaces.forEach((parent) => {
-            SpaceParent.update(
-                { state: 'closed' },
-                {
-                    where: {
-                        spaceAId: parent.id, // parent
-                        spaceBId: spaceId, // child
-                    },
-                }
-            )
-        })
-        // delete space
-        Space.update({ state: 'removed-by-mod' }, { where: { id: spaceId } }).then(
-            res.send('success')
+
+        const detachChildren = await Promise.all(
+            space.DirectChildSpaces.map(async (child) => await detachParentSpace(child.id, spaceId))
         )
+
+        const detachParents = await Promise.all(
+            space.DirectParentSpaces.map(
+                async (parent) =>
+                    await SpaceParent.update(
+                        { state: 'closed' },
+                        {
+                            where: {
+                                spaceAId: parent.id,
+                                spaceBId: spaceId,
+                                state: 'open',
+                            },
+                        }
+                    )
+            )
+        )
+
+        Promise.all([detachChildren, detachParents])
+            .then(() => {
+                Space.update({ state: 'removed-by-mod' }, { where: { id: spaceId } })
+                    .then(() => res.status(200).json({ message: 'Success' }))
+                    .catch((error) => res.status(500).json({ message: 'Error', error }))
+            })
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
