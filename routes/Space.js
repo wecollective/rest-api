@@ -342,19 +342,19 @@ router.get('/space-data', async (req, res) => {
                   `(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true AND Users.state = 'active')`
               )
             : sequelize.literal(`(
-        SELECT COUNT(*)
-            FROM Users
-            WHERE Users.emailVerified = true
-            AND Users.state = 'active'
-            AND Users.id IN (
-                SELECT SpaceUsers.userId
-                FROM SpaceUsers
-                RIGHT JOIN Users
-                ON SpaceUsers.userId = Users.id
-                WHERE SpaceUsers.spaceId = Space.id
-                AND SpaceUsers.state = 'active'
-            )
-        )`),
+                SELECT COUNT(*)
+                    FROM Users
+                    WHERE Users.emailVerified = true
+                    AND Users.state = 'active'
+                    AND Users.id IN (
+                        SELECT SpaceUsers.userId
+                        FROM SpaceUsers
+                        RIGHT JOIN Users
+                        ON SpaceUsers.userId = Users.id
+                        WHERE SpaceUsers.spaceId = Space.id
+                        AND SpaceUsers.state = 'active'
+                    )
+                )`),
         'totalUsers',
     ]
     const spaceData = await Space.findOne({
@@ -388,6 +388,19 @@ router.get('/space-data', async (req, res) => {
                 through: { where: { state: 'open' }, attributes: [] },
             },
             {
+                model: User,
+                as: 'UsersWithAccess',
+                attributes: ['id'],
+                through: {
+                    where: {
+                        relationship: 'access',
+                        state: { [Op.or]: ['active', 'pending'] },
+                    },
+                    attributes: ['state'],
+                },
+                required: false,
+            },
+            {
                 model: Space,
                 as: 'SpaceAncestors',
                 where: { privacy: 'private' },
@@ -400,11 +413,12 @@ router.get('/space-data', async (req, res) => {
                         attributes: ['id'],
                         through: {
                             where: {
-                                relationship: { [Op.or]: ['access', 'pending'] },
-                                state: 'active',
+                                relationship: 'access',
+                                state: { [Op.or]: ['active', 'pending'] },
                             },
-                            attributes: [],
+                            attributes: ['state'],
                         },
+                        required: false,
                     },
                 ],
                 required: false,
@@ -427,58 +441,22 @@ router.get('/space-data', async (req, res) => {
 
     if (!spaceData) res.status(404).send({ message: 'Space not found' })
     else {
-        // check user access (returns 'granted', 'pending', 'blocked', or 'blocked-by-ancestor')
-        const access = await new Promise(async (resolve) => {
+        // check user access ('granted', 'pending', 'blocked', or 'blocked-by-ancestor')
+        function findAccess() {
             if (spaceData.privacy === 'private') {
-                // check space access
-                if (!accountId) resolve('blocked')
-                else {
-                    const spaceAccess = await SpaceUser.findOne({
-                        where: {
-                            spaceId: spaceData.id,
-                            userId: accountId,
-                            relationship: 'access',
-                            state: {
-                                [Op.or]: ['active', 'pending'],
-                            },
-                        },
-                        attributes: ['state'],
-                    })
-                    if (spaceAccess) resolve(spaceAccess.state === 'active' ? 'granted' : 'pending')
-                    else resolve('blocked')
-                }
+                const userAccess = spaceData.UsersWithAccess.find((u) => u.id === +accountId)
+                if (!accountId || !userAccess) return 'blocked'
+                return userAccess.SpaceUser.state === 'active' ? 'granted' : 'pending'
             } else {
-                // check ancestor access
-                if (!spaceData.SpaceAncestors.length) resolve('granted')
-                else {
-                    if (!accountId) resolve('blocked')
-                    else {
-                        Promise.all(
-                            spaceData.SpaceAncestors.map(
-                                (space) =>
-                                    new Promise(async (reso) => {
-                                        const spaceAccess = await SpaceUser.findOne({
-                                            where: {
-                                                spaceId: space.id,
-                                                userId: accountId,
-                                                relationship: 'access',
-                                                state: 'active',
-                                            },
-                                            attributes: ['id'],
-                                        })
-                                        reso(!!spaceAccess)
-                                    })
-                            )
-                        )
-                            .then((results) =>
-                                resolve(results.includes(false) ? 'blocked-by-ancestor' : 'granted')
-                            )
-                            .catch((error) => console.log('error: ', error))
-                    }
-                }
+                const blockedByAncestor = spaceData.SpaceAncestors.find(
+                    (a) => !a.UsersWithAccess.find((u) => u.id === +accountId)
+                )
+                return blockedByAncestor ? 'blocked-by-ancestor' : 'granted'
             }
-        })
-        spaceData.setDataValue('access', access)
+        }
+        spaceData.setDataValue('access', findAccess())
+        delete spaceData.dataValues.UsersWithAccess
+        delete spaceData.dataValues.SpaceAncestors
         // todo: retreive after space data has loaded and only when side bar nav visible or needed in modals
         // child spaces retrieved seperately so limit and order can be applied (not allowed for M:M includes in Sequelize)
         const childSpaces = await Space.findAll({
@@ -2487,7 +2465,7 @@ async function attachParentSpace(childId, parentId) {
         },
     })
 
-    // for each descendent: check the new parents ancestors against its own ancestors and add if not already present
+    // check the new parents ancestors against each of the decendents ancestors and add if not already present
     const addNewAncestorsToDescendents = await Promise.all(
         descendents.map((descendent) =>
             Promise.all(
