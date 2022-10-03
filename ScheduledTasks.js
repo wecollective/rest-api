@@ -207,7 +207,7 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                                     })
                                     Promise.all([createNotification, sendEmail])
                                         .then(() => resolve())
-                                        .catch(() => resolve())
+                                        .catch((error) => resolve(error))
                                 })
                         )
                     ]

@@ -23,123 +23,131 @@ aws.config.update({
 
 const s3 = new aws.S3({})
 
-router.post('/image-upload', authenticateToken, (req, res) => {
-    const accountId = req.user.id
+router.post('/image-upload', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
     const { type, id } = req.query
     const { imageURL } = req.body
 
-    function saveImage(imageType, url) {
-        switch (imageType) {
-            case 'user-flag':
-                User.update({ flagImagePath: url }, { where: { id: accountId } }).then(
-                    res.status(200).json({ message: 'Success', imageURL: url })
-                )
-                break
-            case 'user-cover':
-                User.update({ coverImagePath: url }, { where: { id: accountId } }).then(
-                    res.status(200).json({ message: 'Success', imageURL: url })
-                )
-                break
-            case 'space-flag':
-                Space.update({ flagImagePath: url }, { where: { id } }).then(
-                    res.status(200).json({ message: 'Success', imageURL: url })
-                )
-                break
-            case 'space-cover':
-                Space.update({ coverImagePath: url }, { where: { id } }).then(
-                    res.status(200).json({ message: 'Success', imageURL: url })
-                )
-                break
-            case 'gbg-topic':
-                GlassBeadGame.update({ topicImage: url }, { where: { id } }).then(
-                    res.status(200).json({ message: 'Success', imageURL: url })
-                )
-                break
-            default:
-                break
-        }
-    }
-
-    if (imageURL) saveImage(type, imageURL)
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        multer({
-            storage: multerS3({
-                s3: s3,
-                bucket: `weco-${process.env.NODE_ENV}-${type}-images`,
-                acl: 'public-read',
-                metadata: function (req, file, cb) {
-                    cb(null, { mimetype: file.mimetype })
-                },
-                key: function (req, file, cb) {
-                    const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
-                    const date = Date.now().toString()
-                    const extension = file.mimetype.split('/')[1]
-                    const fileName = `${type}-image-${id}-${accountId}-${name}-${date}.${extension}`
-                    cb(null, fileName)
-                },
-            }),
-        }).single('image')(req, res, (err) => {
-            const { file } = req
-            if (file) saveImage(type, file.location)
-            else res.status(500).json({ message: 'Failed', error: err })
-        })
+        function saveImage(imageType, url) {
+            switch (imageType) {
+                case 'user-flag':
+                    return User.update({ flagImagePath: url }, { where: { id: accountId } })
+                case 'user-cover':
+                    return User.update({ coverImagePath: url }, { where: { id: accountId } })
+                case 'space-flag':
+                    return Space.update({ flagImagePath: url }, { where: { id } })
+                case 'space-cover':
+                    return Space.update({ coverImagePath: url }, { where: { id } })
+                case 'gbg-topic':
+                    return GlassBeadGame.update({ topicImage: url }, { where: { id } })
+                default:
+                    break
+            }
+        }
+
+        if (imageURL) {
+            saveImage(type, imageURL)
+                .then(() => res.status(200).json({ message: 'Success', imageURL }))
+                .catch((error) => res.status(500).json({ message: 'Error', error }))
+        } else {
+            multer({
+                storage: multerS3({
+                    s3: s3,
+                    bucket: `weco-${process.env.NODE_ENV}-${type}-images`,
+                    acl: 'public-read',
+                    metadata: function (req, file, cb) {
+                        cb(null, { mimetype: file.mimetype })
+                    },
+                    key: function (req, file, cb) {
+                        const name = file.originalname
+                            .replace(/[^A-Za-z0-9]/g, '-')
+                            .substring(0, 30)
+                        const date = Date.now().toString()
+                        const extension = file.mimetype.split('/')[1]
+                        const fileName = `${type}-image-${id}-${accountId}-${name}-${date}.${extension}`
+                        cb(null, fileName)
+                    },
+                }),
+            }).single('image')(req, res, (err) => {
+                const { file } = req
+                if (file) {
+                    saveImage(type, file.location)
+                        .then(() =>
+                            res.status(200).json({ message: 'Success', imageURL: file.location })
+                        )
+                        .catch((error) => res.status(500).json({ message: 'Error', error }))
+                } else res.status(500).json({ message: 'Error', error: err })
+            })
+        }
     }
 })
 
 router.post('/gbg-background', authenticateToken, (req, res) => {
-    const accountId = req.user.id
+    const accountId = req.user ? req.user.id : null
     const { gameId } = req.query
     const { imageURL, videoURL, videoStartTime } = req.body
 
-    if (imageURL) {
-        GlassBeadGame.update(
-            { backgroundImage: imageURL, backgroundVideo: null, backgroundVideoStartTime: null },
-            { where: { id: gameId } }
-        ).then(res.status(200).json({ message: 'Success' }))
-    } else if (videoURL) {
-        GlassBeadGame.update(
-            {
-                backgroundImage: null,
-                backgroundVideo: videoURL,
-                backgroundVideoStartTime: videoStartTime,
-            },
-            { where: { id: gameId } }
-        ).then(res.status(200).json({ message: 'Success' }))
-    } else {
-        multer({
-            storage: multerS3({
-                s3: s3,
-                bucket: `weco-${process.env.NODE_ENV}-gbg-background-images`,
-                acl: 'public-read',
-                metadata: function (req, file, cb) {
-                    cb(null, { mimetype: file.mimetype })
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        if (imageURL) {
+            GlassBeadGame.update(
+                {
+                    backgroundImage: imageURL,
+                    backgroundVideo: null,
+                    backgroundVideoStartTime: null,
                 },
-                key: function (req, file, cb) {
-                    const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
-                    const date = Date.now().toString()
-                    const extension = file.mimetype.split('/')[1]
-                    const fileName = `gbg-background-image-${gameId}-${accountId}-${name}-${date}.${extension}`
-                    cb(null, fileName)
+                { where: { id: gameId } }
+            ).then(res.status(200).json({ message: 'Success' }))
+        } else if (videoURL) {
+            GlassBeadGame.update(
+                {
+                    backgroundImage: null,
+                    backgroundVideo: videoURL,
+                    backgroundVideoStartTime: videoStartTime,
                 },
-            }),
-        }).single('image')(req, res, (err) => {
-            const { file } = req
-            if (file) {
-                GlassBeadGame.update(
-                    {
-                        backgroundImage: file.location,
-                        backgroundVideo: null,
-                        backgroundVideoStartTime: null,
+                { where: { id: gameId } }
+            ).then(res.status(200).json({ message: 'Success' }))
+        } else {
+            multer({
+                storage: multerS3({
+                    s3: s3,
+                    bucket: `weco-${process.env.NODE_ENV}-gbg-background-images`,
+                    acl: 'public-read',
+                    metadata: function (req, file, cb) {
+                        cb(null, { mimetype: file.mimetype })
                     },
-                    { where: { id: gameId } }
-                ).then(res.status(200).json({ message: 'Success', imageURL: file.location }))
-            } else res.status(500).json({ message: 'Failed', error: err })
-        })
+                    key: function (req, file, cb) {
+                        const name = file.originalname
+                            .replace(/[^A-Za-z0-9]/g, '-')
+                            .substring(0, 30)
+                        const date = Date.now().toString()
+                        const extension = file.mimetype.split('/')[1]
+                        const fileName = `gbg-background-image-${gameId}-${accountId}-${name}-${date}.${extension}`
+                        cb(null, fileName)
+                    },
+                }),
+            }).single('image')(req, res, (err) => {
+                const { file } = req
+                if (file) {
+                    GlassBeadGame.update(
+                        {
+                            backgroundImage: file.location,
+                            backgroundVideo: null,
+                            backgroundVideoStartTime: null,
+                        },
+                        { where: { id: gameId } }
+                    ).then(res.status(200).json({ message: 'Success', imageURL: file.location }))
+                } else res.status(500).json({ message: 'Failed', error: err })
+            })
+        }
     }
 })
 
 router.post('/audio-upload', (req, res) => {
     const { postId } = req.query
+
     // Glass Bead Audio uploads only...
     // check file type and limits, then save raw audio in 'audio/raw' folder
     multer({

@@ -25,42 +25,45 @@ module.exports = (sequelize, DataTypes) => {
             as: 'DirectParentSpaces',
             foreignKey: 'spaceBId',
         })
+
         Space.belongsToMany(models.Space, {
             through: models.SpaceParent,
             as: 'DirectChildSpaces',
             foreignKey: 'spaceAId',
         })
-        Space.belongsToMany(models.Space, {
-            through: models.SpaceAncestor,
-            as: 'A', // ?
-            foreignKey: 'spaceAId',
-        })
+
         Space.belongsToMany(models.Space, {
             through: models.SpaceAncestor,
             as: 'SpaceAncestors',
             foreignKey: 'spaceBId',
+            otherKey: 'spaceAId',
         })
+
         // SpacePosts relationship
         Space.belongsToMany(models.Post, {
             through: models.SpacePost,
             as: 'SpacePosts',
             foreignKey: 'spaceId',
         })
+
         // SpaceUsers relationships
         Space.belongsTo(models.User, {
             as: 'Creator',
             foreignKey: 'creatorId',
         })
+
         Space.belongsToMany(models.User, {
             through: models.SpaceUser,
             as: 'Followers',
             foreignKey: 'spaceId',
         })
+
         Space.belongsToMany(models.User, {
             through: models.SpaceUser,
             as: 'Moderators',
             foreignKey: 'spaceId',
         })
+
         Space.belongsToMany(models.User, {
             through: models.SpaceUser,
             as: 'UsersWithAccess',

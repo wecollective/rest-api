@@ -30,7 +30,7 @@ module.exports = (sequelize, DataTypes) => {
 
         Post.belongsToMany(models.Space, {
             through: models.SpacePost,
-            as: 'AllIncludedSpaces',
+            as: 'AllSpaces',
             foreignKey: 'postId',
         })
 

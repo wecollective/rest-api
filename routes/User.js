@@ -155,43 +155,14 @@ router.get('/user-data', (req, res) => {
     User.findOne({
         where: { handle: userHandle },
         attributes: ['id', 'handle', 'name', 'bio', 'flagImagePath', 'coverImagePath', 'createdAt'],
-        include: [
-            {
-                model: Space,
-                as: 'FollowedSpaces',
-                attributes: ['handle', 'name', 'flagImagePath'],
-                through: { where: { relationship: 'follower', state: 'active' }, attributes: [] },
-            },
-            {
-                model: Space,
-                as: 'ModeratedSpaces',
-                attributes: ['handle', 'name', 'flagImagePath'],
-                through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
-            },
-            // {
-            //     model: Comment,
-            //     //attributes: ['creator', 'text', 'createdAt']
-            // }
-        ],
     })
-        .then((user) => {
-            res.json(user)
-        })
-        .catch((err) => console.log(err))
+        .then((user) => res.status(200).json(user))
+        .catch((error) => res.status(200).json({ message: 'Error', error }))
 })
 
-router.get('/user-posts', (req, res) => {
-    const {
-        accountId,
-        userId,
-        timeRange,
-        postType,
-        sortBy,
-        sortOrder,
-        searchQuery,
-        limit,
-        offset,
-    } = req.query
+router.get('/user-posts', authenticateToken, (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { userId, timeRange, postType, sortBy, sortOrder, searchQuery, limit, offset } = req.query
 
     function findStartDate() {
         const hour = 60 * 60 * 1000
