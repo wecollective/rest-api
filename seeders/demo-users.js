@@ -12,8 +12,6 @@ module.exports = {
                 bio: '...',
                 state: 'active',
                 emailVerified: true,
-                flagImagePath: null,
-                coverImagePath: null,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             },

@@ -10,8 +10,11 @@ module.exports = {
                 handle: 'all',
                 name: 'All',
                 description: 'This is the root space...',
-                flagImagePath: null,
-                coverImagePath: null,
+                privacy: 'public',
+                flagImagePath:
+                    'https://weco-prod-space-flag-images.s3.eu-west-1.amazonaws.com/1614556880362',
+                coverImagePath:
+                    'https://weco-prod-space-cover-images.s3.eu-west-1.amazonaws.com/space-cover-image-1-1-Global-Brain-colored-jpg-1663802855887.jpeg',
                 createdAt: new Date(),
                 updatedAt: new Date(),
             },
