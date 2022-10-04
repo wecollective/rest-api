@@ -1149,7 +1149,7 @@ router.post('/create-space', authenticateToken, async (req, res) => {
 
                 Promise.all([createParentRelationship, createAncestorRelationships])
                     .then(() => res.status(200).json({ spaceId: newSpace.id, message: 'success' }))
-                    .catch((error) => console.log(error))
+                    .catch((error) => res.status(500).json({ message: 'Error', error }))
             } else {
                 // if not authorized to attach to parent
                 const attachToRoot = await SpaceParent.create({
@@ -1232,7 +1232,7 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                             .status(200)
                             .json({ spaceId: newSpace.id, message: 'pending-acceptance' })
                     )
-                    .catch((error) => console.log(error))
+                    .catch((error) => res.status(500).json({ message: 'Error', error }))
             }
         })
     }
@@ -1354,7 +1354,7 @@ router.post('/invite-space-users', authenticateToken, async (req, res) => {
             )
         )
             .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => console.log(error))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
@@ -1440,7 +1440,7 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
 
         Promise.all([grantAccess, followSpace, updateNotification, notifyInviteCreator])
             .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => console.log(error))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
@@ -1513,7 +1513,7 @@ router.post('/request-space-access', authenticateToken, async (req, res) => {
 
         Promise.all([createAccessRealtionship, notifyMods])
             .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => console.log(error))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
@@ -1594,7 +1594,7 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
 
         Promise.all([updateAccess, followSpace, updateNotification, notifyRequestCreator])
             .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => console.log(error))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 

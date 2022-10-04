@@ -22,7 +22,12 @@ const ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 ffmpeg.setFfmpegPath(ffmpegPath)
 const authenticateToken = require('../middleware/authenticateToken')
-const { postAttributes, asyncForEach } = require('../GlobalConstants')
+const {
+    defaultPostAttributes,
+    findPostReactions,
+    findAccountReactions,
+    findPostInclude,
+} = require('../Helpers')
 const {
     Space,
     SpacePost,
@@ -47,287 +52,30 @@ const {
 } = require('../models')
 
 // GET
-router.get('/post-data', (req, res) => {
-    const { accountId, postId } = req.query
-    let attributes = [
-        ...postAttributes,
-        [
-            sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Reactions
-            AS Reaction
-            WHERE Reaction.postId = Post.id
-            AND Reaction.userId = ${accountId}
-            AND Reaction.type = 'like'
-            AND Reaction.state = 'active'
-            )`),
-            'accountLike',
-        ],
-        [
-            sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Reactions
-            AS Reaction
-            WHERE Reaction.postId = Post.id
-            AND Reaction.userId = ${accountId}
-            AND Reaction.type = 'rating'
-            AND Reaction.state = 'active'
-            )`),
-            'accountRating',
-        ],
-        [
-            sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM SpacePosts
-            AS SpacePost
-            WHERE  SpacePost.postId = Post.id
-            AND SpacePost.creatorId = ${accountId}
-            AND SpacePost.type = 'repost'
-            AND SpacePost.relationship = 'direct'
-            )`),
-            'accountRepost',
-        ],
-        [
-            sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Links
-            AS Link
-            WHERE Link.state = 'visible'
-            AND Link.type != 'string-post'
-            AND Link.creatorId = ${accountId}
-            AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
-            )`),
-            'accountLink',
-        ],
-    ]
-    Post.findOne({
+router.get('/post-data', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId } = req.query
+
+    const post = await Post.findOne({
         where: { id: postId },
-        attributes: attributes,
-        include: [
-            {
-                model: User,
-                as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-            },
-            {
-                model: Space,
-                as: 'DirectSpaces',
-                attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
-                through: { where: { relationship: 'direct' }, attributes: ['type'] },
-            },
-            {
-                model: Space,
-                as: 'IndirectSpaces',
-                attributes: ['id', 'handle', 'name', 'state', 'flagImagePath'],
-                through: { where: { relationship: 'indirect' }, attributes: ['type'] },
-            },
-            {
-                model: PostImage,
-                required: false,
-            },
-            {
-                model: Event,
-                include: [
-                    {
-                        model: User,
-                        as: 'Going',
-                        through: { where: { relationship: 'going', state: 'active' } },
-                    },
-                    {
-                        model: User,
-                        as: 'Interested',
-                        through: { where: { relationship: 'interested', state: 'active' } },
-                    },
-                ],
-            },
-            {
-                model: Inquiry,
-                required: false,
-                include: [
-                    {
-                        model: InquiryAnswer,
-                        required: false,
-                        attributes: [
-                            'id',
-                            'text',
-                            'createdAt',
-                            // [
-                            //     sequelize.literal(`(
-                            // SELECT COUNT(*)
-                            // FROM Reactions
-                            // AS Reaction
-                            // WHERE Reaction.state = 'active'
-                            // AND Reaction.inquiryAnswerId = InquiryAnswer.id
-                            // )`),
-                            //     'totalVotes',
-                            // ],
-                        ],
-                        include: [
-                            {
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['handle', 'name', 'flagImagePath'],
-                            },
-                            {
-                                model: Reaction,
-                                attributes: [
-                                    'value',
-                                    'state',
-                                    'inquiryAnswerId',
-                                    'createdAt',
-                                    'updatedAt',
-                                ],
-                                required: false,
-                                include: [
-                                    {
-                                        model: User,
-                                        as: 'Creator',
-                                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                                    },
-                                ],
-                            },
-                        ],
-                    },
-                ],
-            },
-            {
-                model: GlassBeadGame,
-                attributes: ['topic', 'topicGroup', 'topicImage'],
-                include: [
-                    {
-                        model: GlassBead,
-                        where: { state: 'visible' },
-                        required: false,
-                        include: [
-                            {
-                                model: User,
-                                as: 'user',
-                                attributes: ['handle', 'name', 'flagImagePath'],
-                            },
-                        ],
-                    },
-                ],
-            },
-            {
-                model: Post,
-                as: 'StringPosts',
-                attributes: [
-                    'id',
-                    'type',
-                    'color',
-                    'text',
-                    'url',
-                    'urlTitle',
-                    'urlImage',
-                    'urlDomain',
-                    'urlDescription',
-                    [
-                        sequelize.literal(
-                            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = StringPosts.id AND Reaction.type = 'like' AND Reaction.state = 'active')`
-                        ),
-                        'totalLikes',
-                    ],
-                    [
-                        sequelize.literal(
-                            `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = StringPosts.id)`
-                        ),
-                        'totalComments',
-                    ],
-                    [
-                        sequelize.literal(
-                            `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND Link.type != 'string-post' AND (Link.itemAId = StringPosts.id OR Link.itemBId = StringPosts.id))`
-                        ),
-                        'totalLinks',
-                    ],
-                    [
-                        sequelize.literal(`(
-                        SELECT COUNT(*) > 0
-                        FROM Reactions
-                        AS Reaction
-                        WHERE Reaction.postId = StringPosts.id
-                        AND Reaction.userId = ${accountId}
-                        AND Reaction.type = 'like'
-                        AND Reaction.state = 'active'
-                        )`),
-                        'accountLike',
-                    ],
-                    // todo: add account comment when set up
-                    [
-                        sequelize.literal(`(
-                        SELECT COUNT(*) > 0
-                        FROM Links
-                        AS Link
-                        WHERE Link.state = 'visible'
-                        AND Link.type != 'string-post'
-                        AND Link.creatorId = ${accountId}
-                        AND (Link.itemAId = StringPosts.id OR Link.itemBId = StringPosts.id)
-                        )`),
-                        'accountLink',
-                    ],
-                ],
-                through: {
-                    where: { state: 'visible', type: 'string-post' },
-                    attributes: ['index', 'relationship'],
-                },
-                required: false,
-                include: [
-                    {
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['handle', 'name', 'flagImagePath'],
-                    },
-                    {
-                        model: PostImage,
-                        required: false,
-                        attributes: ['caption', 'createdAt', 'id', 'index', 'url'],
-                    },
-                ],
-            },
-            {
-                model: Weave,
-                attributes: [
-                    'numberOfMoves',
-                    'numberOfTurns',
-                    'allowedBeadTypes',
-                    'moveTimeWindow',
-                    'nextMoveDeadline',
-                    'audioTimeLimit',
-                    'characterLimit',
-                    'state',
-                    'privacy',
-                ],
-                required: false,
-            },
-            {
-                model: User,
-                as: 'StringPlayers',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                through: { where: { type: 'weave' }, attributes: ['index', 'state', 'color'] },
-                required: false,
-            },
+        attributes: [
+            ...defaultPostAttributes,
+            ...findPostReactions('Post'),
+            ...findAccountReactions('Post', accountId),
         ],
+        include: findPostInclude(accountId),
     })
-        .then((post) => {
-            if (!post) res.status(404).json({ message: 'Post not found' })
-            else if (post.state === 'deleted') res.status(401).json({ message: 'Post deleted' })
-            else {
-                post.DirectSpaces.forEach((space) => {
-                    space.setDataValue('type', space.dataValues.SpacePost.type)
-                    delete space.dataValues.SpacePost
-                })
-                post.IndirectSpaces.forEach((space) => {
-                    space.setDataValue('type', space.dataValues.SpacePost.type)
-                    delete space.dataValues.SpacePost
-                })
-                // convert SQL numeric booleans to JS booleans
-                post.setDataValue('accountLike', !!post.dataValues.accountLike)
-                post.setDataValue('accountRating', !!post.dataValues.accountRating)
-                post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
-                post.setDataValue('accountLink', !!post.dataValues.accountLink)
-                res.json(post)
-            }
-        })
-        .catch((err) => console.log(err))
+
+    if (!post) res.status(404).json({ message: 'Post not found' })
+    else if (post.state === 'deleted') res.status(401).json({ message: 'Post deleted' })
+    else {
+        // convert SQL numeric booleans to JS booleans
+        post.setDataValue('accountLike', !!post.dataValues.accountLike)
+        post.setDataValue('accountRating', !!post.dataValues.accountRating)
+        post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
+        post.setDataValue('accountLink', !!post.dataValues.accountLink)
+        res.status(200).json(post)
+    }
 })
 
 router.get('/post-likes', async (req, res) => {
@@ -345,7 +93,7 @@ router.get('/post-likes', async (req, res) => {
         ],
     })
         .then((likes) => res.status(200).json(likes))
-        .catch((error) => console.log(error))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/post-reposts', async (req, res) => {
@@ -368,7 +116,7 @@ router.get('/post-reposts', async (req, res) => {
         ],
     })
         .then((likes) => res.status(200).json(likes))
-        .catch((error) => console.log(error))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/post-ratings', async (req, res) => {
@@ -386,7 +134,7 @@ router.get('/post-ratings', async (req, res) => {
         ],
     })
         .then((likes) => res.status(200).json(likes))
-        .catch((error) => console.log(error))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/post-links', async (req, res) => {
@@ -451,7 +199,7 @@ router.get('/post-links', async (req, res) => {
         ],
     })
         .then((post) => res.status(200).json(post))
-        .catch((error) => console.log(error))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/post-comments', (req, res) => {
@@ -1965,7 +1713,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                             newDeadline: data[2],
                         })
                     )
-                    .catch((error) => console.log(error))
+                    .catch((error) => res.status(500).json({ message: 'Error', error }))
             })
         }
 
@@ -2900,7 +2648,7 @@ router.post('/save-glass-bead-game-settings', (req, res) => {
         { where: { id: gameId } }
     )
         .then(res.status(200).send({ message: 'Success' }))
-        .catch((error) => console.log(error))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.post('/save-gbg-topic', (req, res) => {
@@ -2908,7 +2656,7 @@ router.post('/save-gbg-topic', (req, res) => {
 
     GlassBeadGame.update({ topic: newTopic, topicGroup: null }, { where: { id: gameId } })
         .then(res.status(200).send({ message: 'Success' }))
-        .catch((error) => console.log(error))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.post('/delete-post', authenticateToken, async (req, res) => {
