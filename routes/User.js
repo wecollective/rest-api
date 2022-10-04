@@ -34,8 +34,7 @@ const {
 
 // GET
 router.get('/all-users', (req, res) => {
-    const { accountId, timeRange, userType, sortBy, sortOrder, searchQuery, limit, offset } =
-        req.query
+    const { timeRange, sortBy, sortOrder, searchQuery, limit, offset } = req.query
 
     function findFirstAttributes() {
         let firstAttributes = ['id']
@@ -120,7 +119,7 @@ router.get('/all-users', (req, res) => {
                 res.json(data)
             })
         })
-        .catch((err) => console.log(err))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/user-data', (req, res) => {
@@ -133,21 +132,21 @@ router.get('/user-data', (req, res) => {
         .catch((error) => res.status(200).json({ message: 'Error', error }))
 })
 
-router.get('/user-posts', authenticateToken, (req, res) => {
+router.get('/user-posts', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { userId, timeRange, postType, sortBy, sortOrder, searchQuery, limit, offset } = req.query
 
-    let startDate = findStartDate(timeRange)
-    let type = findPostType(postType)
-    let order = findOrder(sortBy, sortOrder)
-    let firstAttributes = findInitialPostAttributes(sortBy, accountId)
-    let where = findPostWhere('user', userId, startDate, type, searchQuery)
+    const startDate = findStartDate(timeRange)
+    const type = findPostType(postType)
+    const order = findOrder(sortBy, sortOrder)
+    const firstAttributes = findInitialPostAttributes(sortBy, accountId)
+    const where = findPostWhere('user', userId, startDate, type, searchQuery)
 
-    // Double query required to to prevent results and pagination being effected by top level where clause.
-    // Intial query used to find correct posts with calculated stats and pagination applied.
-    // Second query used to return related models.
-    // Final function used to replace SpacePosts object with a simpler array.
-    Post.findAll({
+    // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
+    // Intial query used to find correct posts with pagination and sorting applied.
+    // Second query used to return all related data and models.
+    // todo: more testing to see if more effecient approaches available
+    const emptyPosts = await Post.findAll({
         subQuery: false,
         where,
         order,
@@ -163,39 +162,19 @@ router.get('/user-posts', authenticateToken, (req, res) => {
             },
         ],
     })
-        .then((posts) => {
-            return Post.findAll({
-                where: { id: posts.map((post) => post.id) },
-                attributes: [
-                    ...defaultPostAttributes,
-                    ...findPostReactions('Post'),
-                    ...findAccountReactions('Post', accountId),
-                ],
-                order,
-                include: findPostInclude(accountId),
-            }).then((posts) => {
-                posts.forEach((post) => {
-                    post.DirectSpaces.forEach((space) => {
-                        space.setDataValue('type', space.dataValues.SpacePost.type)
-                        delete space.dataValues.SpacePost
-                    })
-                    post.IndirectSpaces.forEach((space) => {
-                        space.setDataValue('type', space.dataValues.SpacePost.type)
-                        delete space.dataValues.SpacePost
-                    })
-                    // convert SQL numeric booleans to JS booleans
-                    post.setDataValue('accountLike', !!post.dataValues.accountLike)
-                    post.setDataValue('accountRating', !!post.dataValues.accountRating)
-                    post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
-                    post.setDataValue('accountLink', !!post.dataValues.accountLink)
-                })
-                return posts
-            })
-        })
-        .then((data) => {
-            res.json(data)
-        })
-        .catch((err) => console.log(err))
+
+    const postsWithData = await Post.findAll({
+        where: { id: emptyPosts.map((post) => post.id) },
+        attributes: [
+            ...defaultPostAttributes,
+            ...findPostReactions('Post'),
+            ...findAccountReactions('Post', accountId),
+        ],
+        order,
+        include: findPostInclude(accountId),
+    })
+
+    res.status(200).json(postsWithData)
 })
 
 // POST

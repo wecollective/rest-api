@@ -207,11 +207,11 @@ function findPostType(type) {
         : type.replace(/\s+/g, '-').toLowerCase()
 }
 
-function findInitialPostAttributes(sortBy, accountId) {
-    const access = [
-        // checks number of private spaces post is in = number of those spaces user has access to
-        // reposts excluded so public posts can be reposted into private spaces without blocking access
-        // todo: find more efficient query
+function postAccess(accountId) {
+    // checks number of private spaces post is in = number of those spaces user has access to
+    // reposts excluded so public posts can be reposted into private spaces without blocking access
+    // todo: find more efficient query
+    return [
         sequelize.literal(`(
             (SELECT COUNT(*)
                 FROM Spaces
@@ -248,7 +248,10 @@ function findInitialPostAttributes(sortBy, accountId) {
         )`),
         'access',
     ]
-    const attributes = ['id', access]
+}
+
+function findInitialPostAttributes(sortBy, accountId) {
+    const attributes = ['id', postAccess(accountId)]
     if (sortBy === 'Comments') attributes.push(totalPostComments)
     if (sortBy === 'Likes') attributes.push(totalPostLikes)
     if (sortBy === 'Ratings') attributes.push(totalPostRatings)
@@ -389,7 +392,9 @@ function findPostInclude(accountId) {
         {
             model: Space,
             as: 'DirectSpaces',
-            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            where: { [Op.not]: { id: 1 } },
+            required: false,
+            attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
             through: { where: { relationship: 'direct', type: 'post' }, attributes: [] },
         },
         // todo: remove, currently only used in repost modal so should be grabbed there
@@ -546,6 +551,7 @@ module.exports = {
     findStartDate,
     findOrder,
     findPostType,
+    postAccess,
     findInitialPostAttributes,
     findPostThrough,
     findPostWhere,

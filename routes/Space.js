@@ -322,6 +322,7 @@ router.get('/db-update', authenticateToken, async (req, res) => {
     // })
 })
 
+// todo: clean up like post routes
 router.get('/space-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { handle } = req.query
@@ -568,17 +569,7 @@ router.get('/space-posts', authenticateToken, async (req, res) => {
         include: findPostInclude(accountId),
     })
 
-    Promise.all(
-        postsWithData.map((post) => {
-            // convert SQL numeric booleans to JS booleans
-            post.setDataValue('accountLike', !!post.dataValues.accountLike)
-            post.setDataValue('accountRating', !!post.dataValues.accountRating)
-            post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
-            post.setDataValue('accountLink', !!post.dataValues.accountLink)
-        })
-    )
-        .then(() => res.status(200).json(postsWithData))
-        .catch((error) => res.status(500).json({ message: 'Error', error }))
+    res.status(200).json(postsWithData)
 })
 
 router.get('/post-map-data', authenticateToken, async (req, res) => {
@@ -688,17 +679,7 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
         required: false,
     })
 
-    Promise.all(
-        postsWithData.map((post) => {
-            // convert SQL numeric booleans to JS booleans
-            post.setDataValue('accountLike', !!post.dataValues.accountLike)
-            post.setDataValue('accountRating', !!post.dataValues.accountRating)
-            post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
-            post.setDataValue('accountLink', !!post.dataValues.accountLink)
-        })
-    )
-        .then(() => res.status(200).json({ totalMatchingPosts, posts: postsWithData }))
-        .catch((error) => res.status(500).json({ message: 'Error', error }))
+    res.status(200).json({ totalMatchingPosts, posts: postsWithData })
 })
 
 router.get('/space-spaces', authenticateToken, (req, res) => {
@@ -728,7 +709,7 @@ router.get('/space-spaces', authenticateToken, (req, res) => {
                 res.json(data)
             })
         })
-        .catch((err) => console.log(err))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/space-people', authenticateToken, (req, res) => {
@@ -770,7 +751,7 @@ router.get('/space-people', authenticateToken, (req, res) => {
                 res.json(data)
             })
         })
-        .catch((err) => console.log(err))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/space-events', authenticateToken, (req, res) => {
@@ -806,7 +787,7 @@ router.get('/space-events', authenticateToken, (req, res) => {
         ],
     })
         .then((data) => res.json(data))
-        .catch((err) => console.log(err))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/space-map-data', authenticateToken, async (req, res) => {
@@ -930,7 +911,7 @@ router.get('/suggested-space-handles', (req, res) => {
         .then((handles) => {
             res.json(handles)
         })
-        .catch((err) => console.log(err))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/validate-space-handle', (req, res) => {
@@ -946,7 +927,7 @@ router.get('/validate-space-handle', (req, res) => {
                 res.send('fail')
             }
         })
-        .catch((err) => console.log(err))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/parent-space-blacklist', async (req, res) => {
@@ -1268,7 +1249,7 @@ router.post('/update-space-handle', authenticateToken, async (req, res) => {
             else {
                 Space.update({ handle: payload }, { where: { id: spaceId } })
                     .then(res.send('success'))
-                    .catch((err) => console.log(err))
+                    .catch((error) => res.status(500).json({ message: 'Error', error }))
             }
         })
     }
@@ -1283,7 +1264,7 @@ router.post('/update-space-name', authenticateToken, async (req, res) => {
     else {
         Space.update({ name: payload }, { where: { id: spaceId } })
             .then(res.send('success'))
-            .catch((err) => console.log(err))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
@@ -1296,7 +1277,7 @@ router.post('/update-space-description', authenticateToken, async (req, res) => 
     else {
         Space.update({ description: payload }, { where: { id: spaceId } })
             .then(res.send('success'))
-            .catch((err) => console.log(err))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 

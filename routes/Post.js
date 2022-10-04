@@ -5,28 +5,22 @@ const router = express.Router()
 const sequelize = require('sequelize')
 const Op = sequelize.Op
 const sgMail = require('@sendgrid/mail')
-sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const ScheduledTasks = require('../ScheduledTasks')
 const puppeteer = require('puppeteer')
 const aws = require('aws-sdk')
 const multer = require('multer')
 const multerS3 = require('multer-s3')
-aws.config.update({
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    region: 'eu-west-1',
-})
 const s3 = new aws.S3({})
 const fs = require('fs')
 const ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
-ffmpeg.setFfmpegPath(ffmpegPath)
 const authenticateToken = require('../middleware/authenticateToken')
 const {
     defaultPostAttributes,
     findPostReactions,
     findAccountReactions,
     findPostInclude,
+    postAccess,
 } = require('../Helpers')
 const {
     Space,
@@ -51,6 +45,15 @@ const {
     InquiryAnswer,
 } = require('../models')
 
+// initialise
+ffmpeg.setFfmpegPath(ffmpegPath)
+sgMail.setApiKey(process.env.SENDGRID_API_KEY)
+aws.config.update({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    region: 'eu-west-1',
+})
+
 // GET
 router.get('/post-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
@@ -59,6 +62,7 @@ router.get('/post-data', authenticateToken, async (req, res) => {
     const post = await Post.findOne({
         where: { id: postId },
         attributes: [
+            postAccess(accountId),
             ...defaultPostAttributes,
             ...findPostReactions('Post'),
             ...findAccountReactions('Post', accountId),
@@ -67,15 +71,9 @@ router.get('/post-data', authenticateToken, async (req, res) => {
     })
 
     if (!post) res.status(404).json({ message: 'Post not found' })
+    else if (!post.dataValues.access) res.status(401).json({ message: 'Access denied' })
     else if (post.state === 'deleted') res.status(401).json({ message: 'Post deleted' })
-    else {
-        // convert SQL numeric booleans to JS booleans
-        post.setDataValue('accountLike', !!post.dataValues.accountLike)
-        post.setDataValue('accountRating', !!post.dataValues.accountRating)
-        post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
-        post.setDataValue('accountLink', !!post.dataValues.accountLink)
-        res.status(200).json(post)
-    }
+    else res.status(200).json(post)
 })
 
 router.get('/post-likes', async (req, res) => {
@@ -92,7 +90,7 @@ router.get('/post-likes', async (req, res) => {
             },
         ],
     })
-        .then((likes) => res.status(200).json(likes))
+        .then((reactions) => res.status(200).json(reactions))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
@@ -115,7 +113,7 @@ router.get('/post-reposts', async (req, res) => {
             },
         ],
     })
-        .then((likes) => res.status(200).json(likes))
+        .then((reactions) => res.status(200).json(reactions))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
@@ -133,7 +131,7 @@ router.get('/post-ratings', async (req, res) => {
             },
         ],
     })
-        .then((likes) => res.status(200).json(likes))
+        .then((reactions) => res.status(200).json(reactions))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
@@ -164,7 +162,7 @@ router.get('/post-links', async (req, res) => {
                             {
                                 model: User,
                                 as: 'Creator',
-                                attributes: ['handle', 'name', 'flagImagePath'],
+                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
                             },
                         ],
                     },
@@ -190,7 +188,7 @@ router.get('/post-links', async (req, res) => {
                             {
                                 model: User,
                                 as: 'Creator',
-                                attributes: ['handle', 'name', 'flagImagePath'],
+                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
                             },
                         ],
                     },
@@ -236,27 +234,8 @@ router.get('/post-comments', (req, res) => {
             },
         ],
     })
-        .then((comments) => {
-            res.json(comments)
-        })
-        .catch((err) => console.log(err))
-})
-
-router.get('/poll-votes', (req, res) => {
-    Reaction.findAll({
-        where: { type: 'inquiry-vote', state: 'active', postId: req.query.postId },
-        attributes: ['inquiryAnswerId', 'value', 'createdAt'],
-    })
-        .then((labels) => {
-            labels.forEach((label) => {
-                label.setDataValue('parsedCreatedAt', Date.parse(label.createdAt))
-                delete label.dataValues.createdAt
-            })
-            return labels
-        })
-        .then((labels) => {
-            res.json(labels)
-        })
+        .then((comments) => res.status(200).json(comments))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/prism-data', (req, res) => {
@@ -271,28 +250,15 @@ router.get('/prism-data', (req, res) => {
             },
         ],
     })
-        .then((prism) => {
-            res.json(prism)
-        })
-        .catch((err) => console.log(err))
+        .then((prism) => res.status(200).json(prism))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/plot-graph-data', (req, res) => {
     const { postId } = req.query
-    PlotGraph.findOne({
-        where: { postId: postId },
-        // include: [
-        //     {
-        //         model: User,
-        //         attributes: ['handle', 'name', 'flagImagePath'],
-        //         through: { attributes: [] }
-        //     }
-        // ]
-    })
-        .then((plotGraph) => {
-            res.json(plotGraph)
-        })
-        .catch((err) => console.log(err))
+    PlotGraph.findOne({ where: { postId: postId } })
+        .then((plotGraph) => res.status(200).json(plotGraph))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/scrape-url', async (req, res) => {
@@ -398,11 +364,9 @@ router.get('/glass-bead-game-data', (req, res) => {
             },
             {
                 model: GlassBeadGameComment,
-                required: false,
                 include: [
                     {
                         model: User,
-                        required: false,
                         as: 'user',
                         attributes: ['handle', 'name', 'flagImagePath'],
                     },
@@ -411,7 +375,7 @@ router.get('/glass-bead-game-data', (req, res) => {
         ],
     })
         .then((post) => res.json(post))
-        .catch((err) => console.log(err))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 // POST
@@ -464,10 +428,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 sourcePostId,
                 sourceCreatorId,
             } = postData
-
-            // todo: set up post access
-            // new post column: access ('restricted', or 'open')
-            // new table: 'PostAccess' (postId, spaceId) allows you to grab spaces that post requires access to
 
             Post.create({
                 type,
@@ -2655,7 +2615,7 @@ router.post('/save-gbg-topic', (req, res) => {
     const { gameId, newTopic } = req.body
 
     GlassBeadGame.update({ topic: newTopic, topicGroup: null }, { where: { id: gameId } })
-        .then(res.status(200).send({ message: 'Success' }))
+        .then(() => res.status(200).send({ message: 'Success' }))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
