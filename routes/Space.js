@@ -15,19 +15,14 @@ const {
     SpaceUser,
     User,
     Post,
-    Reaction,
     Link,
     Notification,
     GlassBeadGame,
-    GlassBead,
     Event,
-    Inquiry,
-    InquiryAnswer,
     PostImage,
-    Weave,
 } = require('../models')
 const {
-    postAttributes,
+    defaultPostAttributes,
     totalSpaceFollowers,
     totalSpaceComments,
     totalSpaceReactions,
@@ -38,7 +33,16 @@ const {
     totalUserPosts,
     totalUserComments,
     asyncForEach,
-} = require('../GlobalConstants')
+    findStartDate,
+    findOrder,
+    findPostType,
+    findInitialPostAttributes,
+    findPostThrough,
+    findPostWhere,
+    findPostReactions,
+    findAccountReactions,
+    findPostInclude,
+} = require('../Helpers')
 
 const spaceAttributes = [
     'id',
@@ -74,46 +78,6 @@ const firstGenLimit = 7
 const secondGenLimit = 3
 const thirdGenLimit = 3
 const fourthGenLimit = 3
-
-function findStartDate(timeRange) {
-    let timeOffset = Date.now()
-    if (timeRange === 'Last Year') {
-        timeOffset = 24 * 60 * 60 * 1000 * 365
-    }
-    if (timeRange === 'Last Month') {
-        timeOffset = 24 * 60 * 60 * 1000 * 30
-    }
-    if (timeRange === 'Last Week') {
-        timeOffset = 24 * 60 * 60 * 1000 * 7
-    }
-    if (timeRange === 'Last 24 Hours') {
-        timeOffset = 24 * 60 * 60 * 1000
-    }
-    if (timeRange === 'Last Hour') {
-        timeOffset = 60 * 60 * 1000
-    }
-    let startDate = new Date()
-    startDate.setTime(startDate.getTime() - timeOffset)
-    return startDate
-}
-
-function findOrder(sortOrder, sortBy) {
-    let direction, order
-    if (sortOrder === 'Ascending') {
-        direction = 'ASC'
-    } else {
-        direction = 'DESC'
-    }
-    if (sortBy === 'Date') {
-        order = [['createdAt', direction]]
-    } else {
-        order = [
-            [sequelize.literal(`total${sortBy}`), direction],
-            ['createdAt', 'DESC'],
-        ]
-    }
-    return order
-}
 
 function findSpaceFirstAttributes(sortBy) {
     let firstAttributes = ['id']
@@ -189,7 +153,7 @@ function findUserFirstAttributes(sortBy) {
 
 function findTotalSpaceResults(depth, searchQuery, timeRange) {
     function formatDate(date) {
-        const d = date.toISOString().split(/[-T:.]/)
+        const d = new Date(date).toISOString().split(/[-T:.]/)
         return `${d[0]}-${d[1]}-${d[2]} ${d[3]}:${d[4]}:${d[5]}`
     }
     const startDate = formatDate(findStartDate(timeRange))
@@ -414,6 +378,55 @@ router.get('/space-data', authenticateToken, async (req, res) => {
                 )`),
         'totalUsers',
     ]
+    const spaceAccess = [
+        // checks direct access to space
+        sequelize.literal(`(
+            SELECT SpaceUsers.state
+            FROM SpaceUsers
+            WHERE SpaceUsers.userId = ${accountId}
+            AND (SpaceUsers.relationship = 'access' OR SpaceUsers.relationship = 'pending')
+            AND SpaceUsers.state = 'active'
+            AND SpaceUsers.spaceId = Space.id
+        )`),
+        'spaceAccess',
+    ]
+    const ancestorAccess = [
+        // checks number of private ancestors = number of those ancestors user has access to
+        // todo: find more efficient query
+        sequelize.literal(`(
+            (SELECT COUNT(*)
+                FROM Spaces
+                    WHERE Spaces.state = 'active'
+                    AND Spaces.privacy = 'private'
+                    AND Spaces.id IN (
+                        SELECT SpaceAncestors.spaceAId
+                        FROM SpaceAncestors
+                        RIGHT JOIN Spaces
+                        ON SpaceAncestors.spaceBId = Space.id
+                    )
+            )
+            = 
+            (SELECT COUNT(*)
+                FROM SpaceUsers
+                WHERE SpaceUsers.userId = ${accountId}
+                AND SpaceUsers.state = 'active'
+                AND SpaceUsers.relationship = 'access'
+                AND SpaceUsers.spaceId IN (
+                    SELECT Spaces.id
+                    FROM Spaces
+                    WHERE Spaces.state = 'active'
+                    AND Spaces.privacy = 'private'
+                    AND Spaces.id IN (
+                        SELECT SpaceAncestors.spaceAId
+                        FROM SpaceAncestors
+                        RIGHT JOIN Spaces
+                        ON SpaceAncestors.spaceBId = Space.id
+                    )
+                )
+            )
+        )`),
+        'ancestorAccess',
+    ]
     const spaceData = await Space.findOne({
         where: { handle: handle, state: 'active' },
         attributes: [
@@ -428,55 +441,8 @@ router.get('/space-data', authenticateToken, async (req, res) => {
             totalSpaces,
             totalPosts,
             totalUsers,
-            [
-                // checks direct access to space
-                sequelize.literal(`(
-                    SELECT SpaceUsers.state
-                    FROM SpaceUsers
-                    WHERE SpaceUsers.userId = ${accountId}
-                    AND (SpaceUsers.relationship = 'access' OR SpaceUsers.relationship = 'pending')
-                    AND SpaceUsers.state = 'active'
-                    AND SpaceUsers.spaceId = Space.id
-                )`),
-                'spaceAccess',
-            ],
-            [
-                // checks number of private ancestors = number of those ancestors user has access to
-                // todo: find more efficient query
-                sequelize.literal(`(
-                    (SELECT COUNT(*)
-                        FROM Spaces
-                            WHERE Spaces.state = 'active'
-                            AND Spaces.privacy = 'private'
-                            AND Spaces.id IN (
-                                SELECT SpaceAncestors.spaceAId
-                                FROM SpaceAncestors
-                                RIGHT JOIN Spaces
-                                ON SpaceAncestors.spaceBId = Space.id
-                            )
-                    )
-                    = 
-                    (SELECT COUNT(*)
-                        FROM SpaceUsers
-                        WHERE SpaceUsers.userId = ${accountId}
-                        AND SpaceUsers.state = 'active'
-                        AND SpaceUsers.relationship = 'access'
-                        AND SpaceUsers.spaceId IN (
-                            SELECT Spaces.id
-                            FROM Spaces
-                            WHERE Spaces.state = 'active'
-                            AND Spaces.privacy = 'private'
-                            AND Spaces.id IN (
-                                SELECT SpaceAncestors.spaceAId
-                                FROM SpaceAncestors
-                                RIGHT JOIN Spaces
-                                ON SpaceAncestors.spaceBId = Space.id
-                            )
-                        )
-                    )
-                )`),
-                'ancestorAccess',
-            ],
+            spaceAccess,
+            ancestorAccess,
         ],
         include: [
             // todo: remove DirectParentSpaces and retrieve seperately where needed
@@ -551,205 +517,35 @@ router.get('/space-data', authenticateToken, async (req, res) => {
     }
 })
 
-router.get('/space-posts', authenticateToken, (req, res) => {
+router.get('/space-posts', authenticateToken, async (req, res) => {
     // todo: potentially merge with user posts: get('/posts')
     const accountId = req.user ? req.user.id : null
     const { spaceId, timeRange, postType, sortBy, sortOrder, depth, searchQuery, limit, offset } =
         req.query
 
-    function findStartDate() {
-        let offset = undefined
-        if (timeRange === 'Last Year') offset = 24 * 60 * 60 * 1000 * 365
-        if (timeRange === 'Last Month') offset = 24 * 60 * 60 * 1000 * 30
-        if (timeRange === 'Last Week') offset = 24 * 60 * 60 * 1000 * 7
-        if (timeRange === 'Last 24 Hours') offset = 24 * 60 * 60 * 1000
-        if (timeRange === 'Last Hour') offset = 60 * 60 * 1000
-        var startDate = new Date()
-        startDate.setTime(startDate.getTime() - offset)
-        return startDate
-    }
+    const startDate = findStartDate(timeRange)
+    const type = findPostType(postType)
+    const order = findOrder(sortBy, sortOrder)
+    const firstAttributes = findInitialPostAttributes(sortBy, accountId)
+    const through = findPostThrough(depth)
+    const where = findPostWhere('space', spaceId, startDate, type, searchQuery)
 
-    function findType() {
-        return postType === 'All Types'
-            ? [
-                  'text',
-                  'url',
-                  'image',
-                  'audio',
-                  'event',
-                  'inquiry',
-                  'glass-bead-game',
-                  'string',
-                  'weave',
-                  'prism',
-              ]
-            : postType.replace(/\s+/g, '-').toLowerCase()
-    }
-
-    function findOrder() {
-        let direction, order
-        if (sortOrder === 'Ascending') direction = 'ASC'
-        else direction = 'DESC'
-        if (sortBy === 'Date') order = [['createdAt', direction]]
-        if (sortBy === 'Reactions')
-            order = [
-                [sequelize.literal(`totalReactions`), direction],
-                ['createdAt', 'DESC'],
-            ]
-        if (sortBy !== 'Reactions' && sortBy !== 'Date')
-            order = [
-                [sequelize.literal(`total${sortBy}`), direction],
-                ['createdAt', 'DESC'],
-            ]
-        return order
-    }
-
-    function findFirstAttributes() {
-        let firstAttributes = [
-            'id',
-            [
-                // checks number of private spaces post is in = number of those spaces user has access to
-                // todo: find more efficient query
-                sequelize.literal(`(
-                    (SELECT COUNT(*)
-                        FROM Spaces
-                        WHERE Spaces.state = 'active'
-                        AND Spaces.privacy = 'private'
-                        AND Spaces.id IN (
-                            SELECT SpacePosts.spaceId
-                            FROM SpacePosts
-                            RIGHT JOIN Posts
-                            ON SpacePosts.postId = Post.id
-                        )
-                    )
-                    = 
-                    (SELECT COUNT(*)
-                        FROM SpaceUsers
-                        WHERE SpaceUsers.userId = ${accountId}
-                        AND SpaceUsers.state = 'active'
-                        AND SpaceUsers.relationship = 'access'
-                        AND SpaceUsers.spaceId IN (
-                            SELECT Spaces.id
-                            FROM Spaces
-                            WHERE Spaces.state = 'active'
-                            AND Spaces.privacy = 'private'
-                            AND Spaces.id IN (
-                                SELECT SpacePosts.spaceId
-                                FROM SpacePosts
-                                RIGHT JOIN Posts
-                                ON SpacePosts.postId = Post.id
-                            )
-                        )
-                    )
-                )`),
-                'access',
-            ],
-        ]
-
-        if (sortBy === 'Comments') {
-            firstAttributes.push([
-                sequelize.literal(
-                    `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = Post.id)`
-                ),
-                'totalComments',
-            ])
-        }
-        if (sortBy === 'Reactions') {
-            firstAttributes.push([
-                sequelize.literal(
-                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type != 'vote' AND Reaction.state = 'active')`
-                ),
-                'totalReactions',
-            ])
-        }
-        if (sortBy === 'Likes') {
-            firstAttributes.push([
-                sequelize.literal(
-                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'like' AND Reaction.state = 'active')`
-                ),
-                'totalLikes',
-            ])
-        }
-        if (sortBy === 'Ratings') {
-            firstAttributes.push([
-                sequelize.literal(
-                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'rating' AND Reaction.state = 'active')`
-                ),
-                'totalRatings',
-            ])
-        }
-        if (sortBy === 'Reposts') {
-            firstAttributes.push([
-                sequelize.literal(
-                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'repost' AND Reaction.state = 'active')`
-                ),
-                'totalReposts',
-            ])
-        }
-        return firstAttributes
-    }
-
-    function findThrough() {
-        let through
-        if (depth === 'All Contained Posts') {
-            through = {
-                where: {
-                    [Op.or]: [{ relationship: 'direct' }, { relationship: 'indirect' }],
-                },
-                attributes: [],
-            }
-        }
-        if (depth === 'Only Direct Posts') {
-            through = {
-                where: { relationship: 'direct' },
-                attributes: [],
-            }
-        }
-        return through
-    }
-
-    function findWhere() {
-        let where = {
-            '$AllSpaces.id$': spaceId,
-            state: 'visible',
-            createdAt: { [Op.between]: [startDate, Date.now()] },
-            type,
-        }
-        if (searchQuery) {
-            where[Op.or] = [
-                { text: { [Op.like]: `%${searchQuery}%` } },
-                { urlTitle: { [Op.like]: `%${searchQuery}%` } },
-                { urlDescription: { [Op.like]: `%${searchQuery}%` } },
-                { urlDomain: { [Op.like]: `%${searchQuery}%` } },
-                { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery}%` } },
-            ]
-        }
-        return where
-    }
-
-    let startDate = findStartDate()
-    let type = findType()
-    let order = findOrder()
-    let firstAttributes = findFirstAttributes()
-    let through = findThrough()
-    let where = findWhere()
-
-    // Double query required to to prevent results and pagination being effected by top level where clause.
-    // Intial query used to find correct posts with calculated stats and pagination applied.
-    // Second query used to return related models.
-    // todo: more testing to see if this can be avoided or if more effecient approaches available (seems faster this way maybe due to less data on joins)
-    Post.findAll({
-        subQuery: false,
+    // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
+    // Intial query used to find correct posts with pagination and sorting applied.
+    // Second query used to return all related data and models.
+    // todo: more testing to see if more effecient approaches available
+    const emptyPosts = await Post.findAll({
         where,
-        having: { ['access']: 1 },
         order,
         limit: Number(limit),
         offset: Number(offset),
+        subQuery: false,
         attributes: firstAttributes,
+        having: { ['access']: 1 },
         include: [
             {
                 model: Space,
-                as: 'AllSpaces',
+                as: 'AllPostSpaces',
                 attributes: [],
                 through,
             },
@@ -760,308 +556,29 @@ router.get('/space-posts', authenticateToken, (req, res) => {
             },
         ],
     })
-        .then((posts) => {
-            // Add account reaction data to post attributes
-            let mainAttributes = [
-                ...postAttributes,
-                [
-                    sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Reactions
-                AS Reaction
-                WHERE Reaction.postId = Post.id
-                AND Reaction.userId = ${accountId}
-                AND Reaction.type = 'like'
-                AND Reaction.state = 'active'
-                )`),
-                    'accountLike',
-                ],
-                [
-                    sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Reactions
-                AS Reaction
-                WHERE Reaction.postId = Post.id
-                AND Reaction.userId = ${accountId}
-                AND Reaction.type = 'rating'
-                AND Reaction.state = 'active'
-                )`),
-                    'accountRating',
-                ],
-                [
-                    sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Reactions
-                AS Reaction
-                WHERE Reaction.postId = Post.id
-                AND Reaction.userId = ${accountId}
-                AND Reaction.type = 'repost'
-                AND Reaction.state = 'active'
-                )`),
-                    'accountRepost',
-                ],
-                [
-                    sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Links
-                AS Link
-                WHERE Link.state = 'visible'
-                AND Link.type != 'string-post'
-                AND Link.creatorId = ${accountId}
-                AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
-                )`),
-                    'accountLink',
-                ],
-            ]
-            return Post.findAll({
-                where: { id: posts.map((post) => post.id) },
-                attributes: mainAttributes,
-                order,
-                include: [
-                    {
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    },
-                    {
-                        model: Space,
-                        as: 'DirectSpaces',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
-                        through: { where: { relationship: 'direct' }, attributes: ['type'] },
-                    },
-                    {
-                        model: Space,
-                        as: 'IndirectSpaces',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
-                        through: { where: { relationship: 'indirect' }, attributes: ['type'] },
-                    },
-                    // todo: add required attributes
-                    {
-                        model: PostImage,
-                        required: false,
-                    },
-                    // todo: add required attributes
-                    {
-                        model: Event,
-                        required: false,
-                        include: [
-                            {
-                                model: User,
-                                as: 'Going',
-                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                                through: {
-                                    where: { relationship: 'going', state: 'active' },
-                                    attributes: [],
-                                },
-                            },
-                            {
-                                model: User,
-                                as: 'Interested',
-                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                                through: {
-                                    where: { relationship: 'interested', state: 'active' },
-                                    attributes: [],
-                                },
-                            },
-                        ],
-                    },
-                    {
-                        model: Inquiry,
-                        required: false,
-                        include: [
-                            {
-                                model: InquiryAnswer,
-                                required: false,
-                                attributes: [
-                                    'id',
-                                    'text',
-                                    'createdAt',
-                                    // [
-                                    //     sequelize.literal(`(
-                                    // SELECT COUNT(*)
-                                    // FROM Reactions
-                                    // AS Reaction
-                                    // WHERE Reaction.state = 'active'
-                                    // AND Reaction.inquiryAnswerId = InquiryAnswer.id
-                                    // )`),
-                                    //     'totalVotes',
-                                    // ],
-                                ],
-                                include: [
-                                    {
-                                        model: User,
-                                        as: 'Creator',
-                                        attributes: ['handle', 'name', 'flagImagePath'],
-                                    },
-                                    {
-                                        model: Reaction,
-                                        attributes: [
-                                            'value',
-                                            'state',
-                                            'inquiryAnswerId',
-                                            'createdAt',
-                                            'updatedAt',
-                                        ],
-                                        required: false,
-                                        include: [
-                                            {
-                                                model: User,
-                                                as: 'Creator',
-                                                attributes: [
-                                                    'id',
-                                                    'handle',
-                                                    'name',
-                                                    'flagImagePath',
-                                                ],
-                                            },
-                                        ],
-                                    },
-                                ],
-                            },
-                        ],
-                    },
-                    {
-                        model: GlassBeadGame,
-                        required: false,
-                        attributes: ['topic', 'topicGroup', 'topicImage'],
-                        include: [
-                            {
-                                model: GlassBead,
-                                where: { state: 'visible' },
-                                required: false,
-                                include: [
-                                    {
-                                        model: User,
-                                        as: 'user',
-                                        attributes: ['handle', 'name', 'flagImagePath'],
-                                    },
-                                ],
-                            },
-                        ],
-                    },
-                    {
-                        model: Post,
-                        as: 'StringPosts',
-                        attributes: [
-                            'id',
-                            'type',
-                            'color',
-                            'text',
-                            'url',
-                            'urlTitle',
-                            'urlImage',
-                            'urlDomain',
-                            'urlDescription',
-                            [
-                                sequelize.literal(
-                                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = StringPosts.id AND Reaction.type = 'like' AND Reaction.state = 'active')`
-                                ),
-                                'totalLikes',
-                            ],
-                            [
-                                sequelize.literal(
-                                    `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = StringPosts.id)`
-                                ),
-                                'totalComments',
-                            ],
-                            [
-                                sequelize.literal(
-                                    `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND Link.type != 'string-post' AND (Link.itemAId = StringPosts.id OR Link.itemBId = StringPosts.id))`
-                                ),
-                                'totalLinks',
-                            ],
-                            [
-                                sequelize.literal(`(
-                                SELECT COUNT(*) > 0
-                                FROM Reactions
-                                AS Reaction
-                                WHERE Reaction.postId = StringPosts.id
-                                AND Reaction.userId = ${accountId}
-                                AND Reaction.type = 'like'
-                                AND Reaction.state = 'active'
-                                )`),
-                                'accountLike',
-                            ],
-                            // todo: add account comment when set up
-                            [
-                                sequelize.literal(`(
-                                SELECT COUNT(*) > 0
-                                FROM Links
-                                AS Link
-                                WHERE Link.state = 'visible'
-                                AND Link.type != 'string-post'
-                                AND Link.creatorId = ${accountId}
-                                AND (Link.itemAId = StringPosts.id OR Link.itemBId = StringPosts.id)
-                                )`),
-                                'accountLink',
-                            ],
-                        ],
-                        through: {
-                            where: { state: 'visible', type: 'string-post' },
-                            attributes: ['index', 'relationship'],
-                        },
-                        required: false,
-                        include: [
-                            {
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['handle', 'name', 'flagImagePath'],
-                            },
-                            {
-                                model: PostImage,
-                                required: false,
-                                attributes: ['caption', 'createdAt', 'id', 'index', 'url'],
-                            },
-                        ],
-                    },
-                    {
-                        model: Weave,
-                        attributes: [
-                            'numberOfTurns',
-                            'numberOfMoves',
-                            'allowedBeadTypes',
-                            'moveTimeWindow',
-                            'nextMoveDeadline',
-                            'audioTimeLimit',
-                            'characterLimit',
-                            'state',
-                            'privacy',
-                        ],
-                        required: false,
-                    },
-                    {
-                        model: User,
-                        as: 'StringPlayers',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                        through: {
-                            where: { type: 'weave' },
-                            attributes: ['index', 'state', 'color'],
-                        },
-                        required: false,
-                    },
-                ],
-            }).then((posts) => {
-                posts.forEach((post) => {
-                    // replace SpacePost objects with type value
-                    post.DirectSpaces.forEach((space) => {
-                        space.setDataValue('type', space.dataValues.SpacePost.type)
-                        delete space.dataValues.SpacePost
-                    })
-                    post.IndirectSpaces.forEach((space) => {
-                        space.setDataValue('type', space.dataValues.SpacePost.type)
-                        delete space.dataValues.SpacePost
-                    })
-                    // convert SQL numeric booleans to JS booleans
-                    post.setDataValue('accountLike', !!post.dataValues.accountLike)
-                    post.setDataValue('accountRating', !!post.dataValues.accountRating)
-                    post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
-                    post.setDataValue('accountLink', !!post.dataValues.accountLink)
-                    // post.setDataValue('accountFollowingEvent', !!post.dataValues.accountFollowingEvent)
-                })
-                res.status(200).json(posts)
-            })
+
+    const postsWithData = await Post.findAll({
+        where: { id: emptyPosts.map((post) => post.id) },
+        attributes: [
+            ...defaultPostAttributes,
+            ...findPostReactions('Post'),
+            ...findAccountReactions('Post', accountId),
+        ],
+        order,
+        include: findPostInclude(accountId),
+    })
+
+    Promise.all(
+        postsWithData.map((post) => {
+            // convert SQL numeric booleans to JS booleans
+            post.setDataValue('accountLike', !!post.dataValues.accountLike)
+            post.setDataValue('accountRating', !!post.dataValues.accountRating)
+            post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
+            post.setDataValue('accountLink', !!post.dataValues.accountLink)
         })
-        .catch((err) => console.log(err))
+    )
+        .then(() => res.status(200).json(postsWithData))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/post-map-data', authenticateToken, async (req, res) => {
@@ -1069,161 +586,22 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
     const { spaceId, timeRange, postType, sortBy, sortOrder, depth, searchQuery, limit, offset } =
         req.query
 
-    function findStartDate() {
-        let offset = undefined
-        if (timeRange === 'Last Year') {
-            offset = 24 * 60 * 60 * 1000 * 365
-        }
-        if (timeRange === 'Last Month') {
-            offset = 24 * 60 * 60 * 1000 * 30
-        }
-        if (timeRange === 'Last Week') {
-            offset = 24 * 60 * 60 * 1000 * 7
-        }
-        if (timeRange === 'Last 24 Hours') {
-            offset = 24 * 60 * 60 * 1000
-        }
-        if (timeRange === 'Last Hour') {
-            offset = 60 * 60 * 1000
-        }
-        var startDate = new Date()
-        startDate.setTime(startDate.getTime() - offset)
-        return startDate
-    }
-
-    function findType() {
-        return postType === 'All Types'
-            ? [
-                  'text',
-                  'url',
-                  'image',
-                  'audio',
-                  'event',
-                  'inquiry',
-                  'glass-bead-game',
-                  'string',
-                  'weave',
-                  'prism',
-              ]
-            : postType.replace(/\s+/g, '-').toLowerCase()
-    }
-
-    function findOrder() {
-        let direction, order
-        if (sortOrder === 'Ascending') {
-            direction = 'ASC'
-        } else {
-            direction = 'DESC'
-        }
-        if (sortBy === 'Date') {
-            order = [['createdAt', direction]]
-        }
-        if (sortBy === 'Reactions') {
-            order = [
-                [sequelize.literal(`totalReactions`), direction],
-                ['createdAt', 'DESC'],
-            ]
-        }
-        if (sortBy !== 'Reactions' && sortBy !== 'Date') {
-            order = [
-                [sequelize.literal(`total${sortBy}`), direction],
-                ['createdAt', 'DESC'],
-            ]
-        }
-        return order
-    }
-
-    function findFirstAttributes() {
-        let firstAttributes = ['id']
-        if (sortBy === 'Comments') {
-            firstAttributes.push([
-                sequelize.literal(
-                    `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = Post.id)`
-                ),
-                'totalComments',
-            ])
-        }
-        if (sortBy === 'Reactions') {
-            firstAttributes.push([
-                sequelize.literal(
-                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type != 'vote' AND Reaction.state = 'active')`
-                ),
-                'totalReactions',
-            ])
-        }
-        if (sortBy === 'Likes') {
-            firstAttributes.push([
-                sequelize.literal(
-                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'like' AND Reaction.state = 'active')`
-                ),
-                'totalLikes',
-            ])
-        }
-        if (sortBy === 'Ratings') {
-            firstAttributes.push([
-                sequelize.literal(
-                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'rating' AND Reaction.state = 'active')`
-                ),
-                'totalRatings',
-            ])
-        }
-        if (sortBy === 'Reposts') {
-            firstAttributes.push([
-                sequelize.literal(
-                    `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = Post.id AND Reaction.type = 'repost' AND Reaction.state = 'active')`
-                ),
-                'totalReposts',
-            ])
-        }
-        return firstAttributes
-    }
-
-    function findThrough() {
-        let through
-        if (depth === 'All Contained Posts') {
-            through = {
-                where: {
-                    [Op.or]: [{ relationship: 'direct' }, { relationship: 'indirect' }],
-                },
-                attributes: [],
-            }
-        }
-        if (depth === 'Only Direct Posts') {
-            through = {
-                where: { relationship: 'direct' },
-                attributes: [],
-            }
-        }
-        return through
-    }
-
-    let startDate = findStartDate()
-    let type = findType()
-    let order = findOrder()
-    let firstAttributes = findFirstAttributes()
-    let through = findThrough()
+    const startDate = findStartDate(timeRange)
+    const type = findPostType(postType)
+    const order = findOrder(sortBy, sortOrder)
+    const firstAttributes = findInitialPostAttributes(sortBy, accountId)
+    const through = findPostThrough(depth)
+    const where = findPostWhere('space', spaceId, startDate, type, searchQuery)
 
     const totalMatchingPosts = await Post.count({
         subQuery: false,
-        where: {
-            '$AllSpaces.id$': spaceId,
-            state: 'visible',
-            createdAt: { [Op.between]: [startDate, Date.now()] },
-            type,
-            [Op.or]: [
-                { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { urlTitle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { urlDescription: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { urlDomain: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            ],
-        },
+        where,
         order,
         attributes: firstAttributes,
         include: [
             {
                 model: Space,
-                as: 'AllSpaces',
+                as: 'AllPostSpaces',
                 attributes: [],
                 through,
             },
@@ -1235,32 +613,22 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
         ],
     })
 
-    // Double query required to to prevent results and pagination being effected by top level where clause.
-    // Intial query used to find correct posts with calculated stats and pagination applied.
-    // Second query used to return related models.
-    Post.findAll({
-        subQuery: false,
-        where: {
-            '$AllSpaces.id$': spaceId,
-            state: 'visible',
-            createdAt: { [Op.between]: [startDate, Date.now()] },
-            type,
-            [Op.or]: [
-                { text: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { urlTitle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { urlDescription: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { urlDomain: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            ],
-        },
+    // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
+    // Intial query used to find correct posts with pagination and sorting applied.
+    // Second query used to return all related data and models.
+    // todo: more testing to see if more effecient approaches available
+    const emptyPosts = await Post.findAll({
+        where,
         order,
         limit: Number(limit),
         offset: Number(offset),
+        subQuery: false,
         attributes: firstAttributes,
+        having: { ['access']: 1 },
         include: [
             {
                 model: Space,
-                as: 'AllSpaces',
+                as: 'AllPostSpaces',
                 attributes: [],
                 through,
             },
@@ -1271,120 +639,66 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
             },
         ],
     })
-        .then((posts) => {
-            // Add account reaction data to post attributes
-            let mainAttributes = [
-                ...postAttributes,
-                [
-                    sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Reactions
-                AS Reaction
-                WHERE Reaction.postId = Post.id
-                AND Reaction.userId = ${accountId}
-                AND Reaction.type = 'like'
-                AND Reaction.state = 'active'
-                )`),
-                    'accountLike',
-                ],
-                [
-                    sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Reactions
-                AS Reaction
-                WHERE Reaction.postId = Post.id
-                AND Reaction.userId = ${accountId}
-                AND Reaction.type = 'rating'
-                AND Reaction.state = 'active'
-                )`),
-                    'accountRating',
-                ],
-                [
-                    sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Reactions
-                AS Reaction
-                WHERE Reaction.postId = Post.id
-                AND Reaction.userId = ${accountId}
-                AND Reaction.type = 'repost'
-                AND Reaction.state = 'active'
-                )`),
-                    'accountRepost',
-                ],
-                [
-                    sequelize.literal(`(
-                SELECT COUNT(*) > 0
-                FROM Links
-                AS Link
-                WHERE Link.state = 'visible'
-                AND Link.creatorId = ${accountId}
-                AND (Link.itemAId = Post.id OR Link.itemBId = Post.id)
-                )`),
-                    'accountLink',
-                ],
-            ]
-            return Post.findAll({
-                where: { id: posts.map((post) => post.id) },
-                attributes: mainAttributes,
-                order,
+
+    const postsWithData = await Post.findAll({
+        where: { id: emptyPosts.map((post) => post.id) },
+        attributes: [
+            ...defaultPostAttributes,
+            ...findPostReactions('Post'),
+            ...findAccountReactions('Post', accountId),
+        ],
+        order,
+        include: [
+            {
+                model: Link,
+                as: 'OutgoingLinks',
+                attributes: ['id', 'description'],
+                where: { state: 'visible' },
+                required: false,
                 include: [
                     {
-                        model: Link,
-                        as: 'OutgoingLinks',
-                        where: { state: 'visible' },
-                        required: false,
-                        attributes: ['id', 'description'],
-                        include: [
-                            {
-                                model: Post,
-                                as: 'PostB',
-                                attributes: ['id'],
-                            },
-                        ],
-                    },
-                    {
-                        model: Link,
-                        as: 'IncomingLinks',
-                        where: { state: 'visible' },
-                        required: false,
+                        model: Post,
+                        as: 'PostB',
                         attributes: ['id'],
-                        include: [
-                            {
-                                model: Post,
-                                as: 'PostA',
-                                attributes: ['id'],
-                            },
-                        ],
-                    },
-                    {
-                        model: PostImage,
-                        required: false,
-                        attributes: ['url'],
-                        limit: 1,
-                        order: [['index', 'ASC']],
                     },
                 ],
+            },
+            {
+                model: Link,
+                as: 'IncomingLinks',
+                attributes: ['id'],
+                where: { state: 'visible' },
                 required: false,
-            }).then((posts) => {
-                posts.forEach((post) => {
-                    // convert SQL numeric booleans to JS booleans
-                    post.setDataValue('accountLike', !!post.dataValues.accountLike)
-                    post.setDataValue('accountRating', !!post.dataValues.accountRating)
-                    post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
-                    post.setDataValue('accountLink', !!post.dataValues.accountLink)
-                    // post.setDataValue('accountFollowingEvent', !!post.dataValues.accountFollowingEvent)
-                })
-                let postMapData = {
-                    totalMatchingPosts,
-                    posts,
-                }
-                return postMapData
-            })
+                include: [
+                    {
+                        model: Post,
+                        as: 'PostA',
+                        attributes: ['id'],
+                    },
+                ],
+            },
+            {
+                model: PostImage,
+                required: false,
+                attributes: ['url'],
+                limit: 1,
+                order: [['index', 'ASC']],
+            },
+        ],
+        required: false,
+    })
+
+    Promise.all(
+        postsWithData.map((post) => {
+            // convert SQL numeric booleans to JS booleans
+            post.setDataValue('accountLike', !!post.dataValues.accountLike)
+            post.setDataValue('accountRating', !!post.dataValues.accountRating)
+            post.setDataValue('accountRepost', !!post.dataValues.accountRepost)
+            post.setDataValue('accountLink', !!post.dataValues.accountLink)
         })
-        .then((data) => {
-            res.json(data)
-        })
-        .catch((err) => console.log(err))
+    )
+        .then(() => res.status(200).json({ totalMatchingPosts, posts: postsWithData }))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/space-spaces', authenticateToken, (req, res) => {
@@ -1398,7 +712,7 @@ router.get('/space-spaces', authenticateToken, (req, res) => {
     // Second query used to return related models.
     Space.findAll({
         where: findSpaceWhere(spaceId, depth, timeRange, searchQuery),
-        order: findOrder(sortOrder, sortBy),
+        order: findOrder(sortBy, sortOrder),
         attributes: findSpaceFirstAttributes(sortBy),
         include: findSpaceInclude(depth),
         limit: Number(limit) || null,
@@ -1408,7 +722,7 @@ router.get('/space-spaces', authenticateToken, (req, res) => {
         .then((spaces) => {
             Space.findAll({
                 where: { id: spaces.map((space) => space.id) },
-                order: findOrder(sortOrder, sortBy),
+                order: findOrder(sortBy, sortOrder),
                 attributes: spaceAttributes,
             }).then((data) => {
                 res.json(data)
@@ -1433,7 +747,7 @@ router.get('/space-people', authenticateToken, (req, res) => {
                 { bio: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
             ],
         },
-        order: findOrder(sortOrder, sortBy),
+        order: findOrder(sortBy, sortOrder),
         limit: Number(limit),
         offset: Number(offset),
         attributes: findUserFirstAttributes(sortBy),
@@ -1450,7 +764,7 @@ router.get('/space-people', authenticateToken, (req, res) => {
         .then((users) => {
             User.findAll({
                 where: { id: users.map((user) => user.id) },
-                order: findOrder(sortOrder, sortBy),
+                order: findOrder(sortBy, sortOrder),
                 attributes: userAttributes,
             }).then((data) => {
                 res.json(data)
@@ -1522,7 +836,7 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
                 attributes: childAttributes,
                 limit,
                 offset: genOffset > 0 ? genOffset : null,
-                order: findOrder(sortOrder, sortBy),
+                order: findOrder(sortBy, sortOrder),
                 include: findSpaceInclude(depth),
                 subQuery: false,
             })

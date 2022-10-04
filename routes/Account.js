@@ -7,7 +7,6 @@ const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 const { Space, User, Notification, SpaceUser, UserPost, Post, Weave } = require('../models')
-const { totalUserPosts } = require('../GlobalConstants')
 const ScheduledTasks = require('../ScheduledTasks')
 
 // GET
