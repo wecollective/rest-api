@@ -22,7 +22,7 @@ const {
     PostImage,
 } = require('../models')
 const {
-    defaultPostAttributes,
+    //
     totalSpaceFollowers,
     totalSpaceComments,
     totalSpaceReactions,
@@ -32,16 +32,18 @@ const {
     totalSpaceChildren,
     totalUserPosts,
     totalUserComments,
-    asyncForEach,
     findStartDate,
     findOrder,
     findPostType,
     findInitialPostAttributes,
+    findFullPostAttributes,
     findPostThrough,
     findPostWhere,
-    findPostReactions,
-    findAccountReactions,
     findPostInclude,
+    findSpaceDataAttributes,
+    findSpaceMapAttributes,
+    findSpaceMapWhere,
+    findSpaceMapInclude,
 } = require('../Helpers')
 
 const spaceAttributes = [
@@ -73,11 +75,6 @@ const userAttributes = [
     totalUserPosts,
     totalUserComments,
 ]
-
-const firstGenLimit = 7
-const secondGenLimit = 3
-const thirdGenLimit = 3
-const fourthGenLimit = 3
 
 function findSpaceFirstAttributes(sortBy) {
     let firstAttributes = ['id']
@@ -149,57 +146,6 @@ function findUserFirstAttributes(sortBy) {
     if (sortBy === 'Posts') firstAttributes.push(totalUserPosts)
     if (sortBy === 'Comments') firstAttributes.push(totalUserComments)
     return firstAttributes
-}
-
-function findTotalSpaceResults(depth, searchQuery, timeRange) {
-    function formatDate(date) {
-        const d = new Date(date).toISOString().split(/[-T:.]/)
-        return `${d[0]}-${d[1]}-${d[2]} ${d[3]}:${d[4]}:${d[5]}`
-    }
-    const startDate = formatDate(findStartDate(timeRange))
-    const now = formatDate(new Date())
-
-    if (depth === 'All Contained Spaces') {
-        return [
-            sequelize.literal(`(
-            SELECT COUNT(*)
-                FROM Spaces s
-                WHERE s.id != Space.id
-                AND s.id IN (
-                    SELECT SpaceAncestors.spaceBId
-                    FROM SpaceAncestors
-                    RIGHT JOIN Spaces
-                    ON SpaceAncestors.spaceBId = Spaces.id
-                    WHERE SpaceAncestors.spaceAId = Space.id
-                    AND SpaceAncestors.state = 'open'
-                ) AND (
-                    s.handle LIKE '%${searchQuery}%'
-                    OR s.name LIKE '%${searchQuery}%'
-                    OR s.description LIKE '%${searchQuery}%'
-                ) AND s.createdAt BETWEEN '${startDate}' AND '${now}'
-            )`),
-            'totalResults',
-        ]
-    } else {
-        return [
-            sequelize.literal(`(
-            SELECT COUNT(*)
-                FROM Spaces s
-                WHERE s.id IN (
-                    SELECT vhr.spaceBId
-                    FROM SpaceParents vhr
-                    RIGHT JOIN Spaces
-                    ON vhr.spaceAId = Space.id
-                    WHERE vhr.state = 'open'
-                ) AND (
-                    s.handle LIKE '%${searchQuery}%'
-                    OR s.name LIKE '%${searchQuery}%'
-                    OR s.description LIKE '%${searchQuery}%'
-                ) AND s.createdAt BETWEEN '${startDate}' AND '${now}'
-            )`),
-            'totalResults',
-        ]
-    }
 }
 
 // GET
@@ -327,126 +273,12 @@ router.get('/space-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { handle } = req.query
 
-    const totalSpaces = [
-        sequelize.literal(`(
-        SELECT COUNT(*)
-            FROM Spaces
-            WHERE Spaces.handle != Space.handle
-            AND Spaces.state = 'active'
-            AND Spaces.id IN (
-                SELECT SpaceAncestors.spaceBId
-                FROM SpaceAncestors
-                RIGHT JOIN Spaces
-                ON SpaceAncestors.spaceBId = Spaces.id
-                WHERE SpaceAncestors.spaceAId = Space.id
-            )
-        )`),
-        'totalSpaces',
-    ]
-    const totalPosts = [
-        sequelize.literal(`(
-        SELECT COUNT(*)
-            FROM Posts
-            WHERE Posts.state = 'visible'
-            AND Posts.id IN (
-                SELECT SpacePosts.postId
-                FROM SpacePosts
-                RIGHT JOIN Posts
-                ON SpacePosts.postId = Posts.id
-                WHERE SpacePosts.spaceId = Space.id
-            )
-        )`),
-        'totalPosts',
-    ]
-    const totalUsers = [
-        handle === 'all'
-            ? sequelize.literal(
-                  `(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true AND Users.state = 'active')`
-              )
-            : sequelize.literal(`(
-                SELECT COUNT(*)
-                    FROM Users
-                    WHERE Users.emailVerified = true
-                    AND Users.state = 'active'
-                    AND Users.id IN (
-                        SELECT SpaceUsers.userId
-                        FROM SpaceUsers
-                        RIGHT JOIN Users
-                        ON SpaceUsers.userId = Users.id
-                        WHERE SpaceUsers.spaceId = Space.id
-                        AND SpaceUsers.state = 'active'
-                    )
-                )`),
-        'totalUsers',
-    ]
-    const spaceAccess = [
-        // checks direct access to space
-        sequelize.literal(`(
-            SELECT SpaceUsers.state
-            FROM SpaceUsers
-            WHERE SpaceUsers.userId = ${accountId}
-            AND (SpaceUsers.relationship = 'access' OR SpaceUsers.relationship = 'pending')
-            AND SpaceUsers.state = 'active'
-            AND SpaceUsers.spaceId = Space.id
-        )`),
-        'spaceAccess',
-    ]
-    const ancestorAccess = [
-        // checks number of private ancestors = number of those ancestors user has access to
-        // todo: find more efficient query
-        sequelize.literal(`(
-            (SELECT COUNT(*)
-                FROM Spaces
-                    WHERE Spaces.state = 'active'
-                    AND Spaces.privacy = 'private'
-                    AND Spaces.id IN (
-                        SELECT SpaceAncestors.spaceAId
-                        FROM SpaceAncestors
-                        RIGHT JOIN Spaces
-                        ON SpaceAncestors.spaceBId = Space.id
-                    )
-            )
-            = 
-            (SELECT COUNT(*)
-                FROM SpaceUsers
-                WHERE SpaceUsers.userId = ${accountId}
-                AND SpaceUsers.state = 'active'
-                AND SpaceUsers.relationship = 'access'
-                AND SpaceUsers.spaceId IN (
-                    SELECT Spaces.id
-                    FROM Spaces
-                    WHERE Spaces.state = 'active'
-                    AND Spaces.privacy = 'private'
-                    AND Spaces.id IN (
-                        SELECT SpaceAncestors.spaceAId
-                        FROM SpaceAncestors
-                        RIGHT JOIN Spaces
-                        ON SpaceAncestors.spaceBId = Space.id
-                    )
-                )
-            )
-        )`),
-        'ancestorAccess',
-    ]
     const spaceData = await Space.findOne({
-        where: { handle: handle, state: 'active' },
-        attributes: [
-            'id',
-            'privacy',
-            'handle',
-            'name',
-            'description',
-            'flagImagePath',
-            'coverImagePath',
-            'createdAt',
-            totalSpaces,
-            totalPosts,
-            totalUsers,
-            spaceAccess,
-            ancestorAccess,
-        ],
+        where: { handle, state: 'active' },
+        attributes: findSpaceDataAttributes(handle, accountId),
         include: [
             // todo: remove DirectParentSpaces and retrieve seperately where needed
+            // (Navbar, ParentSpaceRequestModal, RemoveParentSpaceModal, SpaceNavigationList, SpacePageSpaceMap)
             {
                 model: Space,
                 as: 'DirectParentSpaces',
@@ -460,13 +292,8 @@ router.get('/space-data', authenticateToken, async (req, res) => {
                 ],
                 through: { where: { state: 'open' }, attributes: [] },
             },
-            // todo: remove and retrieve on about page
-            {
-                model: User,
-                as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-            },
-            // todo: remove and retrieve on necissary pages/modals
+            // todo: remove and retrieve seperately where needed
+            // (InviteSpaceModeratorModal, ParentSpaceRequestModal, RemoveSpaceModeratorModal)
             {
                 model: User,
                 as: 'Moderators',
@@ -518,6 +345,22 @@ router.get('/space-data', authenticateToken, async (req, res) => {
     }
 })
 
+router.get('/space-about', async (req, res) => {
+    const { handle } = req.query
+    const aboutData = await Space.findOne({
+        where: { handle, state: 'active' },
+        attributes: ['description', 'createdAt'],
+        include: [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            },
+        ],
+    })
+    res.status(200).json(aboutData)
+})
+
 router.get('/space-posts', authenticateToken, async (req, res) => {
     // todo: potentially merge with user posts: get('/posts')
     const accountId = req.user ? req.user.id : null
@@ -527,9 +370,10 @@ router.get('/space-posts', authenticateToken, async (req, res) => {
     const startDate = findStartDate(timeRange)
     const type = findPostType(postType)
     const order = findOrder(sortBy, sortOrder)
-    const firstAttributes = findInitialPostAttributes(sortBy, accountId)
     const through = findPostThrough(depth)
     const where = findPostWhere('space', spaceId, startDate, type, searchQuery)
+    const initialAttributes = findInitialPostAttributes(sortBy, accountId)
+    const fullAttributes = findFullPostAttributes('Post', accountId)
 
     // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
     // Intial query used to find correct posts with pagination and sorting applied.
@@ -541,7 +385,7 @@ router.get('/space-posts', authenticateToken, async (req, res) => {
         limit: Number(limit),
         offset: Number(offset),
         subQuery: false,
-        attributes: firstAttributes,
+        attributes: initialAttributes,
         having: { ['access']: 1 },
         include: [
             {
@@ -560,11 +404,7 @@ router.get('/space-posts', authenticateToken, async (req, res) => {
 
     const postsWithData = await Post.findAll({
         where: { id: emptyPosts.map((post) => post.id) },
-        attributes: [
-            ...defaultPostAttributes,
-            ...findPostReactions('Post'),
-            ...findAccountReactions('Post', accountId),
-        ],
+        attributes: fullAttributes,
         order,
         include: findPostInclude(accountId),
     })
@@ -580,15 +420,16 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
     const startDate = findStartDate(timeRange)
     const type = findPostType(postType)
     const order = findOrder(sortBy, sortOrder)
-    const firstAttributes = findInitialPostAttributes(sortBy, accountId)
     const through = findPostThrough(depth)
     const where = findPostWhere('space', spaceId, startDate, type, searchQuery)
+    const initialAttributes = findInitialPostAttributes(sortBy, accountId)
+    const fullAttributes = findFullPostAttributes('Post', accountId)
 
     const totalMatchingPosts = await Post.count({
         subQuery: false,
         where,
         order,
-        attributes: firstAttributes,
+        attributes: initialAttributes,
         include: [
             {
                 model: Space,
@@ -614,7 +455,7 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
         limit: Number(limit),
         offset: Number(offset),
         subQuery: false,
-        attributes: firstAttributes,
+        attributes: initialAttributes,
         having: { ['access']: 1 },
         include: [
             {
@@ -633,11 +474,7 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
 
     const postsWithData = await Post.findAll({
         where: { id: emptyPosts.map((post) => post.id) },
-        attributes: [
-            ...defaultPostAttributes,
-            ...findPostReactions('Post'),
-            ...findAccountReactions('Post', accountId),
-        ],
+        attributes: fullAttributes,
         order,
         include: [
             {
@@ -747,9 +584,7 @@ router.get('/space-people', authenticateToken, (req, res) => {
                 where: { id: users.map((user) => user.id) },
                 order: findOrder(sortBy, sortOrder),
                 attributes: userAttributes,
-            }).then((data) => {
-                res.json(data)
-            })
+            }).then((data) => res.status(200).json(data))
         })
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
@@ -786,83 +621,24 @@ router.get('/space-events', authenticateToken, (req, res) => {
             },
         ],
     })
-        .then((data) => res.json(data))
+        .then((data) => res.status(200).json(data))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/space-map-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { spaceId, offset, sortBy, sortOrder, timeRange, depth, searchQuery } = req.query
-
-    // todo:
-    // apply all filters only on first generation? at least not 'sort by' or 'sort order'
-    // apply depth 'all contained' spaces only on first generation?
-    // apply search only on first generation?
-    // apply time range only on first generation?
-
-    async function findNextGeneration(generation, parent, limit, offsetAmount) {
-        const genOffset = Number(offsetAmount)
-        const childAttributes = [
-            ...spaceAttributes,
-            findTotalSpaceResults(depth, searchQuery, timeRange),
-        ]
-        parent.children = []
-        if (
-            !parent.isExpander &&
-            parent.totalResults > 0 &&
-            (generation === 1 || parent.privacy !== 'private')
-        ) {
-            const nextGeneration = await Space.findAll({
-                where: findSpaceWhere(parent.id, depth, timeRange, searchQuery),
-                attributes: childAttributes,
-                limit,
-                offset: genOffset > 0 ? genOffset : null,
-                order: findOrder(sortBy, sortOrder),
-                include: findSpaceInclude(depth),
-                subQuery: false,
-            })
-            nextGeneration.forEach((rawChild) => {
-                const child = rawChild.toJSON()
-                child.uuid = uuidv4()
-                parent.children.push(child)
-            })
-        }
-        // if hidden spaces, replace last space with expander
-        if (parent.children.length) {
-            if (generation === 1) {
-                if (parent.totalResults > genOffset + parent.children.length) {
-                    parent.children.splice(-1, 1)
-                    const remainingChildren =
-                        parent.totalResults - parent.children.length - genOffset
-                    parent.children.push({
-                        isExpander: true,
-                        id: uuidv4(),
-                        uuid: uuidv4(),
-                        name: `${remainingChildren} more spaces`,
-                    })
-                }
-            } else {
-                if (parent.totalResults > limit) {
-                    parent.children.splice(-1, 1)
-                    const remainingChildren = parent.totalResults - parent.children.length
-                    parent.children.push({
-                        isExpander: true,
-                        id: uuidv4(),
-                        uuid: uuidv4(),
-                        name: `${remainingChildren} more spaces`,
-                    })
-                }
-            }
-        }
-    }
-
-    const rootAttributes = [
-        ...spaceAttributes,
-        findTotalSpaceResults(depth, searchQuery, timeRange),
+    const generationLimits = [7, 3, 3, 3] // space limits per generation (length of array determines max depth)
+    const filterAllGenerations = false // only applies filters to first generation if false
+    const attributes = findSpaceMapAttributes(depth, searchQuery, timeRange, accountId)
+    const defaultOrder = [
+        [sequelize.literal(`totalLikes`), 'DESC'],
+        ['createdAt', 'DESC'],
     ]
-    const findRoot = await Space.findOne({
+
+    const space = await Space.findOne({
         where: { id: spaceId },
-        attributes: rootAttributes,
+        attributes,
         include: [
             {
                 model: Space,
@@ -872,34 +648,71 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
             },
         ],
     })
-    const root = findRoot.toJSON()
-    root.uuid = uuidv4()
-    const findFirstGeneration = await findNextGeneration(1, root, firstGenLimit, offset)
-    const findSecondGeneration = await asyncForEach(root.children, async (child) => {
-        await findNextGeneration(2, child, secondGenLimit, 0)
-    })
-    const findThirdGeneration = await asyncForEach(root.children, async (child) => {
-        await asyncForEach(child.children, async (child2) => {
-            await findNextGeneration(3, child2, thirdGenLimit, 0)
-        })
-    })
-    const findFourthGeneration = await asyncForEach(root.children, async (child) => {
-        await asyncForEach(child.children, async (child2) => {
-            await asyncForEach(child2.children, async (child3) => {
-                await findNextGeneration(4, child3, fourthGenLimit, 0)
-            })
-        })
-    })
+    space.setDataValue('uuid', uuidv4())
 
-    Promise.all([
-        findFirstGeneration,
-        findSecondGeneration,
-        findThirdGeneration,
-        findFourthGeneration,
-    ]).then(() => {
-        if (offset > 0) res.send(root.children)
-        else res.send(root)
-    })
+    async function traverseTree(parentId, generation) {
+        // recursive function used to...
+        return new Promise(async (resolve) => {
+            const applyFilters = generation === 0 || filterAllGenerations
+            const children = await Space.findAll({
+                where: findSpaceMapWhere(parentId, depth, searchQuery, timeRange, applyFilters),
+                attributes,
+                limit: generationLimits[generation],
+                offset: generation === 0 ? +offset : 0,
+                subQuery: false,
+                order: applyFilters ? findOrder(sortBy, sortOrder) : defaultOrder,
+                include: findSpaceMapInclude(depth, applyFilters),
+            })
+
+            // loop through children
+            Promise.all(
+                children.map(
+                    (child) =>
+                        new Promise((resolve) => {
+                            child.setDataValue('uuid', uuidv4())
+                            const { totalResults, privacy, spaceAccess } = child.dataValues
+                            const accessDenied = privacy === 'private' && spaceAccess !== 'active'
+                            // if max depth reached, no grandchildren, or access denied: resolve
+                            if (
+                                !generationLimits[generation + 1] ||
+                                !totalResults ||
+                                accessDenied
+                            ) {
+                                child.setDataValue('children', [])
+                                resolve(child)
+                            } else {
+                                // else recursively re-run tree traveral of child
+                                traverseTree(child.id, generation + 1).then((grandChildren) => {
+                                    // if total spaces > included spaces, replace last space with expander node
+                                    if (totalResults > grandChildren.length) {
+                                        grandChildren.splice(-1, 1)
+                                        const remainingSpaces = totalResults - grandChildren.length
+                                        const expander = {
+                                            expander: true,
+                                            // todo: try using space id and remaining spaces instead of uuid so consistent through transitions
+                                            id: uuidv4(),
+                                            uuid: uuidv4(),
+                                            name: `${remainingSpaces} more spaces`,
+                                        }
+                                        child.setDataValue('children', [...grandChildren, expander])
+                                    } else child.setDataValue('children', grandChildren)
+                                    resolve(child)
+                                })
+                            }
+                        })
+                )
+            )
+                .then((childrenWithDescendants) => resolve(childrenWithDescendants))
+                .catch((error) => resolve(error))
+        })
+    }
+
+    traverseTree(spaceId, 0)
+        .then((children) => {
+            space.setDataValue('children', children)
+            res.status(200).json(space)
+        })
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/suggested-space-handles', (req, res) => {
@@ -908,25 +721,7 @@ router.get('/suggested-space-handles', (req, res) => {
         where: { state: 'active', handle: { [Op.like]: `%${searchQuery}%` } },
         attributes: ['handle'],
     })
-        .then((handles) => {
-            res.json(handles)
-        })
-        .catch((error) => res.status(500).json({ message: 'Error', error }))
-})
-
-router.get('/validate-space-handle', (req, res) => {
-    const { searchQuery } = req.query
-    Space.findAll({
-        where: { handle: searchQuery, state: 'active' },
-        attributes: ['handle'],
-    })
-        .then((spaces) => {
-            if (spaces.length > 0) {
-                res.send('success')
-            } else {
-                res.send('fail')
-            }
-        })
+        .then((handles) => res.status(200).json(handles))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
@@ -961,9 +756,7 @@ router.get('/users-with-access', async (req, res) => {
             },
         ],
     })
-        .then((space) => {
-            res.status(200).send(space.UsersWithAccess.map((u) => u.id))
-        })
+        .then((space) => res.status(200).send(space.UsersWithAccess.map((u) => u.id)))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
@@ -1101,7 +894,7 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                     state: 'open',
                 })
 
-                // todo move parent and ancestors array out of promise and just use promise.all
+                // todo: move parent and ancestors array out of promise and just use promise.all
                 const createAncestorRelationships = await new Promise(async (resolve) => {
                     const parentSpace = await Space.findOne({
                         where: { id: parentId },
@@ -1220,23 +1013,13 @@ router.post('/create-space', authenticateToken, async (req, res) => {
 })
 
 async function isAuthorizedModerator(accountId, spaceId) {
-    // checks the logged in account is the mod of the space (is this actually required? is there a way for hackers to change the request payload?)
-    // todo: try to get this info directly from the db, rather than having to calculate it server side
-    return await User.findOne({
-        where: { id: accountId },
-        include: [
-            {
-                model: Space,
-                as: 'ModeratedSpaces',
-                attributes: ['id'],
-                through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
-            },
-        ],
-    }).then((user) => {
-        return user.ModeratedSpaces.find((space) => space.id === spaceId) ? true : false
+    // checks the logged in account is a mod of the space
+    return SpaceUser.count({
+        where: { relationship: 'moderator', state: 'active', userId: accountId, spaceId },
     })
 }
 
+// todo: update front and back end error handling
 router.post('/update-space-handle', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { spaceId, payload } = req.body
@@ -1910,6 +1693,7 @@ async function attachParentSpace(childId, parentId) {
     return Promise.all([removeRoot, createNewParentRelationship, addNewAncestorsToDescendants])
 }
 
+// todo: remove async from top level function?
 async function removeAncestors(childId, parentId, ancestorIds) {
     // Recursive promise used to remove the correct ancestors from a space when one of its parents is detached and then apply the same logic to each of its descendants.
     // Recursion required in order to confirm that the ancestors being removed at each level are not still present via other pathways up the tree.
@@ -1987,7 +1771,6 @@ async function removeAncestors(childId, parentId, ancestorIds) {
 
 async function detachParentSpace(childId, parentId) {
     // todo: send notifications? (if initiated from child, send notification to parent mods, else to child mods)
-
     const parent = await Space.findOne({
         where: { id: parentId },
         include: {

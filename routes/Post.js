@@ -15,13 +15,7 @@ const fs = require('fs')
 const ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 const authenticateToken = require('../middleware/authenticateToken')
-const {
-    defaultPostAttributes,
-    findPostReactions,
-    findAccountReactions,
-    findPostInclude,
-    postAccess,
-} = require('../Helpers')
+const { findFullPostAttributes, findPostInclude, postAccess } = require('../Helpers')
 const {
     Space,
     SpacePost,
@@ -58,18 +52,10 @@ aws.config.update({
 router.get('/post-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.query
+    const attributes = [postAccess(accountId), ...findFullPostAttributes('Post', accountId)]
+    const include = findPostInclude(accountId)
 
-    const post = await Post.findOne({
-        where: { id: postId },
-        attributes: [
-            postAccess(accountId),
-            ...defaultPostAttributes,
-            ...findPostReactions('Post'),
-            ...findAccountReactions('Post', accountId),
-        ],
-        include: findPostInclude(accountId),
-    })
-
+    const post = await Post.findOne({ where: { id: postId }, attributes, include })
     if (!post) res.status(404).json({ message: 'Post not found' })
     else if (!post.dataValues.access) res.status(401).json({ message: 'Access denied' })
     else if (post.state === 'deleted') res.status(401).json({ message: 'Post deleted' })

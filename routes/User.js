@@ -7,14 +7,12 @@ const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 const {
-    defaultPostAttributes,
     findStartDate,
     findOrder,
     findPostType,
     findInitialPostAttributes,
+    findFullPostAttributes,
     findPostWhere,
-    findPostReactions,
-    findAccountReactions,
     findPostInclude,
 } = require('../Helpers')
 const {
@@ -139,8 +137,9 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
     const startDate = findStartDate(timeRange)
     const type = findPostType(postType)
     const order = findOrder(sortBy, sortOrder)
-    const firstAttributes = findInitialPostAttributes(sortBy, accountId)
     const where = findPostWhere('user', userId, startDate, type, searchQuery)
+    const initialAttributes = findInitialPostAttributes(sortBy, accountId)
+    const fullAttributes = findFullPostAttributes('Post', accountId)
 
     // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
     // Intial query used to find correct posts with pagination and sorting applied.
@@ -152,7 +151,7 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
         order,
         limit: Number(limit),
         offset: Number(offset),
-        attributes: firstAttributes,
+        attributes: initialAttributes,
         having: { ['access']: 1 },
         include: [
             {
@@ -165,11 +164,7 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
 
     const postsWithData = await Post.findAll({
         where: { id: emptyPosts.map((post) => post.id) },
-        attributes: [
-            ...defaultPostAttributes,
-            ...findPostReactions('Post'),
-            ...findAccountReactions('Post', accountId),
-        ],
+        attributes: fullAttributes,
         order,
         include: findPostInclude(accountId),
     })

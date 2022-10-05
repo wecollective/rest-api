@@ -14,7 +14,216 @@ const {
     Weave,
 } = require('./models')
 
+// post literals (model prop used to distinguish between Post and StringPosts)
+function totalPostLikes(model) {
+    return [
+        sequelize.literal(
+            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'like' AND Reaction.state = 'active')`
+        ),
+        'totalLikes',
+    ]
+}
+
+function totalPostComments(model) {
+    return [
+        sequelize.literal(
+            `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = ${model}.id)`
+        ),
+        'totalComments',
+    ]
+}
+
+function totalPostRatings(model) {
+    return [
+        sequelize.literal(
+            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'rating' AND Reaction.state = 'active')`
+        ),
+        'totalRatings',
+    ]
+}
+
+function totalPostReposts(model) {
+    return [
+        sequelize.literal(
+            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'repost' AND Reaction.state = 'active')`
+        ),
+        'totalReposts',
+    ]
+}
+
+function totalPostRatingPoints(model) {
+    return [
+        sequelize.literal(
+            `(SELECT SUM(value) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'rating' AND Reaction.state = 'active')`
+        ),
+        'totalRatingPoints',
+    ]
+}
+
+function totalPostLinks(model) {
+    return [
+        sequelize.literal(
+            `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND Link.type != 'string-post' AND (Link.itemAId = ${model}.id OR Link.itemBId = ${model}.id))`
+        ),
+        'totalLinks',
+    ]
+}
+
+function accountLike(model, accountId) {
+    return [
+        sequelize.literal(`(
+            SELECT COUNT(*) > 0
+            FROM Reactions
+            AS Reaction
+            WHERE Reaction.postId = ${model}.id
+            AND Reaction.userId = ${accountId}
+            AND Reaction.type = 'like'
+            AND Reaction.state = 'active'
+        )`),
+        'accountLike',
+    ]
+}
+
+function accountRating(model, accountId) {
+    return [
+        sequelize.literal(`(
+            SELECT COUNT(*) > 0
+            FROM Reactions
+            AS Reaction
+            WHERE Reaction.postId = ${model}.id
+            AND Reaction.userId = ${accountId}
+            AND Reaction.type = 'rating'
+            AND Reaction.state = 'active'
+        )`),
+        'accountRating',
+    ]
+}
+
+function accountRepost(model, accountId) {
+    return [
+        sequelize.literal(`(
+            SELECT COUNT(*) > 0
+            FROM Reactions
+            AS Reaction
+            WHERE Reaction.postId = ${model}.id
+            AND Reaction.userId = ${accountId}
+            AND Reaction.type = 'repost'
+            AND Reaction.state = 'active'
+        )`),
+        'accountRepost',
+    ]
+}
+
+function accountLink(model, accountId) {
+    return [
+        sequelize.literal(`(
+            SELECT COUNT(*) > 0
+            FROM Links
+            AS Link
+            WHERE Link.state = 'visible'
+            AND Link.type != 'string-post'
+            AND Link.creatorId = ${accountId}
+            AND (Link.itemAId = ${model}.id OR Link.itemBId = ${model}.id)
+        )`),
+        'accountLink',
+    ]
+}
+
+function postAccess(accountId) {
+    // checks number of private spaces post is in = number of those spaces user has access to
+    // reposts excluded so public posts can be reposted into private spaces without blocking access
+    // todo: find more efficient query
+    return [
+        sequelize.literal(`(
+            (SELECT COUNT(*)
+                FROM Spaces
+                WHERE Spaces.state = 'active'
+                AND Spaces.privacy = 'private'
+                AND Spaces.id IN (
+                    SELECT SpacePosts.spaceId
+                    FROM SpacePosts
+                    RIGHT JOIN Posts
+                    ON SpacePosts.postId = Post.id
+                    WHERE SpacePosts.type = 'post'
+                )
+            )
+            = 
+            (SELECT COUNT(*)
+                FROM SpaceUsers
+                WHERE SpaceUsers.userId = ${accountId}
+                AND SpaceUsers.state = 'active'
+                AND SpaceUsers.relationship = 'access'
+                AND SpaceUsers.spaceId IN (
+                    SELECT Spaces.id
+                    FROM Spaces
+                    WHERE Spaces.state = 'active'
+                    AND Spaces.privacy = 'private'
+                    AND Spaces.id IN (
+                        SELECT SpacePosts.spaceId
+                        FROM SpacePosts
+                        RIGHT JOIN Posts
+                        ON SpacePosts.postId = Post.id
+                        WHERE SpacePosts.type = 'post'
+                    )
+                )
+            )
+        )`),
+        'access',
+    ]
+}
+
 // space literal
+const totalSpaceSpaces = [
+    sequelize.literal(`(
+    SELECT COUNT(*)
+        FROM Spaces
+        WHERE Spaces.handle != Space.handle
+        AND Spaces.state = 'active'
+        AND Spaces.id IN (
+            SELECT SpaceAncestors.spaceBId
+            FROM SpaceAncestors
+            RIGHT JOIN Spaces
+            ON SpaceAncestors.spaceBId = Spaces.id
+            WHERE SpaceAncestors.spaceAId = Space.id
+        )
+    )`),
+    'totalSpaces',
+]
+
+const totalSpacePosts = [
+    sequelize.literal(`(
+    SELECT COUNT(*)
+        FROM Posts
+        WHERE Posts.state = 'visible'
+        AND Posts.id IN (
+            SELECT SpacePosts.postId
+            FROM SpacePosts
+            RIGHT JOIN Posts
+            ON SpacePosts.postId = Posts.id
+            WHERE SpacePosts.spaceId = Space.id
+        )
+    )`),
+    'totalPosts',
+]
+
+const totalSpaceUsers = [
+    sequelize.literal(`(
+        SELECT COUNT(*)
+            FROM Users
+            WHERE Users.emailVerified = true
+            AND Users.state = 'active'
+            AND Users.id IN (
+                SELECT SpaceUsers.userId
+                FROM SpaceUsers
+                RIGHT JOIN Users
+                ON SpaceUsers.userId = Users.id
+                WHERE SpaceUsers.spaceId = Space.id
+                AND SpaceUsers.state = 'active'
+            )
+        )`),
+    'totalUsers',
+]
+
 const totalSpaceFollowers = [
     sequelize.literal(`(
         SELECT COUNT(*)
@@ -99,22 +308,6 @@ const totalSpaceRatings = [
     'totalRatings',
 ]
 
-const totalSpacePosts = [
-    sequelize.literal(`(
-        SELECT COUNT(*)
-        FROM Posts
-        WHERE Posts.state = 'visible'
-        AND Posts.id IN (
-            SELECT SpacePosts.postId
-            FROM SpacePosts
-            RIGHT JOIN Posts
-            ON SpacePosts.postId = Posts.id
-            WHERE SpacePosts.spaceId = Space.id
-        )
-    )`),
-    'totalPosts',
-]
-
 const totalSpaceChildren = [
     sequelize.literal(`(
         SELECT COUNT(*)
@@ -126,7 +319,114 @@ const totalSpaceChildren = [
     'totalChildren',
 ]
 
+function spaceAccess(accountId) {
+    // checks direct access to space
+    return [
+        sequelize.literal(`(
+        SELECT SpaceUsers.state
+        FROM SpaceUsers
+        WHERE SpaceUsers.userId = ${accountId}
+        AND (SpaceUsers.relationship = 'access' OR SpaceUsers.relationship = 'pending')
+        AND SpaceUsers.state = 'active'
+        AND SpaceUsers.spaceId = Space.id
+    )`),
+        'spaceAccess',
+    ]
+}
+
+function ancestorAccess(accountId) {
+    // checks number of private ancestors = number of those ancestors user has access to
+    // todo: find more efficient query
+    return [
+        sequelize.literal(`(
+        (SELECT COUNT(*)
+            FROM Spaces
+                WHERE Spaces.state = 'active'
+                AND Spaces.privacy = 'private'
+                AND Spaces.id IN (
+                    SELECT SpaceAncestors.spaceAId
+                    FROM SpaceAncestors
+                    RIGHT JOIN Spaces
+                    ON SpaceAncestors.spaceBId = Space.id
+                )
+        )
+        = 
+        (SELECT COUNT(*)
+            FROM SpaceUsers
+            WHERE SpaceUsers.userId = ${accountId}
+            AND SpaceUsers.state = 'active'
+            AND SpaceUsers.relationship = 'access'
+            AND SpaceUsers.spaceId IN (
+                SELECT Spaces.id
+                FROM Spaces
+                WHERE Spaces.state = 'active'
+                AND Spaces.privacy = 'private'
+                AND Spaces.id IN (
+                    SELECT SpaceAncestors.spaceAId
+                    FROM SpaceAncestors
+                    RIGHT JOIN Spaces
+                    ON SpaceAncestors.spaceBId = Space.id
+                )
+            )
+        )
+    )`),
+        'ancestorAccess',
+    ]
+}
+
+function totalSpaceResults(depth, searchQuery, timeRange) {
+    const startDate = createSQLDate(findStartDate(timeRange))
+    const endDate = createSQLDate(new Date())
+
+    return depth === 'All Contained Spaces'
+        ? [
+              sequelize.literal(`(
+                SELECT COUNT(*)
+                FROM Spaces s
+                WHERE s.id != Space.id
+                AND s.id IN (
+                    SELECT SpaceAncestors.spaceBId
+                    FROM SpaceAncestors
+                    RIGHT JOIN Spaces
+                    ON SpaceAncestors.spaceBId = Spaces.id
+                    WHERE SpaceAncestors.spaceAId = Space.id
+                    AND SpaceAncestors.state = 'open'
+                ) AND (
+                    s.handle LIKE '%${searchQuery}%'
+                    OR s.name LIKE '%${searchQuery}%'
+                    OR s.description LIKE '%${searchQuery}%'
+                ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
+                )`),
+              'totalResults',
+          ]
+        : [
+              sequelize.literal(`(
+                SELECT COUNT(*)
+                FROM Spaces s
+                WHERE s.id IN (
+                    SELECT SpaceParents.spaceBId
+                    FROM SpaceParents
+                    RIGHT JOIN Spaces
+                    ON SpaceParents.spaceAId = Space.id
+                    WHERE SpaceParents.state = 'open'
+                ) AND (
+                    s.handle LIKE '%${searchQuery}%'
+                    OR s.name LIKE '%${searchQuery}%'
+                    OR s.description LIKE '%${searchQuery}%'
+                ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
+                )`),
+              'totalResults',
+          ]
+}
+
 // user literals
+const totalUsers = [
+    sequelize.literal(
+        `(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true AND Users.state = 'active')`
+    ),
+    'totalUsers',
+]
+
 const totalUserPosts = [
     sequelize.literal(`(
         SELECT COUNT(*)
@@ -147,26 +447,9 @@ const totalUserComments = [
     'totalComments',
 ]
 
-// attributes
-const defaultPostAttributes = [
-    'id',
-    'type',
-    'state',
-    'color',
-    'text',
-    'url',
-    'urlImage',
-    'urlDomain',
-    'urlTitle',
-    'urlDescription',
-    'createdAt',
-    'updatedAt',
-]
-
-async function asyncForEach(array, callback) {
-    for (let index = 0; index < array.length; index++) {
-        await callback(array[index], index, array)
-    }
+// general functions
+function createSQLDate(date) {
+    return new Date(date).toISOString().slice(0, 19).replace('T', ' ')
 }
 
 function findStartDate(timeRange) {
@@ -190,6 +473,7 @@ function findOrder(sortBy, sortOrder) {
           ]
 }
 
+// post functions
 function findPostType(type) {
     return type === 'All Types'
         ? [
@@ -207,56 +491,40 @@ function findPostType(type) {
         : type.replace(/\s+/g, '-').toLowerCase()
 }
 
-function postAccess(accountId) {
-    // checks number of private spaces post is in = number of those spaces user has access to
-    // reposts excluded so public posts can be reposted into private spaces without blocking access
-    // todo: find more efficient query
-    return [
-        sequelize.literal(`(
-            (SELECT COUNT(*)
-                FROM Spaces
-                WHERE Spaces.state = 'active'
-                AND Spaces.privacy = 'private'
-                AND Spaces.id IN (
-                    SELECT SpacePosts.spaceId
-                    FROM SpacePosts
-                    RIGHT JOIN Posts
-                    ON SpacePosts.postId = Post.id
-                    WHERE SpacePosts.type = 'post'
-                )
-            )
-            = 
-            (SELECT COUNT(*)
-                FROM SpaceUsers
-                WHERE SpaceUsers.userId = ${accountId}
-                AND SpaceUsers.state = 'active'
-                AND SpaceUsers.relationship = 'access'
-                AND SpaceUsers.spaceId IN (
-                    SELECT Spaces.id
-                    FROM Spaces
-                    WHERE Spaces.state = 'active'
-                    AND Spaces.privacy = 'private'
-                    AND Spaces.id IN (
-                        SELECT SpacePosts.spaceId
-                        FROM SpacePosts
-                        RIGHT JOIN Posts
-                        ON SpacePosts.postId = Post.id
-                        WHERE SpacePosts.type = 'post'
-                    )
-                )
-            )
-        )`),
-        'access',
-    ]
-}
-
 function findInitialPostAttributes(sortBy, accountId) {
     const attributes = ['id', postAccess(accountId)]
-    if (sortBy === 'Comments') attributes.push(totalPostComments)
-    if (sortBy === 'Likes') attributes.push(totalPostLikes)
-    if (sortBy === 'Ratings') attributes.push(totalPostRatings)
-    if (sortBy === 'Reposts') attributes.push(totalPostReposts)
+    if (sortBy === 'Comments') attributes.push(totalPostComments('Post'))
+    if (sortBy === 'Likes') attributes.push(totalPostLikes('Post'))
+    if (sortBy === 'Ratings') attributes.push(totalPostRatings('Post'))
+    if (sortBy === 'Reposts') attributes.push(totalPostReposts('Post'))
     return attributes
+}
+
+function findFullPostAttributes(model, accountId) {
+    return [
+        'id',
+        'type',
+        'state',
+        'color',
+        'text',
+        'url',
+        'urlImage',
+        'urlDomain',
+        'urlTitle',
+        'urlDescription',
+        'createdAt',
+        'updatedAt',
+        totalPostLikes(model),
+        totalPostComments(model),
+        totalPostRatings(model),
+        totalPostReposts(model),
+        totalPostRatingPoints(model),
+        totalPostLinks(model),
+        accountLike(model, accountId),
+        accountRating(model, accountId),
+        accountRepost(model, accountId),
+        accountLink(model, accountId),
+    ]
 }
 
 function findPostThrough(depth) {
@@ -283,103 +551,6 @@ function findPostWhere(location, id, startDate, type, searchQuery) {
         ]
     }
     return where
-}
-
-function findPostReactions(model) {
-    const totalLikes = [
-        sequelize.literal(
-            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'like' AND Reaction.state = 'active')`
-        ),
-        'totalLikes',
-    ]
-
-    const totalComments = [
-        sequelize.literal(
-            `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = ${model}.id)`
-        ),
-        'totalComments',
-    ]
-
-    const totalRatings = [
-        sequelize.literal(
-            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'rating' AND Reaction.state = 'active')`
-        ),
-        'totalRatings',
-    ]
-
-    const totalReposts = [
-        sequelize.literal(
-            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'repost' AND Reaction.state = 'active')`
-        ),
-        'totalReposts',
-    ]
-
-    const totalRatingPoints = [
-        sequelize.literal(
-            `(SELECT SUM(value) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'rating' AND Reaction.state = 'active')`
-        ),
-        'totalRatingPoints',
-    ]
-
-    const totalLinks = [
-        sequelize.literal(
-            `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND Link.type != 'string-post' AND (Link.itemAId = ${model}.id OR Link.itemBId = ${model}.id))`
-        ),
-        'totalLinks',
-    ]
-    return [totalLikes, totalComments, totalRatings, totalReposts, totalRatingPoints, totalLinks]
-}
-
-function findAccountReactions(model, accountId) {
-    const accountLike = [
-        sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Reactions
-            AS Reaction
-            WHERE Reaction.postId = ${model}.id
-            AND Reaction.userId = ${accountId}
-            AND Reaction.type = 'like'
-            AND Reaction.state = 'active'
-        )`),
-        'accountLike',
-    ]
-    const accountRating = [
-        sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Reactions
-            AS Reaction
-            WHERE Reaction.postId = ${model}.id
-            AND Reaction.userId = ${accountId}
-            AND Reaction.type = 'rating'
-            AND Reaction.state = 'active'
-        )`),
-        'accountRating',
-    ]
-    const accountRepost = [
-        sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Reactions
-            AS Reaction
-            WHERE Reaction.postId = ${model}.id
-            AND Reaction.userId = ${accountId}
-            AND Reaction.type = 'repost'
-            AND Reaction.state = 'active'
-        )`),
-        'accountRepost',
-    ]
-    const accountLink = [
-        sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Links
-            AS Link
-            WHERE Link.state = 'visible'
-            AND Link.type != 'string-post'
-            AND Link.creatorId = ${accountId}
-            AND (Link.itemAId = ${model}.id OR Link.itemBId = ${model}.id)
-        )`),
-        'accountLink',
-    ]
-    return [accountLike, accountRating, accountRepost, accountLink]
 }
 
 function findPostInclude(accountId) {
@@ -489,11 +660,7 @@ function findPostInclude(accountId) {
         {
             model: Post,
             as: 'StringPosts',
-            attributes: [
-                ...defaultPostAttributes,
-                ...findPostReactions('StringPosts'),
-                ...findAccountReactions('StringPosts', accountId),
-            ],
+            attributes: findFullPostAttributes('StringPosts', accountId),
             through: {
                 where: { state: 'visible', type: 'string-post' },
                 attributes: ['index', 'relationship'],
@@ -536,8 +703,92 @@ function findPostInclude(accountId) {
     ]
 }
 
+// space functions
+function findSpaceDataAttributes(handle, accountId) {
+    return [
+        'id',
+        'handle',
+        'name',
+        'flagImagePath',
+        'coverImagePath',
+        'privacy',
+        totalSpaceSpaces,
+        totalSpacePosts,
+        handle === 'all' ? totalUsers : totalSpaceUsers,
+        spaceAccess(accountId),
+        ancestorAccess(accountId),
+    ]
+}
+
+function findSpaceMapAttributes(depth, searchQuery, timeRange, accountId) {
+    return [
+        'id',
+        'handle',
+        'name',
+        'description',
+        'privacy',
+        'flagImagePath',
+        'coverImagePath',
+        'createdAt',
+        totalSpaceFollowers,
+        totalSpaceComments,
+        totalSpaceReactions,
+        totalSpaceLikes,
+        totalSpaceRatings,
+        totalSpacePosts,
+        totalSpaceChildren,
+        totalSpaceResults(depth, searchQuery, timeRange),
+        spaceAccess(accountId),
+    ]
+}
+
+function findSpaceMapWhere(parentId, depth, searchQuery, timeRange, applyFilters) {
+    const where = { state: 'active' }
+    if (applyFilters) {
+        if (depth === 'All Contained Spaces') where['$SpaceAncestors.id$'] = parentId
+        else where['$DirectParentSpaces.id$'] = parentId
+        where.createdAt = { [Op.between]: [findStartDate(timeRange), Date.now()] }
+        where[Op.or] = [
+            { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+            { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+            { description: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+        ]
+    } else {
+        where['$DirectParentSpaces.id$'] = parentId
+    }
+    return where
+}
+
+function findSpaceMapInclude(depth, applyFilters) {
+    const include = []
+    if (applyFilters) {
+        if (depth === 'All Contained Spaces') {
+            include.push({
+                model: Space,
+                as: 'SpaceAncestors',
+                attributes: [],
+                through: { attributes: [], where: { state: 'open' } },
+            })
+        } else {
+            include.push({
+                model: Space,
+                as: 'DirectParentSpaces',
+                attributes: [],
+                through: { attributes: [], where: { state: 'open' } },
+            })
+        }
+    } else {
+        include.push({
+            model: Space,
+            as: 'DirectParentSpaces',
+            attributes: [],
+            through: { attributes: [], where: { state: 'open' } },
+        })
+    }
+    return include
+}
+
 module.exports = {
-    defaultPostAttributes,
     totalSpaceFollowers,
     totalSpaceComments,
     totalSpaceReactions,
@@ -547,15 +798,17 @@ module.exports = {
     totalSpaceChildren,
     totalUserPosts,
     totalUserComments,
-    asyncForEach,
     findStartDate,
     findOrder,
     findPostType,
     postAccess,
     findInitialPostAttributes,
+    findFullPostAttributes,
     findPostThrough,
     findPostWhere,
-    findPostReactions,
-    findAccountReactions,
     findPostInclude,
+    findSpaceDataAttributes,
+    findSpaceMapAttributes,
+    findSpaceMapWhere,
+    findSpaceMapInclude,
 }
