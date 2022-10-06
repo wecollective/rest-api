@@ -173,9 +173,10 @@ function postAccess(accountId) {
 }
 
 // space literal
+// rename to total space descendents
 const totalSpaceSpaces = [
     sequelize.literal(`(
-    SELECT COUNT(*)
+        SELECT COUNT(*)
         FROM Spaces
         WHERE Spaces.handle != Space.handle
         AND Spaces.state = 'active'
@@ -326,9 +327,9 @@ function spaceAccess(accountId) {
         SELECT SpaceUsers.state
         FROM SpaceUsers
         WHERE SpaceUsers.userId = ${accountId}
-        AND (SpaceUsers.relationship = 'access' OR SpaceUsers.relationship = 'pending')
-        AND SpaceUsers.state = 'active'
         AND SpaceUsers.spaceId = Space.id
+        AND SpaceUsers.state = 'active'
+        AND (SpaceUsers.relationship = 'access' OR SpaceUsers.relationship = 'pending')
     )`),
         'spaceAccess',
     ]
@@ -348,6 +349,7 @@ function ancestorAccess(accountId) {
                     FROM SpaceAncestors
                     RIGHT JOIN Spaces
                     ON SpaceAncestors.spaceBId = Space.id
+                    WHERE SpaceAncestors.state = 'open'
                 )
         )
         = 
@@ -366,6 +368,7 @@ function ancestorAccess(accountId) {
                     FROM SpaceAncestors
                     RIGHT JOIN Spaces
                     ON SpaceAncestors.spaceBId = Space.id
+                    WHERE SpaceAncestors.state = 'open'
                 )
             )
         )
@@ -374,49 +377,61 @@ function ancestorAccess(accountId) {
     ]
 }
 
-function totalSpaceResults(depth, searchQuery, timeRange) {
+function totalSpaceResults(depth, searchQuery, timeRange, applyFilters) {
     const startDate = createSQLDate(findStartDate(timeRange))
     const endDate = createSQLDate(new Date())
 
-    return depth === 'All Contained Spaces'
-        ? [
-              sequelize.literal(`(
+    if (applyFilters) {
+        return depth === 'All Contained Spaces'
+            ? [
+                  sequelize.literal(`(
+                    SELECT COUNT(*)
+                    FROM Spaces s
+                    WHERE s.id != Space.id
+                    AND s.id IN (
+                        SELECT SpaceAncestors.spaceBId
+                        FROM SpaceAncestors
+                        RIGHT JOIN Spaces
+                        ON SpaceAncestors.spaceBId = Spaces.id
+                        WHERE SpaceAncestors.spaceAId = Space.id
+                        AND SpaceAncestors.state = 'open'
+                    ) AND (
+                        s.handle LIKE '%${searchQuery}%'
+                        OR s.name LIKE '%${searchQuery}%'
+                        OR s.description LIKE '%${searchQuery}%'
+                    ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
+                    )`),
+                  'totalResults',
+              ]
+            : [
+                  sequelize.literal(`(
+                    SELECT COUNT(*)
+                    FROM Spaces s
+                    WHERE s.id IN (
+                        SELECT SpaceParents.spaceBId
+                        FROM SpaceParents
+                        RIGHT JOIN Spaces
+                        ON SpaceParents.spaceAId = Space.id
+                        WHERE SpaceParents.state = 'open'
+                    ) AND (
+                        s.handle LIKE '%${searchQuery}%'
+                        OR s.name LIKE '%${searchQuery}%'
+                        OR s.description LIKE '%${searchQuery}%'
+                    ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
+                    )`),
+                  'totalResults',
+              ]
+    } else {
+        return [
+            sequelize.literal(`(
                 SELECT COUNT(*)
-                FROM Spaces s
-                WHERE s.id != Space.id
-                AND s.id IN (
-                    SELECT SpaceAncestors.spaceBId
-                    FROM SpaceAncestors
-                    RIGHT JOIN Spaces
-                    ON SpaceAncestors.spaceBId = Spaces.id
-                    WHERE SpaceAncestors.spaceAId = Space.id
-                    AND SpaceAncestors.state = 'open'
-                ) AND (
-                    s.handle LIKE '%${searchQuery}%'
-                    OR s.name LIKE '%${searchQuery}%'
-                    OR s.description LIKE '%${searchQuery}%'
-                ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
-                )`),
-              'totalResults',
-          ]
-        : [
-              sequelize.literal(`(
-                SELECT COUNT(*)
-                FROM Spaces s
-                WHERE s.id IN (
-                    SELECT SpaceParents.spaceBId
-                    FROM SpaceParents
-                    RIGHT JOIN Spaces
-                    ON SpaceParents.spaceAId = Space.id
-                    WHERE SpaceParents.state = 'open'
-                ) AND (
-                    s.handle LIKE '%${searchQuery}%'
-                    OR s.name LIKE '%${searchQuery}%'
-                    OR s.description LIKE '%${searchQuery}%'
-                ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
-                )`),
-              'totalResults',
-          ]
+                FROM SpaceParents
+                WHERE SpaceParents.spaceAId = Space.id
+                AND SpaceParents.state = 'open'
+            )`),
+            'totalResults',
+        ]
+    }
 }
 
 // user literals
@@ -720,7 +735,27 @@ function findSpaceDataAttributes(handle, accountId) {
     ]
 }
 
-function findSpaceMapAttributes(depth, searchQuery, timeRange, accountId) {
+function findSpaceSpaceAttributes(accountId) {
+    return [
+        'id',
+        'handle',
+        'name',
+        'description',
+        'flagImagePath',
+        'coverImagePath',
+        'privacy',
+        totalSpaceFollowers,
+        totalSpaceComments,
+        totalSpaceReactions,
+        totalSpaceLikes,
+        totalSpaceRatings,
+        totalSpacePosts,
+        totalSpaceChildren,
+        ancestorAccess(accountId),
+    ]
+}
+
+function findSpaceMapAttributes(depth, searchQuery, timeRange, accountId, applyFilters) {
     return [
         'id',
         'handle',
@@ -737,7 +772,7 @@ function findSpaceMapAttributes(depth, searchQuery, timeRange, accountId) {
         totalSpaceRatings,
         totalSpacePosts,
         totalSpaceChildren,
-        totalSpaceResults(depth, searchQuery, timeRange),
+        totalSpaceResults(depth, searchQuery, timeRange, applyFilters),
         spaceAccess(accountId),
     ]
 }
@@ -808,7 +843,9 @@ module.exports = {
     findPostWhere,
     findPostInclude,
     findSpaceDataAttributes,
+    findSpaceSpaceAttributes,
     findSpaceMapAttributes,
     findSpaceMapWhere,
     findSpaceMapInclude,
+    ancestorAccess,
 }
