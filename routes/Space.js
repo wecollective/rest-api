@@ -39,6 +39,8 @@ const {
     findSpaceMapAttributes,
     findSpaceMapWhere,
     findSpaceMapInclude,
+    findSpaceSpacesWhere,
+    findSpaceSpacesInclude,
     ancestorAccess,
     postAccess,
 } = require('../Helpers')
@@ -54,60 +56,6 @@ const userAttributes = [
     totalUserPosts,
     totalUserComments,
 ]
-
-function findSpaceWhere(spaceId, depth, timeRange, searchQuery) {
-    let where
-    if (depth === 'All Contained Spaces') {
-        where = {
-            '$SpaceAncestors.id$': spaceId,
-            state: 'active',
-            createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
-            [Op.or]: [
-                { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { description: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            ],
-        }
-    }
-    if (depth === 'Only Direct Descendants') {
-        where = {
-            '$DirectParentSpaces.id$': spaceId,
-            state: 'active',
-            createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
-            [Op.or]: [
-                { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { description: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            ],
-        }
-    }
-    return where
-}
-
-function findSpaceInclude(depth) {
-    let include
-    if (depth === 'All Contained Spaces') {
-        include = [
-            {
-                model: Space,
-                as: 'SpaceAncestors',
-                attributes: [],
-                through: { attributes: [], where: { state: 'open' } },
-            },
-        ]
-    }
-    if (depth === 'Only Direct Descendants') {
-        include = [
-            {
-                model: Space,
-                as: 'DirectParentSpaces',
-                attributes: [],
-                through: { attributes: [], where: { state: 'open' } },
-            },
-        ]
-    }
-    return include
-}
 
 function findUserFirstAttributes(sortBy) {
     let firstAttributes = ['id']
@@ -500,13 +448,12 @@ router.get('/space-spaces', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { spaceId, timeRange, sortBy, sortOrder, depth, searchQuery, limit, offset } = req.query
 
-    // todo: apply privacy rules
     Space.findAll({
-        where: findSpaceWhere(spaceId, depth, timeRange, searchQuery),
+        where: findSpaceSpacesWhere(spaceId, depth, timeRange, searchQuery),
         order: findOrder(sortBy, sortOrder),
         attributes: findSpaceSpaceAttributes(accountId),
         having: { ['ancestorAccess']: 1 },
-        include: findSpaceInclude(depth),
+        include: findSpaceSpacesInclude(depth),
         limit: Number(limit) || null,
         offset: Number(offset),
         subQuery: false,

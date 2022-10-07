@@ -761,10 +761,9 @@ function findSpaceMapAttributes(depth, searchQuery, timeRange, accountId, applyF
         'handle',
         'name',
         'description',
-        'privacy',
         'flagImagePath',
         'coverImagePath',
-        'createdAt',
+        'privacy',
         totalSpaceFollowers,
         totalSpaceComments,
         totalSpaceReactions,
@@ -788,39 +787,46 @@ function findSpaceMapWhere(parentId, depth, searchQuery, timeRange, applyFilters
             { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
             { description: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
         ]
-    } else {
-        where['$DirectParentSpaces.id$'] = parentId
-    }
+    } else where['$DirectParentSpaces.id$'] = parentId
     return where
 }
 
 function findSpaceMapInclude(depth, applyFilters) {
-    const include = []
-    if (applyFilters) {
-        if (depth === 'All Contained Spaces') {
-            include.push({
-                model: Space,
-                as: 'SpaceAncestors',
-                attributes: [],
-                through: { attributes: [], where: { state: 'open' } },
-            })
-        } else {
-            include.push({
-                model: Space,
-                as: 'DirectParentSpaces',
-                attributes: [],
-                through: { attributes: [], where: { state: 'open' } },
-            })
-        }
-    } else {
-        include.push({
+    const allSpaces = applyFilters && depth === 'All Contained Spaces'
+    return [
+        {
             model: Space,
-            as: 'DirectParentSpaces',
+            as: allSpaces ? 'SpaceAncestors' : 'DirectParentSpaces',
             attributes: [],
             through: { attributes: [], where: { state: 'open' } },
-        })
+        },
+    ]
+}
+
+function findSpaceSpacesWhere(spaceId, depth, timeRange, searchQuery) {
+    const where = {
+        state: 'active',
+        createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
+        [Op.or]: [
+            { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+            { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+            { description: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+        ],
     }
-    return include
+    if (depth === 'All Contained Spaces') where['$SpaceAncestors.id$'] = spaceId
+    else where['$DirectParentSpaces.id$'] = spaceId
+    return where
+}
+
+function findSpaceSpacesInclude(depth) {
+    return [
+        {
+            model: Space,
+            as: depth === 'All Contained Spaces' ? 'SpaceAncestors' : 'DirectParentSpaces',
+            attributes: [],
+            through: { attributes: [], where: { state: 'open' } },
+        },
+    ]
 }
 
 module.exports = {
@@ -847,5 +853,7 @@ module.exports = {
     findSpaceMapAttributes,
     findSpaceMapWhere,
     findSpaceMapInclude,
+    findSpaceSpacesWhere,
+    findSpaceSpacesInclude,
     ancestorAccess,
 }
