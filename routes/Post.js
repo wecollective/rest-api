@@ -15,7 +15,7 @@ const fs = require('fs')
 const ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 const authenticateToken = require('../middleware/authenticateToken')
-const { findFullPostAttributes, findPostInclude, postAccess } = require('../Helpers')
+const { imageMBLimit, audioMBLimit, findFullPostAttributes, findPostInclude, postAccess } = require('../Helpers')
 const {
     Space,
     SpacePost,
@@ -368,8 +368,6 @@ router.get('/glass-bead-game-data', (req, res) => {
 router.post('/create-post', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { uploadType } = req.query
-    const audioMBLimit = 5
-    const imageMBLimit = 6
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -1244,8 +1242,6 @@ router.post('/update-post-text', authenticateToken, async (req, res) => {
 router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { uploadType } = req.query
-    const audioMBLimit = 5
-    const imageMBLimit = 6
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {

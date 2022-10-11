@@ -14,6 +14,9 @@ const {
     Weave,
 } = require('./models')
 
+const imageMBLimit = 10
+const audioMBLimit = 25
+
 // post literals (model prop used to distinguish between Post and StringPosts)
 function totalPostLikes(model) {
     return [
@@ -830,6 +833,8 @@ function findSpaceSpacesInclude(depth) {
 }
 
 module.exports = {
+    imageMBLimit,
+    audioMBLimit,
     totalSpaceFollowers,
     totalSpaceComments,
     totalSpaceReactions,
