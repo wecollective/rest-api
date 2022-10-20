@@ -174,7 +174,7 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
 
 // POST
 router.post('/find-people', (req, res) => {
-    const { query, blacklist, spaceId } = req.body
+    const { query, spaceId, blacklist } = req.body
     let where = {
         state: 'active',
         [Op.or]: [{ handle: { [Op.like]: `%${query}%` } }, { name: { [Op.like]: `%${query}%` } }],

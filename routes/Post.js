@@ -304,6 +304,7 @@ router.get('/scrape-url', async (req, res) => {
             return data
         })
         if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
+        if (urlData.image[0] === '/') urlData.image = `${new URL(url).hostname}${urlData.image}`
         res.send(urlData)
     } catch (e) {
         console.log('error: ', e)
