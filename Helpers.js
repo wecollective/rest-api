@@ -686,7 +686,7 @@ function findPostInclude(accountId) {
                 {
                     model: User,
                     as: 'Creator',
-                    attributes: ['handle', 'name', 'flagImagePath'],
+                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
                 },
                 {
                     model: PostImage,
