@@ -225,6 +225,12 @@ router.get('/space-data', authenticateToken, async (req, res) => {
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
             },
+            {
+                model: Space,
+                as: 'SpaceAncestors',
+                attributes: ['id'],
+                through: { where: { state: 'open' }, attributes: [] },
+            },
         ],
     })
 
@@ -1722,6 +1728,7 @@ router.post('/respond-to-parent-space-request', authenticateToken, async (req, r
     const accountId = req.user ? req.user.id : null
     const { requestorId, childId, parentId, response } = req.body
     const authorized = await isAuthorizedModerator(accountId, parentId)
+    // todo: check space has not already been deleted (causes bug if accepted after being removed)
 
     if (!accountId || !authorized) res.status(401).json({ message: 'Unauthorized' })
     else {

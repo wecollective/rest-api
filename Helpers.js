@@ -316,9 +316,8 @@ const totalSpaceChildren = [
     sequelize.literal(`(
         SELECT COUNT(*)
         FROM SpaceParents
-        AS VHR
-        WHERE VHR.spaceAId = Space.id
-        AND VHR.state = 'open'
+        WHERE SpaceParents.spaceAId = Space.id
+        AND SpaceParents.state = 'open'
     )`),
     'totalChildren',
 ]
