@@ -177,9 +177,9 @@ router.post('/find-people', (req, res) => {
     const { query, blacklist, spaceId } = req.body
     let where = {
         state: 'active',
-        [Op.not]: [{ id: [0, ...blacklist] }],
         [Op.or]: [{ handle: { [Op.like]: `%${query}%` } }, { name: { [Op.like]: `%${query}%` } }],
     }
+    if (blacklist) where[Op.not] = [{ id: blacklist }]
     let include = []
     if (spaceId) {
         where['$FollowedSpaces.id$'] = spaceId
