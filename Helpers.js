@@ -726,6 +726,7 @@ function findSpaceDataAttributes(handle, accountId) {
         'id',
         'handle',
         'name',
+        'description',
         'flagImagePath',
         'coverImagePath',
         'privacy',

@@ -280,7 +280,7 @@ router.get('/space-about', async (req, res) => {
     const { handle } = req.query
     const aboutData = await Space.findOne({
         where: { handle, state: 'active' },
-        attributes: ['description', 'createdAt'],
+        attributes: ['createdAt'],
         include: [
             {
                 model: User,

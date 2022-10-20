@@ -15,7 +15,13 @@ const fs = require('fs')
 const ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 const authenticateToken = require('../middleware/authenticateToken')
-const { imageMBLimit, audioMBLimit, findFullPostAttributes, findPostInclude, postAccess } = require('../Helpers')
+const {
+    imageMBLimit,
+    audioMBLimit,
+    findFullPostAttributes,
+    findPostInclude,
+    postAccess,
+} = require('../Helpers')
 const {
     Space,
     SpacePost,
