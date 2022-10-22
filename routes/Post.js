@@ -304,7 +304,8 @@ router.get('/scrape-url', async (req, res) => {
             return data
         })
         if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
-        if (urlData.image[0] === '/') urlData.image = `${new URL(url).hostname}${urlData.image}`
+        if (urlData.image[0] === '/')
+            urlData.image = `https://${new URL(url).hostname}${urlData.image}`
         res.send(urlData)
     } catch (e) {
         console.log('error: ', e)
@@ -2432,8 +2433,8 @@ router.post('/respond-to-event', authenticateToken, async (req, res) => {
         })
 
         const updateStatus = previousResponse
-            ? await UserEvent.update({ state: 'removed' }, { where: { id: previousResponse.id } })
-            : await new Promise(async (resolve) => {
+            ? UserEvent.update({ state: 'removed' }, { where: { id: previousResponse.id } })
+            : new Promise(async (resolve) => {
                   const removeOtherResponseTypes = await UserEvent.update(
                       { state: 'removed' },
                       { where: { userId: accountId, eventId, state: 'active' } }
