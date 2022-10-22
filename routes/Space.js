@@ -710,7 +710,7 @@ router.post('/find-spaces', authenticateToken, (req, res) => {
         '$SpaceAncestors.id$': spaceId || 1,
         [Op.or]: [{ handle: { [Op.like]: `%${query}%` } }, { name: { [Op.like]: `%${query}%` } }],
     }
-    if (blacklist) where[Op.not] = [{ id: blacklist }]
+    if (blacklist && blacklist.length) where[Op.not] = [{ id: blacklist }]
 
     Space.findAll({
         where,

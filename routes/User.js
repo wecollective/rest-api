@@ -179,7 +179,7 @@ router.post('/find-people', (req, res) => {
         state: 'active',
         [Op.or]: [{ handle: { [Op.like]: `%${query}%` } }, { name: { [Op.like]: `%${query}%` } }],
     }
-    if (blacklist) where[Op.not] = [{ id: blacklist }]
+    if (blacklist && blacklist.length) where[Op.not] = [{ id: blacklist }]
     let include = []
     if (spaceId) {
         where['$FollowedSpaces.id$'] = spaceId
