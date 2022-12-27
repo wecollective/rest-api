@@ -46,6 +46,9 @@ module.exports = {
                 allowNull: false,
                 type: Sequelize.DATE,
             },
+            mmId: {
+                type: Sequelize.INTEGER,
+            },
         })
     },
     down: (queryInterface, Sequelize) => {

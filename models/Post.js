@@ -18,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
             urlDomain: DataTypes.TEXT,
             urlTitle: DataTypes.TEXT,
             urlDescription: DataTypes.TEXT,
+            mmId: DataTypes.INTEGER,
         },
         {}
     )

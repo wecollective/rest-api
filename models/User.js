@@ -21,6 +21,7 @@ module.exports = (sequelize, DataTypes) => {
             accountVerified: DataTypes.BOOLEAN,
             passwordResetToken: DataTypes.TEXT,
             state: DataTypes.STRING,
+            mmId: DataTypes.INTEGER,
         },
         {}
     )

@@ -14,6 +14,8 @@ module.exports = (sequelize, DataTypes) => {
             postId: DataTypes.INTEGER,
             parentCommentId: DataTypes.INTEGER,
             text: DataTypes.TEXT,
+            mmId: DataTypes.INTEGER,
+            mmCommentNumber: DataTypes.INTEGER,
         },
         {}
     )

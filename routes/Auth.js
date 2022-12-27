@@ -10,6 +10,7 @@ const jwt = require('jsonwebtoken')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const { User, Notification } = require('../models')
+const Op = sequelize.Op
 
 async function verifyRecaptch(reCaptchaToken, res) {
     const secret = config.recaptchaSecretKey
@@ -57,6 +58,44 @@ router.post('/log-in', async (req, res) => {
                 }
             })
         }
+    }
+})
+
+router.post('/verfiy-mm-email', async (req, res) => {
+    const { mmEmail, mmPassword } = req.body
+    const match = await User.findOne({ where: { email: mmEmail, [Op.not]: { mmId: null } } })
+    if (!match) res.status(403).send({ message: 'No matching account found' })
+    else if (match.state !== 'unclaimed')
+        res.status(403).send({ message: 'Account already claimed' })
+    else {
+        const hashedPassword = await bcrypt.hash(mmPassword, 10)
+        const emailToken = crypto.randomBytes(64).toString('hex')
+        const updateAccount = await User.update(
+            { password: hashedPassword, emailToken },
+            { where: { email: mmEmail } }
+        )
+        const sendEmail = await sgMail.send({
+            to: mmEmail,
+            from: {
+                email: 'admin@weco.io',
+                name: 'we { collective }',
+            },
+            subject: 'Verify your email',
+            text: `
+                Hi, we've recieved a request to reclaim your metamodern forum account on weco.io.
+                If this was you, copy and paste the address below to verify your account:
+                http://${config.appURL}?alert=verify-email&token=${emailToken}
+            `,
+            html: `
+                <h1>Hi</h1>
+                <p>We've recieved a request to reclaim your metamodern forum account on weco.io.</p>
+                <p>If this was you, click the link below to verify your account:</p>
+                <a href='${config.appURL}?alert=verify-email&token=${emailToken}'>Verfiy your account</a>
+            `,
+        })
+        Promise.all([updateAccount, sendEmail])
+            .then(() => res.status(200).send('success'))
+            .catch(() => res.status(500).send('error'))
     }
 })
 
@@ -219,7 +258,11 @@ router.post('/verify-email', (req, res) => {
     const { token } = req.body
     User.findOne({ where: { emailToken: token } }).then(async (user) => {
         if (user) {
-            const markEmailVerified = await user.update({ emailVerified: true, emailToken: null })
+            const markEmailVerified = await user.update({
+                emailVerified: true,
+                emailToken: null,
+                state: 'active',
+            })
             const createNotification = Notification.create({
                 ownerId: user.id,
                 type: 'email-verified',
