@@ -483,10 +483,14 @@ function findStartDate(timeRange) {
 function findOrder(sortBy, sortOrder) {
     const direction = sortOrder === 'Ascending' ? 'ASC' : 'DESC'
     return sortBy === 'Date'
-        ? [['createdAt', direction]]
+        ? [
+              ['createdAt', direction],
+              ['id', 'ASC'],
+          ]
         : [
               [sequelize.literal(`total${sortBy}`), direction],
               ['createdAt', 'DESC'],
+              ['id', 'ASC'],
           ]
 }
 
