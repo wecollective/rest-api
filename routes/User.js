@@ -120,14 +120,14 @@ router.get('/all-users', (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
-router.get('/user-data', (req, res) => {
+router.get('/user-data', async (req, res) => {
     const { userHandle } = req.query
-    User.findOne({
+    const user = await User.findOne({
         where: { handle: userHandle },
         attributes: ['id', 'handle', 'name', 'bio', 'flagImagePath', 'coverImagePath', 'createdAt'],
     })
-        .then((user) => res.status(200).json(user))
-        .catch((error) => res.status(200).json({ message: 'Error', error }))
+    if (user) res.status(200).json(user)
+    else res.status(404).json({ message: 'User not found' })
 })
 
 router.get('/user-posts', authenticateToken, async (req, res) => {
