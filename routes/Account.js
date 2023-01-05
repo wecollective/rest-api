@@ -8,6 +8,7 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 const { Space, User, Notification, SpaceUser, UserPost, Post, Weave } = require('../models')
 const ScheduledTasks = require('../ScheduledTasks')
+const { unseenNotifications } = require('../Helpers')
 
 // GET
 router.get('/account-data', authenticateToken, (req, res) => {
@@ -23,34 +24,7 @@ router.get('/account-data', authenticateToken, (req, res) => {
                 'bio',
                 'email',
                 'flagImagePath',
-                [
-                    sequelize.literal(
-                        `(SELECT COUNT(*) FROM Notifications AS Notification WHERE Notification.ownerId = User.id AND Notification.seen = false)`
-                    ),
-                    'unseenNotifications',
-                ],
-            ],
-            include: [
-                {
-                    model: Space,
-                    as: 'FollowedSpaces',
-                    where: { state: 'active' },
-                    required: false,
-                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    through: {
-                        where: { relationship: 'follower', state: 'active' },
-                        attributes: [],
-                    },
-                },
-                {
-                    model: Space,
-                    as: 'ModeratedSpaces',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    through: {
-                        where: { relationship: 'moderator', state: 'active' },
-                        attributes: [],
-                    },
-                },
+                unseenNotifications,
             ],
         })
             .then((user) => res.status(200).send(user))
