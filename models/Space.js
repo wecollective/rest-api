@@ -20,6 +20,7 @@ module.exports = (sequelize, DataTypes) => {
         {}
     )
     Space.associate = function (models) {
+        // todo: Remove 'Space' from aliases so cleaner
         Space.belongsToMany(models.Space, {
             through: models.SpaceParent,
             as: 'DirectParentSpaces',
@@ -37,6 +38,13 @@ module.exports = (sequelize, DataTypes) => {
             as: 'SpaceAncestors',
             foreignKey: 'spaceBId',
             otherKey: 'spaceAId',
+        })
+
+        Space.belongsToMany(models.Space, {
+            through: models.SpaceAncestor,
+            as: 'SpaceDescendents',
+            foreignKey: 'spaceAId',
+            otherKey: 'spaceBId',
         })
 
         // SpacePosts relationship
