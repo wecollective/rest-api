@@ -122,6 +122,37 @@ router.post('/mark-notifications-seen', authenticateToken, (req, res) => {
     }
 })
 
+router.post('/help-message', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { helpMessage } = req.body
+
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const user = await User.findOne({
+            where: { id: accountId },
+            attributes: ['id', 'name', 'handle', 'email'],
+        })
+        sgMail
+            .sendMultiple({
+                to: ['james@weco.io', 'l.currie.clark@protonmail.com'],
+                from: { email: 'admin@weco.io', name: 'we { collective }' },
+                subject: 'Help request',
+                text: `
+                    Help request sent from ${user.name}: https://${config.appURL}/u/${user.handle} (email: ${user.email})
+                    Message: "${helpMessage}"
+                `,
+                html: `
+                    <div>
+                        <p>Help request sent from <a href='${config.appURL}/u/${user.handle}'>${user.name}</a> (email: ${user.email})</p>
+                        <p>Message:</p>
+                        <p>"${helpMessage}"</p>
+                    </div>
+                `,
+            })
+            .then(() => res.status(200).json({ message: 'success' }))
+    }
+})
+
 // move to Space routes?
 router.post('/respond-to-mod-invite', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
