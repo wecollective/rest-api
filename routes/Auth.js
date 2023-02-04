@@ -30,7 +30,10 @@ router.post('/log-in', async (req, res) => {
     if (recaptchaValid) {
         // check user exists
         const matchingUser = await User.findOne({
-            where: { [sequelize.Op.or]: [{ email: emailOrHandle }, { handle: emailOrHandle }] },
+            where: {
+                state: { [Op.not]: 'deleted' },
+                [Op.or]: [{ email: emailOrHandle }, { handle: emailOrHandle }],
+            },
             attributes: ['id', 'password', 'emailVerified', 'state'],
         })
         if (!matchingUser) res.status(404).send({ message: 'User not found' })
@@ -105,8 +108,12 @@ router.post('/register', async (req, res) => {
     const recaptchaValid = await verifyRecaptch(reCaptchaToken, res)
     if (recaptchaValid) {
         // check if handle or email already taken
-        const matchingHandle = await User.findOne({ where: { handle } })
-        const matchingEmail = await User.findOne({ where: { email } })
+        const matchingHandle = await User.findOne({
+            where: { handle, state: { [Op.not]: 'deleted' } },
+        })
+        const matchingEmail = await User.findOne({
+            where: { email, state: { [Op.not]: 'deleted' } },
+        })
         if (matchingHandle) res.status(403).send({ message: 'Handle already taken' })
         else if (matchingEmail) res.status(403).send({ message: 'Email already taken' })
         else {
@@ -162,7 +169,7 @@ router.post('/reset-password-request', async (req, res) => {
     const recaptchaValid = await verifyRecaptch(reCaptchaToken, res)
     if (recaptchaValid) {
         // find user with matching email
-        User.findOne({ where: { email } }).then((user) => {
+        User.findOne({ where: { email, state: { [Op.not]: 'deleted' } } }).then((user) => {
             if (!user) res.status(404).send({ message: 'User not found' })
             else {
                 // update passwordResetToken in db

@@ -6,7 +6,20 @@ const sequelize = require('sequelize')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
-const { Space, User, Notification, SpaceUser, UserPost, Post, Weave } = require('../models')
+const {
+    Space,
+    User,
+    Notification,
+    SpaceUser,
+    UserPost,
+    Post,
+    Comment,
+    Weave,
+    Event,
+    UserEvent,
+    Link,
+    Reaction,
+} = require('../models')
 const ScheduledTasks = require('../ScheduledTasks')
 const { unseenNotifications } = require('../Helpers')
 
@@ -117,6 +130,89 @@ router.post('/mark-notifications-seen', authenticateToken, (req, res) => {
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         Notification.update({ seen: true }, { where: { id: ids, ownerId: accountId } })
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/delete-account', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const removeAccountData = await User.update(
+            {
+                handle: null,
+                name: null,
+                email: null,
+                password: null,
+                bio: null,
+                flagImagePath: null,
+                coverImagePath: null,
+                facebookId: null,
+                emailVerified: false,
+                emailToken: null,
+                passwordResetToken: null,
+                accountVerified: null,
+                mmId: null,
+                state: 'deleted',
+            },
+            { where: { id: accountId } }
+        )
+
+        const removePosts = await Post.update(
+            {
+                state: 'account-deleted',
+                text: null,
+                url: null,
+                urlImage: null,
+                urlDomain: null,
+                urlTitle: null,
+                urlDescription: null,
+                color: null,
+                mmId: null,
+            },
+            { where: { creatorId: accountId } }
+        )
+
+        const removeComments = await Comment.update(
+            {
+                state: 'account-deleted',
+                text: null,
+            },
+            { where: { creatorId: accountId } }
+        )
+
+        const removeLinks = await Link.update(
+            { state: 'account-deleted', description: null },
+            { where: { creatorId: accountId } }
+        )
+
+        // remove reposts? (would need to remove SpacePosts as well...)
+        const removeReactions = await Reaction.update(
+            { state: 'account-deleted', value: null },
+            { where: { userId: accountId } }
+        )
+
+        // need to add creatorId to events so easily updateable
+        // const removeEvents = await Event.update({
+        //     state: 'deleted',
+        //     title: null,
+        // }, { where: { creatorId: accountId } })
+
+        const removeUserEvents = await UserEvent.update(
+            { state: 'account-deleted' },
+            { where: { userId: accountId } }
+        )
+
+        Promise.all([
+            removeAccountData,
+            removePosts,
+            removeComments,
+            removeLinks,
+            removeReactions,
+            removeUserEvents,
+        ])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
