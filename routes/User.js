@@ -10,7 +10,7 @@ const {
     findStartDate,
     findOrder,
     findPostType,
-    findInitialPostAttributes,
+    findInitialPostAttributesWithAccess,
     findFullPostAttributes,
     findPostWhere,
     findPostInclude,
@@ -123,7 +123,7 @@ router.get('/all-users', (req, res) => {
 router.get('/user-data', async (req, res) => {
     const { userHandle } = req.query
     const user = await User.findOne({
-        where: { handle: userHandle },
+        where: { handle: userHandle, state: { [Op.not]: 'deleted' } },
         attributes: ['id', 'handle', 'name', 'bio', 'flagImagePath', 'coverImagePath', 'createdAt'],
     })
     if (user) res.status(200).json(user)
@@ -138,7 +138,7 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
     const type = findPostType(postType)
     const order = findOrder(sortBy, sortOrder)
     const where = findPostWhere('user', userId, startDate, type, searchQuery)
-    const initialAttributes = findInitialPostAttributes(sortBy, accountId)
+    const initialAttributes = findInitialPostAttributesWithAccess(sortBy, accountId)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 
     // Double query used to prevent results being effected by top level where clause and reduce data load on joins.

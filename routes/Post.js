@@ -21,6 +21,9 @@ const {
     findFullPostAttributes,
     findPostInclude,
     postAccess,
+    totalUserPosts,
+    totalUserComments,
+    totalSpacePosts,
 } = require('../Helpers')
 const {
     Space,
@@ -57,6 +60,11 @@ aws.config.update({
     region: 'eu-west-1',
 })
 
+// testing
+router.get('/test', async (req, res) => {
+    console.log('testing!')
+})
+
 // GET
 router.get('/post-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
@@ -64,7 +72,11 @@ router.get('/post-data', authenticateToken, async (req, res) => {
     const attributes = [postAccess(accountId), ...findFullPostAttributes('Post', accountId)]
     const include = findPostInclude(accountId)
 
-    const post = await Post.findOne({ where: { id: postId }, attributes, include })
+    const post = await Post.findOne({
+        where: { id: postId, state: 'visible' },
+        attributes,
+        include,
+    })
     if (!post) res.status(404).json({ message: 'Post not found' })
     else if (!post.dataValues.access) res.status(401).json({ message: 'Access denied' })
     else if (post.state === 'deleted') res.status(401).json({ message: 'Post deleted' })
@@ -110,6 +122,22 @@ router.get('/post-reposts', async (req, res) => {
     })
         .then((reactions) => res.status(200).json(reactions))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
+})
+
+router.get('/post-indirect-spaces', async (req, res) => {
+    const { postId } = req.query
+    const post = await Post.findOne({
+        where: { id: postId },
+        include: [
+            {
+                model: Space,
+                as: 'IndirectSpaces',
+                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                through: { where: { relationship: 'indirect' }, attributes: [] },
+            },
+        ],
+    })
+    res.status(200).json(post.IndirectSpaces)
 })
 
 router.get('/post-ratings', async (req, res) => {
@@ -201,11 +229,11 @@ router.get('/post-comments', (req, res) => {
     Comment.findAll({
         where: {
             postId,
-            state: 'visible',
+            // state: 'visible',
             parentCommentId: null,
         },
         order: [['createdAt', 'ASC']],
-        attributes: ['id', 'parentCommentId', 'text', 'createdAt'],
+        attributes: ['id', 'parentCommentId', 'text', 'state', 'createdAt'],
         include: [
             {
                 model: User,
@@ -3113,7 +3141,7 @@ module.exports = router
 //     //             Promise.all(
 //     //                 comments
 //     //                     .filter((c) => c.reply_to_comment_number)
-//     //                     .map(
+//     //                     .map(s
 //     //                         async (comment) =>
 //     //                             await new Promise(async (resolve) => {
 //     //                                 const matchingUser = await User.findOne({

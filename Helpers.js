@@ -17,6 +17,36 @@ const {
 const imageMBLimit = 10
 const audioMBLimit = 25
 
+// general functions
+function createSQLDate(date) {
+    return new Date(date).toISOString().slice(0, 19).replace('T', ' ')
+}
+
+function findStartDate(timeRange) {
+    let startDate = new Date()
+    let offset = Date.now()
+    if (timeRange === 'Last Hour') offset = 60 * 60 * 1000
+    if (timeRange === 'Last 24 Hours') offset = 24 * 60 * 60 * 1000
+    if (timeRange === 'Last Week') offset = 24 * 60 * 60 * 1000 * 7
+    if (timeRange === 'Last Month') offset = 24 * 60 * 60 * 1000 * 30
+    if (timeRange === 'Last Year') offset = 24 * 60 * 60 * 1000 * 365
+    return startDate.setTime(startDate.getTime() - offset)
+}
+
+function findOrder(sortBy, sortOrder) {
+    const direction = sortOrder === 'Ascending' ? 'ASC' : 'DESC'
+    return sortBy === 'Date'
+        ? [
+              ['createdAt', direction],
+              ['id', 'ASC'],
+          ]
+        : [
+              [sequelize.literal(`total${sortBy}`), direction],
+              ['createdAt', 'DESC'],
+              ['id', 'ASC'],
+          ]
+}
+
 // post literals (model prop used to distinguish between Post and StringPosts)
 function totalPostLikes(model) {
     return [
@@ -323,19 +353,37 @@ const totalSpaceChildren = [
 ]
 
 function spaceAccess(accountId) {
-    // checks direct access to space
+    // checks direct user access to space
+    // used in findSpaceMapAttributes, space-data, find-spaces, and nav-list-child-spaces
     return [
         sequelize.literal(`(
         SELECT SpaceUsers.state
         FROM SpaceUsers
         WHERE SpaceUsers.userId = ${accountId}
         AND SpaceUsers.spaceId = Space.id
-        AND SpaceUsers.state = 'active'
-        AND (SpaceUsers.relationship = 'access' OR SpaceUsers.relationship = 'pending')
+        AND SpaceUsers.relationship = 'access'
+        AND (SpaceUsers.state = 'active' OR SpaceUsers.state = 'pending')
     )`),
         'spaceAccess',
     ]
 }
+
+const restrictedAncestors = [
+    sequelize.literal(`(
+        SELECT Spaces.id
+        FROM Spaces
+        WHERE Spaces.state = 'active'
+        AND Spaces.privacy = 'private'
+        AND Spaces.id IN (
+            SELECT SpaceAncestors.spaceAId
+            FROM SpaceAncestors
+            RIGHT JOIN Spaces
+            ON SpaceAncestors.spaceBId = Space.id
+            WHERE SpaceAncestors.state = 'open'
+        )
+    )`),
+    'restirctedAncestors',
+]
 
 function ancestorAccess(accountId) {
     // checks number of private ancestors = number of those ancestors user has access to
@@ -352,6 +400,7 @@ function ancestorAccess(accountId) {
                     RIGHT JOIN Spaces
                     ON SpaceAncestors.spaceBId = Space.id
                     WHERE SpaceAncestors.state = 'open'
+                    OR SpaceAncestors.state = 'closed'
                 )
         )
         = 
@@ -371,6 +420,7 @@ function ancestorAccess(accountId) {
                     RIGHT JOIN Spaces
                     ON SpaceAncestors.spaceBId = Space.id
                     WHERE SpaceAncestors.state = 'open'
+                    OR SpaceAncestors.state = 'closed'
                 )
             )
         )
@@ -379,17 +429,73 @@ function ancestorAccess(accountId) {
     ]
 }
 
-function totalSpaceResults(depth, searchQuery, timeRange, applyFilters) {
+function isModerator(accountId) {
+    // checks user is mod of space
+    return [
+        sequelize.literal(`(
+            SELECT COUNT(*)
+            FROM SpaceUsers
+            WHERE SpaceUsers.userId = ${accountId}
+            AND SpaceUsers.spaceId = Space.id
+            AND SpaceUsers.relationship = 'moderator'
+            AND SpaceUsers.state = 'active'
+        )`),
+        'isModerator',
+    ]
+}
+
+function isFollowing(accountId) {
+    // checks user is following space
+    return [
+        sequelize.literal(`(
+            SELECT COUNT(*)
+            FROM SpaceUsers
+            WHERE SpaceUsers.userId = ${accountId}
+            AND SpaceUsers.spaceId = Space.id
+            AND SpaceUsers.relationship = 'follower'
+            AND SpaceUsers.state = 'active'
+        )`),
+        'isFollowing',
+    ]
+}
+
+function totalLikesReceivedInSpace(spaceId) {
+    // calculates the total likes recieved by the user in a space
+    return [
+        sequelize.literal(`(
+            SELECT COUNT(*)
+            FROM Reactions
+            WHERE Reactions.state = 'active'
+            AND Reactions.type = 'like'
+            AND Reactions.postId IN (
+                SELECT Posts.id
+                FROM Posts
+                WHERE Posts.state = 'visible'
+                AND Posts.creatorId = User.id
+                AND Posts.id IN (
+                    SELECT SpacePosts.postId
+                    FROM SpacePosts
+                    WHERE SpacePosts.spaceId = ${spaceId}
+                    AND (SpacePosts.relationship = 'indirect' OR SpacePosts.relationship = 'direct')
+                )
+            )
+        )`),
+        'likesReceived',
+    ]
+}
+
+function totalSpaceResults(depth, timeRange, searchQuery) {
+    // todo: move to helpers (requires: timeRange, depth, searchQuery)
     const startDate = createSQLDate(findStartDate(timeRange))
     const endDate = createSQLDate(new Date())
 
-    if (applyFilters) {
-        return depth === 'All Contained Spaces'
-            ? [
-                  sequelize.literal(`(
+    return depth === 'All Contained Spaces'
+        ? [
+              sequelize.literal(`(
                     SELECT COUNT(*)
                     FROM Spaces s
                     WHERE s.id != Space.id
+                    AND s.state = 'active'
                     AND s.id IN (
                         SELECT SpaceAncestors.spaceBId
                         FROM SpaceAncestors
@@ -397,19 +503,21 @@ function totalSpaceResults(depth, searchQuery, timeRange, applyFilters) {
                         ON SpaceAncestors.spaceBId = Spaces.id
                         WHERE SpaceAncestors.spaceAId = Space.id
                         AND SpaceAncestors.state = 'open'
+                        OR SpaceAncestors.state = 'closed'
                     ) AND (
                         s.handle LIKE '%${searchQuery}%'
                         OR s.name LIKE '%${searchQuery}%'
                         OR s.description LIKE '%${searchQuery}%'
                     ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
                     )`),
-                  'totalResults',
-              ]
-            : [
-                  sequelize.literal(`(
+              'totalResults',
+          ]
+        : [
+              sequelize.literal(`(
                     SELECT COUNT(*)
                     FROM Spaces s
-                    WHERE s.id IN (
+                    WHERE s.state = 'active'
+                    AND s.id IN (
                         SELECT SpaceParents.spaceBId
                         FROM SpaceParents
                         RIGHT JOIN Spaces
@@ -421,19 +529,8 @@ function totalSpaceResults(depth, searchQuery, timeRange, applyFilters) {
                         OR s.description LIKE '%${searchQuery}%'
                     ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
                     )`),
-                  'totalResults',
-              ]
-    } else {
-        return [
-            sequelize.literal(`(
-                SELECT COUNT(*)
-                FROM SpaceParents
-                WHERE SpaceParents.spaceAId = Space.id
-                AND SpaceParents.state = 'open'
-            )`),
-            'totalResults',
-        ]
-    }
+              'totalResults',
+          ]
 }
 
 // user literals
@@ -464,35 +561,12 @@ const totalUserComments = [
     'totalComments',
 ]
 
-// general functions
-function createSQLDate(date) {
-    return new Date(date).toISOString().slice(0, 19).replace('T', ' ')
-}
-
-function findStartDate(timeRange) {
-    let startDate = new Date()
-    let offset = Date.now()
-    if (timeRange === 'Last Hour') offset = 60 * 60 * 1000
-    if (timeRange === 'Last 24 Hours') offset = 24 * 60 * 60 * 1000
-    if (timeRange === 'Last Week') offset = 24 * 60 * 60 * 1000 * 7
-    if (timeRange === 'Last Month') offset = 24 * 60 * 60 * 1000 * 30
-    if (timeRange === 'Last Year') offset = 24 * 60 * 60 * 1000 * 365
-    return startDate.setTime(startDate.getTime() - offset)
-}
-
-function findOrder(sortBy, sortOrder) {
-    const direction = sortOrder === 'Ascending' ? 'ASC' : 'DESC'
-    return sortBy === 'Date'
-        ? [
-              ['createdAt', direction],
-              ['id', 'ASC'],
-          ]
-        : [
-              [sequelize.literal(`total${sortBy}`), direction],
-              ['createdAt', 'DESC'],
-              ['id', 'ASC'],
-          ]
-}
+const unseenNotifications = [
+    sequelize.literal(
+        `(SELECT COUNT(*) FROM Notifications AS Notification WHERE Notification.ownerId = User.id AND Notification.seen = false)`
+    ),
+    'unseenNotifications',
+]
 
 // post functions
 function findPostType(type) {
@@ -512,8 +586,19 @@ function findPostType(type) {
         : type.replace(/\s+/g, '-').toLowerCase()
 }
 
-function findInitialPostAttributes(sortBy, accountId) {
+function findInitialPostAttributes(sortBy) {
+    const attributes = ['id']
+    if (sortBy === 'Links') attributes.push(totalPostLinks('Post'))
+    if (sortBy === 'Comments') attributes.push(totalPostComments('Post'))
+    if (sortBy === 'Likes') attributes.push(totalPostLikes('Post'))
+    if (sortBy === 'Ratings') attributes.push(totalPostRatings('Post'))
+    if (sortBy === 'Reposts') attributes.push(totalPostReposts('Post'))
+    return attributes
+}
+
+function findInitialPostAttributesWithAccess(sortBy, accountId) {
     const attributes = ['id', postAccess(accountId)]
+    if (sortBy === 'Links') attributes.push(totalPostLinks('Post'))
     if (sortBy === 'Comments') attributes.push(totalPostComments('Post'))
     if (sortBy === 'Likes') attributes.push(totalPostLikes('Post'))
     if (sortBy === 'Ratings') attributes.push(totalPostRatings('Post'))
@@ -584,17 +669,10 @@ function findPostInclude(accountId) {
         {
             model: Space,
             as: 'DirectSpaces',
-            where: { [Op.not]: { id: 1 } },
+            // where: { [Op.not]: { id: 1 } },
             required: false,
             attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
             through: { where: { relationship: 'direct', type: 'post' }, attributes: [] },
-        },
-        // todo: remove, currently only used in repost modal so should be grabbed there
-        {
-            model: Space,
-            as: 'IndirectSpaces',
-            attributes: ['id', 'handle', 'name', 'flagImagePath'],
-            through: { where: { relationship: 'indirect' }, attributes: [] },
         },
         {
             model: PostImage,
@@ -724,24 +802,6 @@ function findPostInclude(accountId) {
     ]
 }
 
-// space functions
-function findSpaceDataAttributes(handle, accountId) {
-    return [
-        'id',
-        'handle',
-        'name',
-        'description',
-        'flagImagePath',
-        'coverImagePath',
-        'privacy',
-        totalSpaceSpaces,
-        totalSpacePosts,
-        handle === 'all' ? totalUsers : totalSpaceUsers,
-        spaceAccess(accountId),
-        ancestorAccess(accountId),
-    ]
-}
-
 function findSpaceSpaceAttributes(accountId) {
     return [
         'id',
@@ -759,54 +819,6 @@ function findSpaceSpaceAttributes(accountId) {
         totalSpacePosts,
         totalSpaceChildren,
         ancestorAccess(accountId),
-    ]
-}
-
-function findSpaceMapAttributes(depth, searchQuery, timeRange, accountId, applyFilters) {
-    return [
-        'id',
-        'handle',
-        'name',
-        'description',
-        'flagImagePath',
-        'coverImagePath',
-        'privacy',
-        totalSpaceFollowers,
-        totalSpaceComments,
-        totalSpaceReactions,
-        totalSpaceLikes,
-        totalSpaceRatings,
-        totalSpacePosts,
-        totalSpaceChildren,
-        totalSpaceResults(depth, searchQuery, timeRange, applyFilters),
-        spaceAccess(accountId),
-    ]
-}
-
-function findSpaceMapWhere(parentId, depth, searchQuery, timeRange, applyFilters) {
-    const where = { state: 'active' }
-    if (applyFilters) {
-        if (depth === 'All Contained Spaces') where['$SpaceAncestors.id$'] = parentId
-        else where['$DirectParentSpaces.id$'] = parentId
-        where.createdAt = { [Op.between]: [findStartDate(timeRange), Date.now()] }
-        where[Op.or] = [
-            { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            { description: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-        ]
-    } else where['$DirectParentSpaces.id$'] = parentId
-    return where
-}
-
-function findSpaceMapInclude(depth, applyFilters) {
-    const allSpaces = applyFilters && depth === 'All Contained Spaces'
-    return [
-        {
-            model: Space,
-            as: allSpaces ? 'SpaceAncestors' : 'DirectParentSpaces',
-            attributes: [],
-            through: { attributes: [], where: { state: 'open' } },
-        },
     ]
 }
 
@@ -839,30 +851,37 @@ function findSpaceSpacesInclude(depth) {
 module.exports = {
     imageMBLimit,
     audioMBLimit,
+    totalUsers,
+    totalSpaceUsers,
     totalSpaceFollowers,
     totalSpaceComments,
     totalSpaceReactions,
     totalSpaceLikes,
     totalSpaceRatings,
     totalSpacePosts,
+    totalSpaceSpaces,
     totalSpaceChildren,
     totalUserPosts,
     totalUserComments,
+    unseenNotifications,
     findStartDate,
     findOrder,
     findPostType,
     postAccess,
     findInitialPostAttributes,
+    findInitialPostAttributesWithAccess,
     findFullPostAttributes,
     findPostThrough,
     findPostWhere,
     findPostInclude,
-    findSpaceDataAttributes,
     findSpaceSpaceAttributes,
-    findSpaceMapAttributes,
-    findSpaceMapWhere,
-    findSpaceMapInclude,
+    totalSpaceResults,
     findSpaceSpacesWhere,
     findSpaceSpacesInclude,
+    spaceAccess,
     ancestorAccess,
+    isModerator,
+    isFollowing,
+    totalLikesReceivedInSpace,
+    restrictedAncestors,
 }
