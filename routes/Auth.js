@@ -1,7 +1,7 @@
 require('dotenv').config()
 const express = require('express')
 const router = express.Router()
-const config = require('../Config')
+const { appURL, recaptchaSecretKey } = require('../Config')
 const sequelize = require('sequelize')
 const bcrypt = require('bcrypt')
 const crypto = require('crypto')
@@ -12,46 +12,41 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const { User, Notification } = require('../models')
 const Op = sequelize.Op
 
-async function verifyRecaptch(reCaptchaToken, res) {
-    const secret = config.recaptchaSecretKey
+async function verifyRecaptch(reCaptchaToken) {
+    const secret = recaptchaSecretKey
     const url = 'https://www.google.com/recaptcha/api/siteverify'
     const response = await axios.post(`${url}?secret=${secret}&response=${reCaptchaToken}`)
-    if (!response.data.success) res.status(400).send({ message: 'Recaptcha request failed' })
-    else if (response.data.score < 0.5) res.status(403).send({ message: 'Recaptcha score < 0.5' })
-    else return true
+    return response.data.success && response.data.score > 0.5
 }
 
 // POST
 router.post('/log-in', async (req, res) => {
     const { reCaptchaToken, emailOrHandle, password } = req.body
-    // todo: sanitise email and handle to avoid sql injection attacks
     // verify recaptcha
-    const recaptchaValid = await verifyRecaptch(reCaptchaToken, res)
-    if (recaptchaValid) {
+    const validRecaptcha = await verifyRecaptch(reCaptchaToken)
+    if (!validRecaptcha) res.status(403).json({ message: 'Recaptcha failed' })
+    else {
         // check user exists
-        const matchingUser = await User.findOne({
-            where: {
-                state: { [Op.not]: 'deleted' },
-                [Op.or]: [{ email: emailOrHandle }, { handle: emailOrHandle }],
-            },
+        const user = await User.findOne({
+            where: { [Op.or]: [{ email: emailOrHandle }, { handle: emailOrHandle }] },
             attributes: ['id', 'password', 'emailVerified', 'state'],
         })
-        if (!matchingUser) res.status(404).send({ message: 'User not found' })
-        else if (matchingUser.state === 'spam') res.status(403).send({ message: 'Spam account' })
+        if (!user) res.status(404).json({ message: 'User not found' })
+        else if (user.state === 'spam') res.status(403).json({ message: 'Spam account' })
         else {
             // check password is correct
-            bcrypt.compare(password, matchingUser.password, function (error, success) {
-                if (!success) res.status(403).send({ message: 'Incorrect password' })
+            bcrypt.compare(password, user.password, function (error, success) {
+                if (!success) res.status(403).json({ message: 'Incorrect password' })
                 else {
                     // check email is verified
-                    if (!matchingUser.emailVerified)
-                        res.status(403).send({
+                    if (!user.emailVerified)
+                        res.status(403).json({
                             message: 'Email not yet verified',
-                            userId: matchingUser.id,
+                            userId: user.id,
                         })
                     else {
                         // create access token
-                        const payload = { id: matchingUser.id }
+                        const payload = { id: user.id }
                         const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
                             expiresIn: '3d',
                         })
@@ -87,13 +82,13 @@ router.post('/verfiy-mm-email', async (req, res) => {
             text: `
                 Hi, we've recieved a request to reclaim your metamodern forum account on weco.io.
                 If this was you, copy and paste the address below to verify your account:
-                http://${config.appURL}?alert=verify-email&token=${emailToken}
+                http://${appURL}?alert=verify-email&token=${emailToken}
             `,
             html: `
                 <h1>Hi</h1>
                 <p>We've recieved a request to reclaim your metamodern forum account on weco.io.</p>
                 <p>If this was you, click the link below to verify your account:</p>
-                <a href='${config.appURL}?alert=verify-email&token=${emailToken}'>Verfiy your account</a>
+                <a href='${appURL}?alert=verify-email&token=${emailToken}'>Verfiy your account</a>
             `,
         })
         Promise.all([updateAccount, sendEmail])
@@ -105,22 +100,19 @@ router.post('/verfiy-mm-email', async (req, res) => {
 router.post('/register', async (req, res) => {
     const { reCaptchaToken, handle, name, email, password } = req.body
     // verify recaptcha
-    const recaptchaValid = await verifyRecaptch(reCaptchaToken, res)
-    if (recaptchaValid) {
+    const validRecaptcha = await verifyRecaptch(reCaptchaToken)
+    if (!validRecaptcha) res.status(403).json({ message: 'Recaptcha failed' })
+    else {
         // check if handle or email already taken
-        const matchingHandle = await User.findOne({
-            where: { handle, state: { [Op.not]: 'deleted' } },
-        })
-        const matchingEmail = await User.findOne({
-            where: { email, state: { [Op.not]: 'deleted' } },
-        })
-        if (matchingHandle) res.status(403).send({ message: 'Handle already taken' })
-        else if (matchingEmail) res.status(403).send({ message: 'Email already taken' })
+        const matchingHandle = await User.findOne({ where: { handle } })
+        const matchingEmail = await User.findOne({ where: { email } })
+        if (matchingHandle) res.status(403).json({ message: 'Handle already taken' })
+        else if (matchingEmail) res.status(403).json({ message: 'Email already taken' })
         else {
             // create account and send verification email
             const hashedPassword = await bcrypt.hash(password, 10)
             const emailToken = crypto.randomBytes(64).toString('hex')
-            const createUserAndNotification = await User.create({
+            const createUser = await User.create({
                 handle,
                 name,
                 email,
@@ -128,156 +120,132 @@ router.post('/register', async (req, res) => {
                 emailVerified: false,
                 emailToken,
                 state: 'active',
-            }).then((user) => {
-                Notification.create({
-                    ownerId: user.id,
-                    type: 'welcome-message',
-                    seen: false,
-                })
             })
-            const message = {
+            const createNotification = await Notification.create({
+                ownerId: createUser.id,
+                type: 'welcome-message',
+                seen: false,
+            })
+            const sendEmail = await sgMail.send({
                 to: email,
-                from: {
-                    email: 'admin@weco.io',
-                    name: 'we { collective }',
-                },
+                from: { email: 'admin@weco.io', name: 'we { collective }' },
                 subject: 'Verify your email',
                 text: `
                     Hi, thanks for creating an account on weco.
                     Please copy and paste the address below to verify your email address:
-                    http://${config.appURL}?alert=verify-email&token=${emailToken}
+                    http://${appURL}?alert=verify-email&token=${emailToken}
                 `,
                 html: `
                     <h1>Hi</h1>
                     <p>Thanks for creating an account on weco.</p>
                     <p>Please click the link below to verify your account:</p>
-                    <a href='${config.appURL}?alert=verify-email&token=${emailToken}'>Verfiy your account</a>
+                    <a href='${appURL}?alert=verify-email&token=${emailToken}'>Verfiy your account</a>
                 `,
-            }
-            const sendEmail = await sgMail.send(message)
-            Promise.all([createUserAndNotification, sendEmail])
-                .then(res.status(200).send({ message: 'Success' }))
+            })
+            Promise.all([createUser, createNotification, sendEmail])
+                .then(res.status(200).json({ message: 'Success' }))
                 .catch((error) => console.log('error: ', error))
         }
     }
 })
 
 router.post('/reset-password-request', async (req, res) => {
-    console.log(req.body)
     const { reCaptchaToken, email } = req.body
-    // verify recaptcha
-    const recaptchaValid = await verifyRecaptch(reCaptchaToken, res)
-    if (recaptchaValid) {
-        // find user with matching email
-        User.findOne({ where: { email, state: { [Op.not]: 'deleted' } } }).then((user) => {
-            if (!user) res.status(404).send({ message: 'User not found' })
-            else {
-                // update passwordResetToken in db
-                const passwordResetToken = crypto.randomBytes(64).toString('hex')
-                user.update({ passwordResetToken }).then(() => {
-                    // send email to user with password reset link
-                    sgMail
-                        .send({
-                            to: email,
-                            from: {
-                                email: 'admin@weco.io',
-                                name: 'we { collective }',
-                            },
-                            subject: 'Reset your password',
-                            text: `
-                            Hi, we recieved a request to reset your password.
-                            If that's correct, copy and paste the address below to set a new password:
-                            http://${config.appURL}?alert=reset-password&token=${passwordResetToken}
-                        `,
-                            html: `
-                            <p>Hi, we recieved a request to reset your password on weco.</p>
-                            <p>If that's correct click the link below to set a new password:</p>
-                            <a href='${config.appURL}?alert=reset-password&token=${passwordResetToken}'>Set new password</a>
-                        `,
-                        })
-                        .then(res.status(200).send({ message: 'Email sent' }))
-                        .catch((error) => console.error(error))
-                })
-            }
-        })
+    const validRecaptcha = await verifyRecaptch(reCaptchaToken)
+    if (!validRecaptcha) res.status(403).json({ message: 'Recaptcha failed' })
+    else {
+        const user = await User.findOne({ where: { email } })
+        if (!user) res.status(404).send({ message: 'User not found' })
+        else {
+            const passwordResetToken = crypto.randomBytes(64).toString('hex')
+            const createResetToken = await user.update({ passwordResetToken })
+            const sendEmail = await sgMail.send({
+                to: email,
+                from: { email: 'admin@weco.io', name: 'we { collective }' },
+                subject: 'Reset your password',
+                text: `
+                    Hi, we recieved a request to reset your password.
+                    If that's correct, copy and paste the address below to set a new password:
+                    http://${appURL}?alert=reset-password&token=${passwordResetToken}
+                `,
+                html: `
+                    <p>Hi, we recieved a request to reset your password on weco.</p>
+                    <p>If that's correct click the link below to set a new password:</p>
+                    <a href='${appURL}?alert=reset-password&token=${passwordResetToken}'>Set new password</a>
+                `,
+            })
+
+            Promise.all([createResetToken, sendEmail])
+                .then(() => res.status(200).send({ message: 'Success' }))
+                .catch((error) => res.status(500).send(error))
+        }
     }
 })
 
-// todo: add recaptcha token
 router.post('/reset-password', async (req, res) => {
-    const { token, newPassword } = req.body
-
-    User.findOne({ where: { passwordResetToken: token } }).then(async (user) => {
-        if (user) {
-            let hashedPassword = await bcrypt.hash(newPassword, 10)
-            user.update({ password: hashedPassword, passwordResetToken: null })
-            res.send('success')
-        } else {
-            res.send('invalid-token')
-        }
-    })
+    const { password, token } = req.body
+    const user = await User.findOne({ where: { passwordResetToken: token } })
+    if (!user) res.status(404).send({ message: 'Invalid token' })
+    else {
+        const hashedPassword = await bcrypt.hash(password, 10)
+        user.update({ password: hashedPassword, passwordResetToken: null })
+            .then(() => res.status(200).send({ message: 'Success' }))
+            .catch((error) => res.status(500).send(error))
+    }
 })
 
-// todo: add recaptcha token
 router.post('/resend-verification-email', async (req, res) => {
     const { userId } = req.body
-    let token = crypto.randomBytes(64).toString('hex')
+    const token = crypto.randomBytes(64).toString('hex')
+    const user = await User.findOne({ where: { id: userId } })
+    if (!user) res.status(404).send({ message: 'User not found' })
+    else {
+        const updateEmailToken = await user.update({ emailToken: token })
+        const sendVerificationEmail = await sgMail.send({
+            to: user.email,
+            from: {
+                email: 'admin@weco.io',
+                name: 'we { collective }',
+            },
+            subject: 'Verify your email',
+            text: `
+                Hi, thanks for creating an account on weco.
+                Please copy and paste the address below to verify your email address:
+                http://${appURL}?alert=verify-email&token=${token}
+            `,
+            html: `
+                <h1>Hi</h1>
+                <p>Thanks for creating an account on weco.</p>
+                <p>Please click the link below to verify your account:</p>
+                <a href='${appURL}?alert=verify-email&token=${token}'>Verfiy your account</a>
+            `,
+        })
 
-    User.findOne({ where: { id: userId } }).then((user) => {
-        if (user) {
-            user.update({ emailToken: token })
-            let message = {
-                to: user.email,
-                from: {
-                    email: 'admin@weco.io',
-                    name: 'we { collective }',
-                },
-                subject: 'Verify your email',
-                text: `
-                        Hi, thanks for creating an account on weco.
-                        Please copy and paste the address below to verify your email address:
-                        http://${config.appURL}?alert=verify-email&token=${token}
-                    `,
-                html: `
-                        <h1>Hi</h1>
-                        <p>Thanks for creating an account on weco.</p>
-                        <p>Please click the link below to verify your account:</p>
-                        <a href='${config.appURL}?alert=verify-email&token=${token}'>Verfiy your account</a>
-                    `,
-            }
-            sgMail
-                .send(message)
-                .then(() => {
-                    console.log('Email sent')
-                })
-                .catch((error) => {
-                    console.error(error)
-                })
-            res.send('success')
-        } else {
-            res.send('user-not-found')
-        }
-    })
+        Promise.all([updateEmailToken, sendVerificationEmail])
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).send(error))
+    }
 })
 
-// todo: add recaptcha token
-router.post('/verify-email', (req, res) => {
+router.post('/verify-email', async (req, res) => {
     const { token } = req.body
-    User.findOne({ where: { emailToken: token } }).then(async (user) => {
-        if (user) {
-            const markEmailVerified = await user.update({
-                emailVerified: true,
-                emailToken: null,
-                state: 'active',
-            })
-            const createNotification = Notification.create({
-                ownerId: user.id,
-                type: 'email-verified',
-                seen: false,
-            })
-            Promise.all([markEmailVerified, createNotification]).then(res.send('success'))
-        } else res.send(`Sorry, we couldn't find a user with that email token.`)
-    })
+    const user = await User.findOne({ where: { emailToken: token } })
+    if (!user) res.status(404).send({ message: 'Invalid token' })
+    else {
+        const markEmailVerified = await user.update({
+            emailVerified: true,
+            emailToken: null,
+            state: 'active',
+        })
+        const createNotification = Notification.create({
+            ownerId: user.id,
+            type: 'email-verified',
+            seen: false,
+        })
+        Promise.all([markEmailVerified, createNotification])
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).send(error))
+    }
 })
 
 module.exports = router
