@@ -26,33 +26,25 @@ router.post('/log-in', async (req, res) => {
     const validRecaptcha = await verifyRecaptch(reCaptchaToken)
     if (!validRecaptcha) res.status(403).json({ message: 'Recaptcha failed' })
     else {
-        // check user exists
         const user = await User.findOne({
             where: { [Op.or]: [{ email: emailOrHandle }, { handle: emailOrHandle }] },
             attributes: ['id', 'password', 'emailVerified', 'state'],
         })
         if (!user) res.status(404).json({ message: 'User not found' })
         else if (user.state === 'spam') res.status(403).json({ message: 'Spam account' })
+        else if (!user.emailVerified) res.status(403).json({ message: 'Email not yet verified' })
         else {
             // check password is correct
             bcrypt.compare(password, user.password, function (error, success) {
                 if (!success) res.status(403).json({ message: 'Incorrect password' })
                 else {
-                    // check email is verified
-                    if (!user.emailVerified)
-                        res.status(403).json({
-                            message: 'Email not yet verified',
-                            userId: user.id,
-                        })
-                    else {
-                        // create access token
-                        const payload = { id: user.id }
-                        const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
-                            expiresIn: '3d',
-                        })
-                        // const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' })
-                        res.status(200).send(accessToken)
-                    }
+                    // create access token
+                    const payload = { id: user.id }
+                    const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
+                        expiresIn: '3d',
+                    })
+                    // const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' })
+                    res.status(200).send(accessToken)
                 }
             })
         }
@@ -106,8 +98,8 @@ router.post('/register', async (req, res) => {
         // check if handle or email already taken
         const matchingHandle = await User.findOne({ where: { handle } })
         const matchingEmail = await User.findOne({ where: { email } })
-        if (matchingHandle) res.status(403).json({ message: 'Handle already taken' })
-        else if (matchingEmail) res.status(403).json({ message: 'Email already taken' })
+        if (matchingHandle) res.status(403).json({ message: 'Handle taken' })
+        else if (matchingEmail) res.status(403).json({ message: 'Email taken' })
         else {
             // create account and send verification email
             const hashedPassword = await bcrypt.hash(password, 10)
@@ -203,10 +195,7 @@ router.post('/resend-verification-email', async (req, res) => {
         const updateEmailToken = await user.update({ emailToken: token })
         const sendVerificationEmail = await sgMail.send({
             to: user.email,
-            from: {
-                email: 'admin@weco.io',
-                name: 'we { collective }',
-            },
+            from: { email: 'admin@weco.io', name: 'we { collective }' },
             subject: 'Verify your email',
             text: `
                 Hi, thanks for creating an account on weco.
