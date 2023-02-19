@@ -227,11 +227,7 @@ router.get('/post-comments', (req, res) => {
     const { postId } = req.query
 
     Comment.findAll({
-        where: {
-            postId,
-            // state: 'visible',
-            parentCommentId: null,
-        },
+        where: { postId, parentCommentId: null },
         order: [['createdAt', 'ASC']],
         attributes: ['id', 'parentCommentId', 'text', 'state', 'createdAt'],
         include: [
@@ -246,7 +242,15 @@ router.get('/post-comments', (req, res) => {
                 separate: true,
                 where: { state: 'visible' },
                 order: [['createdAt', 'ASC']],
-                attributes: ['id', 'creatorId', 'parentCommentId', 'postId', 'text', 'createdAt'],
+                attributes: [
+                    'id',
+                    'creatorId',
+                    'parentCommentId',
+                    'postId',
+                    'text',
+                    'state',
+                    'createdAt',
+                ],
                 include: [
                     {
                         model: User,
