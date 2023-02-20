@@ -761,8 +761,8 @@ function findPostInclude(accountId) {
             as: 'StringPosts',
             attributes: findFullPostAttributes('StringPosts', accountId),
             through: {
-                where: { state: 'visible', type: 'string-post' },
-                attributes: ['index', 'relationship'],
+                where: { type: 'string-post' },
+                attributes: ['index', 'relationship', 'state'],
             },
             include: [
                 {
@@ -793,7 +793,7 @@ function findPostInclude(accountId) {
         {
             model: User,
             as: 'StringPlayers',
-            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
             through: {
                 where: { type: 'weave' },
                 attributes: ['index', 'state', 'color'],
