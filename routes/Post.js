@@ -229,7 +229,7 @@ router.get('/post-comments', (req, res) => {
     Comment.findAll({
         where: { postId, parentCommentId: null },
         order: [['createdAt', 'ASC']],
-        attributes: ['id', 'parentCommentId', 'text', 'state', 'createdAt'],
+        attributes: ['id', 'postId', 'text', 'state', 'createdAt', 'updatedAt'],
         include: [
             {
                 model: User,
@@ -244,12 +244,12 @@ router.get('/post-comments', (req, res) => {
                 order: [['createdAt', 'ASC']],
                 attributes: [
                     'id',
-                    'creatorId',
-                    'parentCommentId',
                     'postId',
+                    'parentCommentId',
                     'text',
                     'state',
                     'createdAt',
+                    'updatedAt',
                 ],
                 include: [
                     {
@@ -1211,7 +1211,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
     }
 })
 
-router.post('/update-post-text', authenticateToken, async (req, res) => {
+router.post('/update-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId, type, text, mentions, creatorName, creatorHandle } = req.body
     const mentionType = type.includes('string-') ? 'bead' : 'post'
@@ -2272,7 +2272,7 @@ router.post('/remove-link', authenticateToken, (req, res) => {
     }
 })
 
-router.post('/submit-comment', authenticateToken, async (req, res) => {
+router.post('/create-comment', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { text, postId, commentId, replyId, spaceId, mentions } = req.body
 
@@ -2368,7 +2368,7 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                       subject: 'New notification',
                       text: `
                             Hi ${post.Creator.name}, ${account.name} just commented on your post on weco:
-                            http://${config.appURL}/p/${postId}
+                            http://${config.appURL}/p/${postId}?commentId=${newComment.id}
                         `,
                       html: `
                             <p>
@@ -2376,7 +2376,7 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                                 <br/>
                                 <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
                                 just commented on your
-                                <a href='${config.appURL}/p/${postId}'>post</a>
+                                <a href='${config.appURL}/p/${postId}?commentId=${newComment.id}'>post</a>
                                 on weco
                             </p>
                         `,
@@ -2404,7 +2404,7 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                       subject: 'New notification',
                       text: `
                             Hi ${comment.Creator.name}, ${account.name} just replied to your comment on weco:
-                            http://${config.appURL}/p/${postId}
+                            http://${config.appURL}/p/${postId}?commentId=${newComment.id}
                         `,
                       html: `
                             <p>
@@ -2412,7 +2412,7 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                                 <br/>
                                 <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
                                 just replied to your
-                                <a href='${config.appURL}/p/${postId}'>comment</a>
+                                <a href='${config.appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
                                 on weco
                             </p>
                         `,
@@ -2440,7 +2440,7 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                       subject: 'New notification',
                       text: `
                               Hi ${reply.Creator.name}, ${account.name} just replied to your comment on weco:
-                              http://${config.appURL}/p/${postId}
+                              http://${config.appURL}/p/${postId}?commentId=${newComment.id}
                           `,
                       html: `
                               <p>
@@ -2448,7 +2448,7 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                                   <br/>
                                   <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
                                   just replied to your
-                                  <a href='${config.appURL}/p/${postId}'>comment</a>
+                                  <a href='${config.appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
                                   on weco
                               </p>
                           `,
@@ -2479,7 +2479,7 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                                 subject: 'New notification',
                                 text: `
                                     Hi ${user.name}, ${account.name} just mentioned you in a comment on weco:
-                                    http://${config.appURL}/p/${postId}
+                                    http://${config.appURL}/p/${postId}?commentId=${newComment.id}
                                 `,
                                 html: `
                                     <p>
@@ -2487,7 +2487,7 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
                                         <br/>
                                         <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
                                         just mentioned you in a
-                                        <a href='${config.appURL}/p/${postId}'>comment</a>
+                                        <a href='${config.appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
                                         on weco
                                     </p>
                                 `,
@@ -2502,6 +2502,75 @@ router.post('/submit-comment', authenticateToken, async (req, res) => {
 
         Promise.all([notifyPostCreator, notifyCommentCreator, notifyReplyCreator, notifyMentions])
             .then(() => res.status(200).json(newComment))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/update-comment', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId, commentId, text, mentions } = req.body
+
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const account = await User.findOne({
+            where: { id: accountId },
+            attributes: ['name', 'handle'],
+        })
+
+        const mentionedUsers = await User.findAll({
+            where: { handle: mentions, state: 'active' },
+            attributes: ['id', 'name', 'email'],
+        })
+
+        const updateComment = await Comment.update(
+            { text: text || null },
+            { where: { id: commentId, creatorId: accountId } }
+        )
+
+        const notifyMentions = await Promise.all(
+            mentionedUsers
+                .filter((u) => u.id !== accountId)
+                .map(
+                    (user) =>
+                        new Promise(async (resolve) => {
+                            const sendNotification = await Notification.create({
+                                ownerId: user.id,
+                                type: 'comment-mention',
+                                seen: false,
+                                userId: accountId,
+                                postId,
+                                commentId,
+                            })
+
+                            const sendEmail = await sgMail.send({
+                                to: user.email,
+                                from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                subject: 'New notification',
+                                text: `
+                                    Hi ${user.name}, ${account.name} just mentioned you in a comment on weco:
+                                    http://${config.appURL}/p/${postId}?commentId=${commentId}
+                                `,
+                                html: `
+                                    <p>
+                                        Hi ${user.name},
+                                        <br/>
+                                        <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
+                                        just mentioned you in a
+                                        <a href='${config.appURL}/p/${postId}?commentId=${commentId}'>comment</a>
+                                        on weco
+                                    </p>
+                                `,
+                            })
+
+                            Promise.all([sendNotification, sendEmail])
+                                .then(() => resolve())
+                                .catch((error) => resolve(error))
+                        })
+                )
+        )
+
+        Promise.all([updateComment, notifyMentions])
+            .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
