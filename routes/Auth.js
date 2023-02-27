@@ -41,7 +41,7 @@ router.post('/log-in', async (req, res) => {
                     // create access token
                     const payload = { id: user.id }
                     const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
-                        expiresIn: '3d',
+                        expiresIn: '7d',
                     })
                     // const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' })
                     res.status(200).send(accessToken)
