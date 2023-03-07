@@ -933,7 +933,7 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
     // currently used in both getSpaceMapData and getSpaceMapChildren in SpaceContext
     const accountId = req.user ? req.user.id : null
     // todo: use post request and req.body instead?
-    const { spaceId, sortBy, sortOrder, timeRange, depth, searchQuery, offset, isParent } =
+    const { spaceId, lens, sortBy, sortOrder, timeRange, depth, searchQuery, offset, isParent } =
         req.query
 
     // three scenarios: 'full-tree', 'children-of-parent', 'children-of-child'
@@ -946,7 +946,8 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
     // offset determins if grabing children or whole tree
     console.log('!!!!!!! state: ', state)
     console.log('!!!!!!! req.query: ', req.query)
-    const generationLimits = [7, 3, 3, 3] // space limits per generation (length of array determines max depth)
+    const generationLimits =
+        lens === 'Tree' ? [7, 3, 3, 3] : [200, 100, 100, 100, 100, 100, 100, 100] // space limits per generation (length of array determines max depth)
 
     const fullAttributes = ['name', 'handle', 'flagImagePath', 'privacy', spaceAccess(accountId)]
     if (sortBy === 'Followers') fullAttributes.push(totalSpaceFollowers)
@@ -956,7 +957,7 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
     if (sortBy === 'Ratings') fullAttributes.push(totalSpaceRatings)
 
     function findAttributes(type) {
-        let attributes = ['id']
+        let attributes = ['id', 'createdAt']
         if (type === 'child' || state === 'full-tree') attributes.push(...fullAttributes)
         if (type === 'parent' && state !== 'children-of-child') {
             attributes.push(totalSpaceResults(depth, timeRange, searchQuery))
@@ -1065,6 +1066,8 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
         include: findParentInclude(), // findInclude('parent', 0)
     })
     parentSpace.setDataValue('uuid', uuidv4())
+    if (parentSpace.DirectParentSpaces)
+        parentSpace.DirectParentSpaces.forEach((s) => s.setDataValue('uuid', uuidv4()))
 
     async function traverseTree(parent, generation, includeParent) {
         return new Promise(async (resolve) => {
@@ -1089,7 +1092,7 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
                     expander: true,
                     // todo: try using space id and remaining spaces instead of uuid so consistent through transitions
                     id: uuidv4(),
-                    uuid: uuidv4(),
+                    uuid: uuidv4(), // `${parent.id}-${remainingSpaces}`,
                     name: `${remainingSpaces + 1} more spaces`,
                 }
                 parent.setDataValue('children', [...children, expander])
