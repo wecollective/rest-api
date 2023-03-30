@@ -65,7 +65,7 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                     },
                     {
                         model: Post,
-                        as: 'StringPosts',
+                        as: 'Beads',
                         required: false,
                         through: {
                             where: { state: 'visible' },
@@ -82,7 +82,7 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                 ],
             })
             if (post) {
-                const beads = post.StringPosts.sort((a, b) => a.Link.index - b.Link.index)
+                const beads = post.Beads.sort((a, b) => a.Link.index - b.Link.index)
                 const moveTaken = beads.length >= moveNumber
                 if (post.Weave.state === 'active' && !moveTaken) {
                     // create notification
@@ -139,7 +139,7 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                     },
                     {
                         model: Post,
-                        as: 'StringPosts',
+                        as: 'Beads',
                         required: false,
                         through: {
                             where: { state: 'visible' },
@@ -156,7 +156,7 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                 ],
             })
             if (post) {
-                const beads = post.StringPosts.sort((a, b) => a.Link.index - b.Link.index)
+                const beads = post.Beads.sort((a, b) => a.Link.index - b.Link.index)
                 const moveTaken = beads.length >= moveNumber
                 if (post.Weave.state === 'active' && !moveTaken) {
                     // cancel game and notify other players
@@ -296,7 +296,7 @@ module.exports = {
                 },
                 {
                     model: Post,
-                    as: 'StringPosts',
+                    as: 'Beads',
                     required: false,
                     through: {
                         where: { state: 'visible' },
@@ -306,10 +306,10 @@ module.exports = {
             ],
         })
         weavePosts.forEach((weavePost) => {
-            const { id, StringPosts, StringPlayers } = weavePost
+            const { id, Beads, StringPlayers } = weavePost
             const { privacy, state, numberOfTurns, moveTimeWindow, nextMoveDeadline } =
                 weavePost.Weave
-            const movesLeft = StringPosts.length < StringPlayers.length * numberOfTurns
+            const movesLeft = Beads.length < StringPlayers.length * numberOfTurns
             if (
                 state === 'active' &&
                 privacy === 'only-selected-users' &&
@@ -318,8 +318,8 @@ module.exports = {
                 new Date(nextMoveDeadline) > new Date()
             ) {
                 const players = StringPlayers.sort((a, b) => a.UserPost.index - b.UserPost.index)
-                const activePlayer = players[StringPosts.length % players.length]
-                const moveNumber = StringPosts.length + 1
+                const activePlayer = players[Beads.length % players.length]
+                const moveNumber = Beads.length + 1
                 if (activePlayer)
                     scheduleWeaveMoveJobs(id, activePlayer, moveNumber, nextMoveDeadline)
             }

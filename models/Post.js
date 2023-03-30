@@ -12,7 +12,15 @@ module.exports = (sequelize, DataTypes) => {
             color: DataTypes.STRING,
             state: DataTypes.STRING,
             creatorId: DataTypes.INTEGER,
+            title: DataTypes.TEXT,
             text: DataTypes.TEXT,
+            totalLikes: DataTypes.INTEGER,
+            totalComments: DataTypes.INTEGER,
+            totalLinks: DataTypes.INTEGER,
+            totalReposts: DataTypes.INTEGER,
+            totalRatings: DataTypes.INTEGER,
+            totalGlassBeadGames: DataTypes.INTEGER,
+            // todo: remove urls
             url: DataTypes.TEXT,
             urlImage: DataTypes.TEXT,
             urlDomain: DataTypes.TEXT,
@@ -55,7 +63,7 @@ module.exports = (sequelize, DataTypes) => {
 
         Post.belongsToMany(models.Post, {
             through: models.Link,
-            as: 'StringPosts',
+            as: 'Beads',
             foreignKey: 'itemAId',
             otherKey: 'itemBId',
         })
@@ -79,11 +87,19 @@ module.exports = (sequelize, DataTypes) => {
         })
 
         Post.hasMany(models.Comment, {
-            foreignKey: 'postId',
+            foreignKey: 'itemId',
+        })
+
+        Post.hasMany(models.Url, {
+            foreignKey: 'itemId',
         })
 
         Post.hasMany(models.PostImage, {
             foreignKey: 'postId',
+        })
+
+        Post.hasMany(models.Audio, {
+            foreignKey: 'itemId',
         })
 
         Post.hasOne(models.Event, {
@@ -94,7 +110,7 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'postId',
         })
 
-        Post.hasOne(models.GlassBeadGame, {
+        Post.hasOne(models.GlassBeadGame2, {
             foreignKey: 'postId',
         })
 

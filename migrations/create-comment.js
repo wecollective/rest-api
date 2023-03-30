@@ -11,13 +11,16 @@ module.exports = {
             state: {
                 type: Sequelize.STRING,
             },
+            type: {
+                type: Sequelize.STRING,
+            },
             creatorId: {
                 type: Sequelize.INTEGER,
             },
             spaceId: {
                 type: Sequelize.INTEGER,
             },
-            postId: {
+            itemId: {
                 type: Sequelize.INTEGER,
             },
             parentCommentId: {

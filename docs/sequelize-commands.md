@@ -33,6 +33,11 @@ Create datatbase
 
 ‘id’, ‘createdAt’, and ‘updatedAt’ attributes generated automatically by Sequelize.
 
+### TextDataTypes
+
+string: max 255 characters
+text: unlimited characters
+
 TODO: Describe the purpose of each table, inlcude link to table map on Draw.io
 
 ### Holon
@@ -107,7 +112,7 @@ type: post-post, post-space, post-user, space-post, space-space, space-user, use
 relationship: turn, text
 `npx sequelize-cli model:generate --name Link --attributes creatorId:integer,type:string,relationship:string,description:text,itemAId:integer,itemBId:integer`
 
-### GlassBeadGames
+### GlassBeadGame
 
 `npx sequelize-cli model:generate --name GlassBeadGame --attributes postId:integer,topic:string,numberOfTurns:integer,turnDuration:integer,introDuration:integer,intervalDuration:integer,saved:boolean`
 
@@ -130,6 +135,57 @@ relationship: turn, text
 ### Weave
 
 `npx sequelize-cli model:generate --name Weave --attributes postId:integer,numberOfTurns:integer,moveDuration:integer,allowedPostTypes:string,privacy:string`
+
+### GlassBeadGame2
+
+postId:integer
+state:string
+topic:string
+topicGroup:string
+topicImage:string
+backgroundImage:string
+backgroundVideo:string
+backgroundVideoStartTime:string
+locked:boolean
+synchronous:boolean
+multiplayer:boolean
+nextMoveDeadline:date
+allowedBeadTypes:string
+playerOrder:text
+totalMoves:integer
+movesPerPlayer:integer
+moveDuration:integer
+moveTimeWindow:integer
+characterLimit:integer
+introDuration:integer
+outroDuration:integer
+intervalDuration:integer
+oldGameId:integer (used to restore old gbg beads and comments)
+
+`npx sequelize-cli model:generate --name GlassBeadGame2 --attributes postId:integer,state:string,locked:boolean,topic:string,topicGroup:string,topicImage:string,synchronous:boolean,multiplayer:boolean,nextMoveDeadline:date,allowedBeadTypes:string,playerOrder:text,totalMoves:integer,movesPerPlayer:integer,moveDuration:integer,moveTimeWindow:integer,characterLimit:integer,introDuration:integer,outroDuration:integer,intervalDuration:integer,backgroundImage:string,backgroundVideo:string,backgroundVideoStartTime:string,oldGameId:integer`
+
+### Url
+
+type:string (post, comment etc.)
+itemId:integer
+url:text
+image:text
+title:text
+description:text
+domain:text
+
+type:string,itemId:integer,url:text,image:text,title:text,description:text,domain:text
+
+`npx sequelize-cli model:generate --name Url --attributes type:string,itemId:integer,state:string,url:text,image:text,title:text,description:text,domain:text`
+
+### Audio
+
+type:string (post, comment etc.)
+itemId:integer
+state:string
+url:text
+
+`npx sequelize-cli model:generate --name Audio --attributes type:string,itemId:integer,state:string,url:text`
 
 ## Generate Seeders
 

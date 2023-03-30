@@ -17,7 +17,7 @@ const {
     Post,
     Link,
     Notification,
-    GlassBeadGame,
+    GlassBeadGame2,
     Event,
     PostImage,
 } = require('../models')
@@ -418,68 +418,6 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
     )
 })
 
-router.get('/db-update', authenticateToken, async (req, res) => {
-    const invalidToken = !req.user
-    const accountId = invalidToken ? null : req.user.id
-    console.log('db-update!', accountId)
-    // res.status(200).json({ message: 'Success' })
-    // test descendents
-    // const childId = 45 // 'holonics'
-    // const descendants = await Space.findAll({
-    //     attributes: ['id'],
-    //     where: {
-    //         [Op.or]: {
-    //             id: childId,
-    //             '$SpaceAncestors.id$': childId,
-    //         },
-    //         state: 'active',
-    //     },
-    //     include: {
-    //         model: Space,
-    //         as: 'SpaceAncestors',
-    //         attributes: ['id'],
-    //         // op.or open/closed
-    //         through: { attributes: ['state'], where: { state: 'open' } },
-    //     },
-    // })
-    // res.status(200).send(descendants)
-
-    // set all spaces with privacy null to 'public'
-    // Space.update({ privacy: 'public' }, { where: { privacy: null } })
-    //     .then(() => res.status(200).json({ message: 'Success' }))
-    //     .catch((error) => res.status(500).json({ message: 'Error', error }))
-
-    // // convert old 'closed' ancestors to 'removed'
-    // SpaceAncestor.update({ state: 'removed' }, { where: { state: 'closed' } })
-    //     .then(() => {
-    //         res.status(200).json({ message: 'Success' })
-    //     })
-    //     .catch((error) => res.status(500).json({ message: 'Error', error }))
-
-    // // remove self matching spaceAncestors:
-    // SpaceAncestor.findAll().then((ancestors) => {
-    //     Promise.all(
-    //         ancestors.map(
-    //             async (a) =>
-    //                 await new Promise((resolve) => {
-    //                     if (a.spaceAId === a.spaceBId) {
-    //                         SpaceAncestor.update({ state: 'removed' }, { where: { id: a.id } })
-    //                             .then(() => resolve())
-    //                             .catch((error) => {
-    //                                 console.log(error)
-    //                                 resolve()
-    //                             })
-    //                     } else resolve()
-    //                 })
-    //         )
-    //     )
-    //         .then(() => {
-    //             res.status(200).json({ message: 'Success' })
-    //         })
-    //         .catch((error) => res.status(500).json({ message: 'Error', error }))
-    // })
-})
-
 // todo: clean up like post routes
 router.get('/space-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
@@ -709,7 +647,7 @@ router.get('/space-posts', authenticateToken, async (req, res) => {
                 through,
             },
             {
-                model: GlassBeadGame,
+                model: GlassBeadGame2,
                 required: false,
                 attributes: ['topic'],
             },

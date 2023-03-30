@@ -9,9 +9,10 @@ module.exports = (sequelize, DataTypes) => {
                 autoIncrement: true,
             },
             state: DataTypes.STRING,
+            type: DataTypes.STRING,
             creatorId: DataTypes.INTEGER,
             spaceId: DataTypes.INTEGER,
-            postId: DataTypes.INTEGER,
+            itemId: DataTypes.INTEGER,
             parentCommentId: DataTypes.INTEGER,
             text: DataTypes.TEXT,
             mmId: DataTypes.INTEGER,
@@ -22,7 +23,7 @@ module.exports = (sequelize, DataTypes) => {
     Comment.associate = function (models) {
         Comment.belongsTo(models.Post, {
             //as: 'postComment',
-            foreignKey: 'postId',
+            foreignKey: 'itemId',
             //sourceKey: 'postId'
         })
         Comment.belongsTo(models.User, {

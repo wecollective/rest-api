@@ -6,12 +6,15 @@ const {
     Post,
     Reaction,
     GlassBeadGame,
+    GlassBeadGame2,
     GlassBead,
     Event,
     Inquiry,
     InquiryAnswer,
     PostImage,
     Weave,
+    Url,
+    Audio,
 } = require('./models')
 
 const imageMBLimit = 10
@@ -47,7 +50,7 @@ function findOrder(sortBy, sortOrder) {
           ]
 }
 
-// post literals (model prop used to distinguish between Post and StringPosts)
+// post literals (model prop used to distinguish between Post and Beads)
 function totalPostLikes(model) {
     return [
         sequelize.literal(
@@ -60,7 +63,7 @@ function totalPostLikes(model) {
 function totalPostComments(model) {
     return [
         sequelize.literal(
-            `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.postId = ${model}.id)`
+            `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.type = 'post' AND Comment.itemId = ${model}.id)`
         ),
         'totalComments',
     ]
@@ -96,7 +99,7 @@ function totalPostRatingPoints(model) {
 function totalPostLinks(model) {
     return [
         sequelize.literal(
-            `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND Link.type != 'string-post' AND (Link.itemAId = ${model}.id OR Link.itemBId = ${model}.id))`
+            `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND Link.type != 'gbg-post' AND (Link.itemAId = ${model}.id OR Link.itemBId = ${model}.id))`
         ),
         'totalLinks',
     ]
@@ -154,7 +157,7 @@ function accountLink(model, accountId) {
             FROM Links
             AS Link
             WHERE Link.state = 'visible'
-            AND Link.type != 'string-post'
+            AND Link.type = 'post-post'
             AND Link.creatorId = ${accountId}
             AND (Link.itemAId = ${model}.id OR Link.itemBId = ${model}.id)
         )`),
@@ -280,7 +283,8 @@ const totalSpaceComments = [
         SELECT COUNT(*)
         FROM Comments
         WHERE Comments.state = 'visible'
-        AND Comments.postId IN (
+        AND Comments.type = 'post'
+        AND Comments.itemId IN (
             SELECT SpacePosts.postId
             FROM SpacePosts
             RIGHT JOIN Posts
@@ -612,12 +616,13 @@ function findFullPostAttributes(model, accountId) {
         'type',
         'state',
         'color',
+        'title',
         'text',
-        'url',
-        'urlImage',
-        'urlDomain',
-        'urlTitle',
-        'urlDescription',
+        // 'url',
+        // 'urlImage',
+        // 'urlDomain',
+        // 'urlTitle',
+        // 'urlDescription',
         'createdAt',
         'updatedAt',
         totalPostLikes(model),
@@ -675,8 +680,16 @@ function findPostInclude(accountId) {
             through: { where: { relationship: 'direct', type: 'post' }, attributes: [] },
         },
         {
+            model: Url,
+            attributes: ['url', 'image', 'title', 'description', 'domain'],
+        },
+        {
             model: PostImage,
             attributes: ['id', 'index', 'url', 'caption'],
+        },
+        {
+            model: Audio,
+            attributes: ['url'],
         },
         {
             model: Event,
@@ -738,30 +751,30 @@ function findPostInclude(accountId) {
             ],
         },
         {
-            model: GlassBeadGame,
+            model: GlassBeadGame2,
             attributes: ['topic', 'topicGroup', 'topicImage'],
-            include: [
-                {
-                    model: GlassBead,
-                    where: { state: 'visible' },
-                    attributes: ['id', 'index', 'beadUrl'],
-                    required: false,
-                    include: [
-                        {
-                            model: User,
-                            as: 'user',
-                            attributes: ['handle', 'name', 'flagImagePath'],
-                        },
-                    ],
-                },
-            ],
+            // include: [
+            //     {
+            //         model: GlassBead,
+            //         where: { state: 'visible' },
+            //         attributes: ['id', 'index', 'beadUrl'],
+            //         required: false,
+            //         include: [
+            //             {
+            //                 model: User,
+            //                 as: 'user',
+            //                 attributes: ['handle', 'name', 'flagImagePath'],
+            //             },
+            //         ],
+            //     },
+            // ],
         },
         {
             model: Post,
-            as: 'StringPosts',
-            attributes: findFullPostAttributes('StringPosts', accountId),
+            as: 'Beads',
+            attributes: findFullPostAttributes('Beads', accountId),
             through: {
-                where: { type: 'string-post' },
+                where: { type: 'gbg-post' },
                 attributes: ['index', 'relationship', 'state'],
             },
             include: [
@@ -769,6 +782,14 @@ function findPostInclude(accountId) {
                     model: User,
                     as: 'Creator',
                     attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                },
+                {
+                    model: Url,
+                    attributes: ['url', 'image', 'title', 'description', 'domain'],
+                },
+                {
+                    model: Audio,
+                    attributes: ['url'],
                 },
                 {
                     model: PostImage,

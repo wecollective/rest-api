@@ -20,9 +20,31 @@ module.exports = {
             creatorId: {
                 type: Sequelize.INTEGER,
             },
+            title: {
+                type: Sequelize.TEXT,
+            },
             text: {
                 type: Sequelize.TEXT,
             },
+            totalLikes: {
+                type: Sequelize.INTEGER,
+            },
+            totalComments: {
+                type: Sequelize.INTEGER,
+            },
+            totalLinks: {
+                type: Sequelize.INTEGER,
+            },
+            totalReposts: {
+                type: Sequelize.INTEGER,
+            },
+            totalRatings: {
+                type: Sequelize.INTEGER,
+            },
+            totalGlassBeadGames: {
+                type: Sequelize.INTEGER,
+            },
+            // todo: remove urls
             url: {
                 type: Sequelize.TEXT,
             },

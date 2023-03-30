@@ -42,6 +42,7 @@ const {
     Link,
     Notification,
     GlassBeadGame,
+    GlassBeadGame2,
     GlassBeadGameComment,
     GlassBead,
     PostImage,
@@ -49,6 +50,8 @@ const {
     UserPost,
     Inquiry,
     InquiryAnswer,
+    Url,
+    Audio,
 } = require('../models')
 
 // initialise
@@ -60,9 +63,198 @@ aws.config.update({
     region: 'eu-west-1',
 })
 
+let testIndex = 0
+
 // testing
 router.get('/test', async (req, res) => {
-    console.log('testing!')
+    if (testIndex > 0) {
+        console.log('second attempt')
+        res.send('second attempt')
+    } else {
+        console.log('first attempt')
+        testIndex += 1
+
+        //// 1. Create new URLs
+        // const urlPosts = await Post.findAll({
+        //     where: { state: 'visible', type: ['url', 'string-url'] },
+        //     attributes: ['id', 'url', 'urlImage', 'urlTitle', 'urlDescription', 'urlDomain', 'createdAt'],
+        // })
+
+        // Promise.all(
+        //     urlPosts.map(
+        //         async (post) =>
+        //             await Url.create({
+        //                 type: 'post',
+        //                 itemId: post.id,
+        //                 state: 'active',
+        //                 url: post.url,
+        //                 image: post.urlImage,
+        //                 title: post.urlTitle,
+        //                 description: post.urlDescription,
+        //                 domain: post.urlDomain,
+        //                 createdAt: post.createdAt,
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        //// 2. Create new Audio
+        // const audioPosts = await Post.findAll({
+        //     where: { state: 'visible', type: ['audio', 'string-audio'] },
+        //     attributes: ['id', 'url'],
+        // })
+
+        // Promise.all(
+        //     audioPosts.map(
+        //         async (post) =>
+        //             await Audio.create({
+        //                 type: 'post',
+        //                 itemId: post.id,
+        //                 state: 'active',
+        //                 url: post.url,
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        //// 3. update string bead types
+        // Post.update({ type: 'gbg-audio' }, { where: { type: 'string-audio' } })
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // Post.update({ type: 'gbg-text' }, { where: { type: 'string-text' } })
+        // .then(() => res.status(200).json({ message: 'success' }))
+        // .catch((error) => res.status(500).json(error))
+
+        // Post.update({ type: 'gbg-image' }, { where: { type: 'string-image' } })
+        // .then(() => res.status(200).json({ message: 'success' }))
+        // .catch((error) => res.status(500).json(error))
+
+        // Post.update({ type: 'gbg-url' }, { where: { type: 'string-url' } })
+        // .then(() => res.status(200).json({ message: 'success' }))
+        // .catch((error) => res.status(500).json(error))
+
+        //// 4. Update comment types for old comments
+        // Comment.update({ type: 'post' }, { where: { type: null } })
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        //// 5. Migrate old GBGs
+        // const oldGBGs = await GlassBeadGame.findAll()
+        // Promise.all(
+        //     oldGBGs.map(
+        //         async (gbg) =>
+        //             await GlassBeadGame2.create({
+        //                 oldGameId: gbg.id,
+        //                 postId: gbg.postId,
+        //                 state: 'active',
+        //                 locked: gbg.locked,
+        //                 topic: gbg.topic,
+        //                 topicGroup: gbg.topicGroup,
+        //                 topicImage: gbg.topicImage,
+        //                 synchronous: true,
+        //                 multiplayer: null,
+        //                 nextMoveDeadline: null,
+        //                 allowedBeadTypes: 'audio',
+        //                 playerOrder: gbg.playerOrder,
+        //                 totalMoves: null,
+        //                 movesPerPlayer: gbg.numberOfTurns,
+        //                 moveDuration: gbg.moveDuration,
+        //                 moveTimeWindow: null,
+        //                 characterLimit: null,
+        //                 introDuration: gbg.introDuration,
+        //                 outroDuration: gbg.outroDuration,
+        //                 intervalDuration: gbg.intervalDuration,
+        //                 backgroundImage: gbg.backgroundImage,
+        //                 backgroundVideo: gbg.backgroundVideo,
+        //                 backgroundVideoStartTime: gbg.backgroundVideoStartTime,
+        //                 createdAt: gbg.createdAt,
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // //// 6. Migrate old GBG beads
+        // const oldBeads = await GlassBead.findAll({ where: { userId: { [Op.not]: null } } })
+        // Promise.all(
+        //     oldBeads.map(
+        //         async (bead) =>
+        //             await new Promise(async (resolve) => {
+        //                 const createPost = await Post.create({
+        //                     type: 'gbg-audio',
+        //                     state: 'visible',
+        //                     creatorId: bead.userId,
+        //                     createdAt: bead.createdAt,
+        //                 })
+        //                 const createAudio = await Audio.create({
+        //                     type: 'post',
+        //                     itemId: createPost.id,
+        //                     state: 'active',
+        //                     url: bead.beadUrl,
+        //                 })
+        //                 const gamePost = await GlassBeadGame2.findOne({
+        //                     where: { oldGameId: bead.gameId },
+        //                     attributes: ['postId'],
+        //                 })
+        //                 const createLink = await Link.create({
+        //                     creatorId: bead.userId,
+        //                     type: 'gbg-post',
+        //                     state: 'visible',
+        //                     itemAId: gamePost.postId,
+        //                     itemBId: createPost.id,
+        //                     index: bead.index,
+        //                 })
+
+        //                 Promise.all([createAudio, createLink])
+        //                     .then(() => resolve())
+        //                     .catch(() => resolve())
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // //// 7. Migrate old GBG comments
+        // const oldGBGcomments = await GlassBeadGameComment.findAll({
+        //     where: { gameId: { [Op.not]: null } },
+        // })
+        // Promise.all(
+        //     oldGBGcomments.map(
+        //         async (comment) =>
+        //             await new Promise(async (resolve) => {
+        //                 const newGame = await GlassBeadGame2.findOne({
+        //                     where: { oldGameId: comment.gameId },
+        //                     attributes: ['id'],
+        //                 })
+        //                 const createComment = await Comment.create(
+        //                     {
+        //                         state: 'visible',
+        //                         type: 'glass-bead-game',
+        //                         itemId: newGame.id,
+        //                         creatorId: comment.userId,
+        //                         text: comment.text,
+        //                         createdAt: comment.createdAt,
+        //                         updatedAt: comment.updatedAt,
+        //                     },
+        //                     { silent: true }
+        //                 )
+        //                 Promise.all([createComment])
+        //                     .then(() => resolve())
+        //                     .catch(() => resolve())
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // //// 8. Update old Link types
+        // Link.update({ type: 'gbg-post' }, { where: { type: 'string-post' } })
+        // .then(() => res.status(200).json({ message: 'success' }))
+        // .catch((error) => res.status(500).json(error))
+    }
 })
 
 // GET
@@ -168,7 +360,7 @@ router.get('/post-links', async (req, res) => {
             {
                 model: Link,
                 as: 'OutgoingLinks',
-                where: { state: 'visible', type: { [Op.not]: 'string-post' } },
+                where: { state: 'visible', type: 'post-post' },
                 required: false,
                 attributes: ['id'],
                 include: [
@@ -194,7 +386,7 @@ router.get('/post-links', async (req, res) => {
             {
                 model: Link,
                 as: 'IncomingLinks',
-                where: { state: 'visible', type: { [Op.not]: 'string-post' } },
+                where: { state: 'visible', type: 'post-post' },
                 required: false,
                 attributes: ['id'],
                 include: [
@@ -227,9 +419,9 @@ router.get('/post-comments', (req, res) => {
     const { postId } = req.query
 
     Comment.findAll({
-        where: { postId, parentCommentId: null },
+        where: { type: 'post', itemId: postId, parentCommentId: null },
         order: [['createdAt', 'ASC']],
-        attributes: ['id', 'postId', 'text', 'state', 'createdAt', 'updatedAt'],
+        attributes: ['id', 'itemId', 'text', 'state', 'createdAt', 'updatedAt'],
         include: [
             {
                 model: User,
@@ -244,7 +436,7 @@ router.get('/post-comments', (req, res) => {
                 order: [['createdAt', 'ASC']],
                 attributes: [
                     'id',
-                    'postId',
+                    'itemId',
                     'parentCommentId',
                     'text',
                     'state',
@@ -411,6 +603,7 @@ router.get('/glass-bead-game-data', (req, res) => {
 router.post('/create-post', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { uploadType } = req.query
+    console.log(999, 'create post data: ', req.body)
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -420,52 +613,54 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 creatorHandle,
                 type,
                 spaceIds,
-                mentions,
-                text,
-                url,
-                // urls
-                urlImage,
-                urlDomain,
-                urlTitle,
-                urlDescription,
-                // events
                 title,
+                text,
+                mentions,
+                urls,
+                // // urls
+                // urlImage,
+                // urlDomain,
+                // urlTitle,
+                // urlDescription,
+
                 startTime,
                 endTime,
                 // inquiries
-                inquiryTitle,
-                inquiryEndTime,
-                answersLocked,
-                inquiryType,
-                inquiryAnswers,
+                // inquiryTitle,
+                // inquiryEndTime,
+                pollType,
+                pollAnswersLocked,
+                pollAnswers,
                 // glass bead games
                 topic,
                 topicGroup,
-                topicImage,
+                topicImageUrl,
+                gbgSettings,
                 // weaves
-                privacy,
-                playerData,
-                numberOfMoves,
-                numberOfTurns,
-                allowedBeadTypes,
-                characterLimit,
-                audioTimeLimit,
-                moveTimeWindow,
-                // strings and weaves
-                sourcePostId,
-                sourceCreatorId,
+                // privacy,
+                // playerData,
+                // numberOfMoves,
+                // numberOfTurns,
+                // allowedBeadTypes,
+                // characterLimit,
+                // audioTimeLimit,
+                // moveTimeWindow,
+                // // strings and weaves
+                // sourcePostId,
+                // sourceCreatorId,
             } = postData
 
             Post.create({
                 type,
                 state: 'visible',
                 creatorId: accountId,
+                title: type === 'glass-bead-game' ? topic : title || null,
                 text: text || null,
-                url: type === 'audio' ? files[0].location : url,
-                urlImage,
-                urlDomain,
-                urlTitle,
-                urlDescription,
+                // url: type === 'audio' ? files[0].location : url,
+                // urlImage,
+                // urlDomain,
+                // urlTitle,
+                // urlDescription,
             }).then(async (post) => {
                 const createDirectRelationships = await Promise.all(
                     spaceIds.map((spaceId) =>
@@ -567,6 +762,20 @@ router.post('/create-post', authenticateToken, (req, res) => {
                         .catch((error) => resolve(error))
                 })
 
+                const createUrls = await Promise.all(
+                    urls.map((urlData) =>
+                        Url.create({
+                            type: 'post',
+                            itemId: post.id,
+                            url: urlData.url,
+                            image: urlData.image,
+                            title: urlData.title,
+                            description: urlData.description,
+                            domain: urlData.domain,
+                        })
+                    )
+                )
+
                 const createEvent =
                     type === 'event' || (type === 'glass-bead-game' && startTime)
                         ? await Event.create({
@@ -630,7 +839,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                           )
                         : null
 
-                const createStringPosts =
+                const createBeads =
                     type === 'string'
                         ? await new Promise(async (resolve) => {
                               const linkSourceBead = sourcePostId
@@ -894,11 +1103,12 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     createDirectRelationships,
                     createIndirectRelationships,
                     notifyMentions,
+                    createUrls,
                     createEvent,
                     createInquiry,
                     createGBG,
                     createImages,
-                    createStringPosts,
+                    createBeads,
                     createWeave,
                 ]).then((data) => {
                     res.status(200).json({
@@ -972,7 +1182,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                             .substring(0, 30)
                         const date = Date.now().toString()
                         const fileName = `post-audio-upload-${accountId}-${name}-${date}.mp3`
-                        console.log('fileName: ', fileName)
+                        // console.log('fileName: ', fileName)
                         cb(null, fileName)
                     },
                 }),
@@ -1059,7 +1269,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                         .run()
                 }
             })
-        } else if (uploadType === 'string') {
+        } else if (uploadType === 'glass-bead-game') {
             multer({
                 limits: { fileSize: imageMBLimit * 1024 * 1024 },
                 dest: './stringData',
@@ -1159,7 +1369,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             )
                                         })
                                         .run()
-                                } else if (file.fieldname === 'image') {
+                                } else if (file.fieldname === 'imageFile') {
                                     fs.readFile(
                                         `stringData/${file.filename}`,
                                         function (err, data) {
@@ -1185,6 +1395,45 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                             fieldname: file.fieldname,
                                                             beadIndex: +indexes[0],
                                                             imageIndex: +indexes[1],
+                                                            location: `${baseUrl}post-images${s3Url}/${fileName}`,
+                                                        })
+                                                        fs.unlink(
+                                                            `stringData/${file.filename}`,
+                                                            (err) => {
+                                                                if (err) console.log(err)
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    )
+                                } else if (file.fieldname === 'topicImageFile') {
+                                    fs.readFile(
+                                        `stringData/${file.filename}`,
+                                        function (err, data) {
+                                            const name = file.originalname
+                                                .replace(/[^A-Za-z0-9]/g, '-')
+                                                .substring(0, 30)
+                                            const date = Date.now().toString()
+                                            const fileName = `gbg-topic-image-upload-${accountId}-${name}-${date}`
+                                            s3.putObject(
+                                                {
+                                                    Bucket: `weco-${process.env.NODE_ENV}-post-images`,
+                                                    ACL: 'public-read',
+                                                    Key: fileName,
+                                                    Body: data,
+                                                    ContentType: file.mimetype,
+                                                    Metadata: { mimetype: file.mimetype },
+                                                },
+                                                (err, response) => {
+                                                    if (err) console.log(err)
+                                                    else {
+                                                        // const indexes = file.originalname.split('-')
+                                                        resolve({
+                                                            fieldname: file.fieldname,
+                                                            // beadIndex: +indexes[0],
+                                                            // imageIndex: +indexes[1],
                                                             location: `${baseUrl}post-images${s3Url}/${fileName}`,
                                                         })
                                                         fs.unlink(
@@ -1364,7 +1613,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                         },
                         {
                             model: Post,
-                            as: 'StringPosts',
+                            as: 'Beads',
                             required: false,
                             through: {
                                 where: { state: 'visible' },
@@ -1384,12 +1633,12 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                 const updateWeaveStateAndNotifyPlayers = await new Promise(async (resolve) => {
                     const openGameFinished =
                         privacy === 'all-users-allowed' &&
-                        post.StringPosts.length === post.Weave.numberOfMoves
+                        post.Beads.length === post.Weave.numberOfMoves
                     const privateGameFinished = privacy === 'only-selected-users' && !nextPlayerId
                     if (openGameFinished) {
                         // find open game players
                         const openGamePlayers = []
-                        post.StringPosts.forEach((bead) => {
+                        post.Beads.forEach((bead) => {
                             if (!openGamePlayers.find((p) => p.id === bead.Creator.id))
                                 openGamePlayers.push(bead.Creator)
                         })
@@ -1492,7 +1741,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                             : null
                         // notify next player in private game
                         const nextPlayer = post.StringPlayers.find((p) => p.id === nextPlayerId)
-                        const nextMoveNumber = post.StringPosts.length + 1
+                        const nextMoveNumber = post.Beads.length + 1
                         const createMoveNotification = await Notification.create({
                             type: 'weave-move',
                             ownerId: nextPlayerId,
@@ -1537,7 +1786,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                     } else {
                         // find open game players
                         const openGamePlayers = []
-                        post.StringPosts.forEach((bead) => {
+                        post.Beads.forEach((bead) => {
                             // filter out game creator and existing records
                             if (
                                 bead.Creator.id !== post.Creator.id &&

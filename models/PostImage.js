@@ -15,10 +15,10 @@ module.exports = (sequelize, DataTypes) => {
         PostImage.belongsTo(models.Post, {
             foreignKey: 'postId',
         })
-        PostImage.belongsTo(models.User, {
-            foreignKey: 'creatorId',
-            as: 'Creator',
-        })
+        // PostImage.belongsTo(models.User, {
+        //     foreignKey: 'creatorId',
+        //     as: 'Creator',
+        // })
     }
     return PostImage
 }
