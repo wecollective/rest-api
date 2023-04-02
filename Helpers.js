@@ -11,14 +11,122 @@ const {
     Event,
     Inquiry,
     InquiryAnswer,
-    PostImage,
+    Image,
     Weave,
     Url,
     Audio,
 } = require('./models')
 
+var aws = require('aws-sdk')
+var multer = require('multer')
+var multerS3 = require('multer-s3')
+aws.config.update({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    region: 'eu-west-1',
+})
+const s3 = new aws.S3({})
+const fs = require('fs')
+var ffmpeg = require('fluent-ffmpeg')
+const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
+ffmpeg.setFfmpegPath(ffmpegPath)
+
 const imageMBLimit = 10
 const audioMBLimit = 25
+
+function findFileName(file, accountId) {
+    const date = Date.now().toString()
+    const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
+    const extension = file.mimetype.split('/')[1]
+    return `${accountId}-${date}-${name}.${extension}`
+}
+
+function noMulterErrors(error, res) {
+    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+        res.status(413).send({ message: 'File size too large' })
+        return false
+    } else if (error) {
+        res.status(500).send(error)
+        return false
+    }
+    return true
+}
+
+function multerParams(type, accountId) {
+    // types: 'image-file', 'audio-file', 'audio-blob', 'glass-bead-game'
+    const limit = type.includes('audio') ? audioMBLimit : imageMBLimit
+    const params = { limits: { fileSize: limit * 1024 * 1024 } }
+    if (type === 'audio-blob') params.dest = './temp/audio/raw'
+    else if (type === 'glass-bead-game') params.dest = './temp/beads'
+    else {
+        const bucketType = type.includes('audio') ? 'post-audio' : 'post-images'
+        params.storage = multerS3({
+            s3: s3,
+            bucket: `weco-${process.env.NODE_ENV}-${bucketType}`,
+            acl: 'public-read',
+            metadata: (req, file, cb) => cb(null, { mimetype: file.mimetype }),
+            key: (req, file, cb) => cb(null, findFileName(file, accountId)),
+        })
+    }
+    return params
+}
+
+function convertAndUploadAudio(file, accountId) {
+    return new Promise((resolve) => {
+        // convert raw audio to mp3
+        const outputPath = `temp/audio/mp3/${file.filename}.mp3`
+        ffmpeg(file.path)
+            .output(outputPath)
+            .on('end', () => {
+                // upload new mp3 file to s3 bucket
+                fs.readFile(outputPath, (err, data) => {
+                    if (!err) {
+                        const fileName = findFileName(file, accountId)
+                        const bucket = `weco-${process.env.NODE_ENV}-post-audio`
+                        const s3Object = {
+                            Bucket: bucket,
+                            ACL: 'public-read',
+                            Key: fileName,
+                            Body: data,
+                            Metadata: { mimetype: file.mimetype },
+                        }
+                        s3.putObject(s3Object, (err) => {
+                            // delete old files
+                            fs.unlink(`temp/audio/raw/${file.filename}`, (e) => console.log(e))
+                            fs.unlink(`temp/audio/mp3/${file.filename}.mp3`, (e) => console.log(e))
+                            // return audio url
+                            resolve(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
+                        })
+                    }
+                })
+            })
+            .run()
+    })
+}
+
+function uploadBeadFile(file, accountId) {
+    return new Promise((resolve) => {
+        // fieldnames include: 'topicImage', 'imageFile', 'audioFile',
+        const bucketType = file.fieldname.includes('audio') ? 'post-audio' : 'post-images'
+        const fileName = findFileName(file, accountId)
+        const bucket = `weco-${process.env.NODE_ENV}-${bucketType}`
+        fs.readFile(`temp/beads/${file.filename}`, (err, data) => {
+            const s3Object = {
+                Bucket: bucket,
+                ACL: 'public-read',
+                Key: fileName,
+                Body: data,
+                Metadata: { mimetype: file.mimetype },
+            }
+            s3.putObject(s3Object, (err) => {
+                // delete old file
+                fs.unlink(`temp/beads/${file.filename}`, (e) => console.log(e))
+                // return upload url
+                resolve(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
+            })
+        })
+    })
+}
 
 // general functions
 function createSQLDate(date) {
@@ -658,7 +766,7 @@ function findPostWhere(location, id, startDate, type, searchQuery) {
             { urlTitle: { [Op.like]: `%${searchQuery}%` } },
             { urlDescription: { [Op.like]: `%${searchQuery}%` } },
             { urlDomain: { [Op.like]: `%${searchQuery}%` } },
-            { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery}%` } },
+            { '$GlassBeadGame2.topic$': { [Op.like]: `%${searchQuery}%` } },
         ]
     }
     return where
@@ -684,7 +792,7 @@ function findPostInclude(accountId) {
             attributes: ['url', 'image', 'title', 'description', 'domain'],
         },
         {
-            model: PostImage,
+            model: Image,
             attributes: ['id', 'index', 'url', 'caption'],
         },
         {
@@ -752,7 +860,7 @@ function findPostInclude(accountId) {
         },
         {
             model: GlassBeadGame2,
-            attributes: ['topic', 'topicGroup', 'topicImage'],
+            // attributes: ['topic', 'topicGroup', 'topicImage'],
             // include: [
             //     {
             //         model: GlassBead,
@@ -792,28 +900,28 @@ function findPostInclude(accountId) {
                     attributes: ['url'],
                 },
                 {
-                    model: PostImage,
+                    model: Image,
                     attributes: ['id', 'index', 'url', 'caption'],
                 },
             ],
         },
-        {
-            model: Weave,
-            attributes: [
-                'numberOfTurns',
-                'numberOfMoves',
-                'allowedBeadTypes',
-                'moveTimeWindow',
-                'nextMoveDeadline',
-                'audioTimeLimit',
-                'characterLimit',
-                'state',
-                'privacy',
-            ],
-        },
+        // {
+        //     model: Weave,
+        //     attributes: [
+        //         'numberOfTurns',
+        //         'numberOfMoves',
+        //         'allowedBeadTypes',
+        //         'moveTimeWindow',
+        //         'nextMoveDeadline',
+        //         'audioTimeLimit',
+        //         'characterLimit',
+        //         'state',
+        //         'privacy',
+        //     ],
+        // },
         {
             model: User,
-            as: 'StringPlayers',
+            as: 'Players',
             attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
             through: {
                 where: { type: 'weave' },
@@ -904,5 +1012,9 @@ module.exports = {
     isModerator,
     isFollowing,
     totalLikesReceivedInSpace,
+    noMulterErrors,
+    multerParams,
+    convertAndUploadAudio,
+    uploadBeadFile,
     restrictedAncestors,
 }
