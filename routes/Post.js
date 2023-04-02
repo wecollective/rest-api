@@ -24,6 +24,10 @@ const {
     totalUserPosts,
     totalUserComments,
     totalSpacePosts,
+    multerParams,
+    noMulterErrors,
+    convertAndUploadAudio,
+    uploadBeadFile,
 } = require('../Helpers')
 const {
     Space,
@@ -45,7 +49,7 @@ const {
     GlassBeadGame2,
     GlassBeadGameComment,
     GlassBead,
-    PostImage,
+    Image,
     Weave,
     UserPost,
     Inquiry,
@@ -254,6 +258,127 @@ router.get('/test', async (req, res) => {
         // Link.update({ type: 'gbg-post' }, { where: { type: 'string-post' } })
         // .then(() => res.status(200).json({ message: 'success' }))
         // .catch((error) => res.status(500).json(error))
+
+        // // 9. Create old string GBG entries
+        // const stringPosts = await Post.findAll({ where: { type: 'string' } })
+        // Promise.all(
+        //     stringPosts.map(
+        //         async (string) =>
+        //             await GlassBeadGame2.create({
+        //                 oldGameId: null,
+        //                 postId: string.id,
+        //                 state: 'active',
+        //                 locked: false,
+        //                 topic: null,
+        //                 topicGroup: null,
+        //                 topicImage: null,
+        //                 synchronous: false,
+        //                 multiplayer: false,
+        //                 nextMoveDeadline: null,
+        //                 allowedBeadTypes: 'text,url,audio,image',
+        //                 playerOrder: null,
+        //                 totalMoves: null,
+        //                 movesPerPlayer: null,
+        //                 moveDuration: null,
+        //                 moveTimeWindow: null,
+        //                 characterLimit: null,
+        //                 introDuration: null,
+        //                 outroDuration: null,
+        //                 intervalDuration: null,
+        //                 backgroundImage: null,
+        //                 backgroundVideo: null,
+        //                 backgroundVideoStartTime: null,
+        //                 createdAt: string.createdAt,
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // // 10. Add weave entries to new GBG table
+        // const weavePosts = await Post.findAll({ where: { type: 'weave' } })
+        // Promise.all(
+        //     weavePosts.map(
+        //         async (post) =>
+        //             await new Promise(async (resolve) => {
+        //                 const players = await UserPost.findAll({ where: { postId: post.id } })
+        //                 const playerOrder =
+        //                     players.length > 0
+        //                         ? players
+        //                               .sort((a, b) => a.index - b.index)
+        //                               .map((p) => p.userId)
+        //                               .join(',')
+        //                         : null
+        //                 const weave = await Weave.findOne({ where: { postId: post.id } })
+        //                 const createGBG = weave
+        //                     ? await GlassBeadGame2.create({
+        //                           oldGameId: null,
+        //                           postId: weave.postId,
+        //                           state: weave.state || 'active',
+        //                           locked: false,
+        //                           topic: null,
+        //                           topicGroup: null,
+        //                           topicImage: null,
+        //                           synchronous: false,
+        //                           multiplayer: true,
+        //                           nextMoveDeadline: weave.nextMoveDeadline,
+        //                           allowedBeadTypes: weave.allowedBeadTypes.toLowerCase(),
+        //                           playerOrder,
+        //                           totalMoves: weave.numberOfMoves,
+        //                           movesPerPlayer: weave.numberOfTurns,
+        //                           moveDuration: weave.audioTimeLimit,
+        //                           moveTimeWindow: weave.moveTimeWindow,
+        //                           characterLimit: weave.characterLimit,
+        //                           introDuration: null,
+        //                           outroDuration: null,
+        //                           intervalDuration: null,
+        //                           backgroundImage: null,
+        //                           backgroundVideo: null,
+        //                           backgroundVideoStartTime: null,
+        //                           createdAt: weave.createdAt,
+        //                       })
+        //                     : null
+
+        //                 Promise.all([createGBG])
+        //                     .then(() => resolve())
+        //                     .catch(() => resolve())
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // // Move event titles to post table
+        // const events = await Event.findAll()
+        // Promise.all(
+        //     events.map(
+        //         async (event) =>
+        //             await Post.update({ title: event.title }, { where: { id: event.postId } })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // // Move poll titles to post table
+        // const polls = await Inquiry.findAll()
+        // Promise.all(
+        //     polls.map(
+        //         async (poll) =>
+        //             await Post.update({ title: poll.title }, { where: { id: poll.postId } })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // Change post type 'inquiry' to 'poll'
+        // Post.update({ type: 'poll' }, { where: { type: 'inquiry' } })
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // // update glass bead game post types
+        // Post.update({ type: 'glass-bead-game' }, { where: { type: ['string', 'weave'] } })
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
     }
 })
 
@@ -603,11 +728,10 @@ router.get('/glass-bead-game-data', (req, res) => {
 router.post('/create-post', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { uploadType } = req.query
-    console.log(999, 'create post data: ', req.body)
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        function createPost(postData, files, imageData, stringData) {
+        async function createPost(postData, files) {
             const {
                 creatorName,
                 creatorHandle,
@@ -617,128 +741,107 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 text,
                 mentions,
                 urls,
-                // // urls
-                // urlImage,
-                // urlDomain,
-                // urlTitle,
-                // urlDescription,
-
+                images,
                 startTime,
                 endTime,
-                // inquiries
-                // inquiryTitle,
-                // inquiryEndTime,
                 pollType,
                 pollAnswersLocked,
                 pollAnswers,
-                // glass bead games
                 topic,
                 topicGroup,
                 topicImageUrl,
                 gbgSettings,
-                // weaves
-                // privacy,
-                // playerData,
-                // numberOfMoves,
-                // numberOfTurns,
-                // allowedBeadTypes,
-                // characterLimit,
-                // audioTimeLimit,
-                // moveTimeWindow,
-                // // strings and weaves
-                // sourcePostId,
-                // sourceCreatorId,
+                beads,
+                sourcePostId,
+                sourceCreatorId,
             } = postData
 
-            Post.create({
+            const post = await Post.create({
                 type,
                 state: 'visible',
                 creatorId: accountId,
-                title: type === 'glass-bead-game' ? topic : title || null,
+                title: title || null,
                 text: text || null,
-                // url: type === 'audio' ? files[0].location : url,
-                // urlImage,
-                // urlDomain,
-                // urlTitle,
-                // urlDescription,
-            }).then(async (post) => {
-                const createDirectRelationships = await Promise.all(
-                    spaceIds.map((spaceId) =>
+                lastActivity: new Date(),
+            })
+
+            const createDirectRelationships = await Promise.all(
+                spaceIds.map((spaceId) =>
+                    SpacePost.create({
+                        type: 'post',
+                        relationship: 'direct',
+                        creatorId: accountId,
+                        postId: post.id,
+                        spaceId,
+                    })
+                )
+            )
+
+            const createIndirectRelationships = await new Promise(async (resolve) => {
+                const spaces = await Space.findAll({
+                    where: { id: spaceIds, state: 'active' },
+                    attributes: ['id'],
+                    include: [
+                        {
+                            model: Space,
+                            as: 'SpaceAncestors',
+                            attributes: ['id'],
+                            through: { where: { state: 'open' }, attributes: [] },
+                        },
+                    ],
+                })
+                // gather ancestor ids
+                const ids = []
+                spaces.forEach((space) =>
+                    ids.push(...space.SpaceAncestors.map((space) => space.id))
+                )
+                // remove duplicates and direct spaces
+                const filteredIds = [...new Set(ids)].filter((id) => !spaceIds.includes(id))
+                Promise.all(
+                    filteredIds.map((id) =>
                         SpacePost.create({
                             type: 'post',
-                            relationship: 'direct',
+                            relationship: 'indirect',
                             creatorId: accountId,
                             postId: post.id,
-                            spaceId,
+                            spaceId: id,
                         })
                     )
                 )
+                    .then((data) => resolve(data))
+                    .catch((error) => resolve(error))
+            })
 
-                const createIndirectRelationships = await new Promise(async (resolve) => {
-                    const spaces = await Space.findAll({
-                        where: { id: spaceIds, state: 'active' },
-                        attributes: ['id'],
-                        include: [
-                            {
-                                model: Space,
-                                as: 'SpaceAncestors',
-                                attributes: ['id'],
-                                through: { where: { state: 'open' }, attributes: [] },
-                            },
-                        ],
-                    })
-                    // gather ancestor ids
-                    const ids = []
-                    spaces.forEach((space) =>
-                        ids.push(...space.SpaceAncestors.map((space) => space.id))
-                    )
-                    // remove duplicates and direct spaces
-                    const filteredIds = [...new Set(ids)].filter((id) => !spaceIds.includes(id))
-                    Promise.all(
-                        filteredIds.map((id) =>
-                            SpacePost.create({
-                                type: 'post',
-                                relationship: 'indirect',
-                                creatorId: accountId,
-                                postId: post.id,
-                                spaceId: id,
-                            })
-                        )
-                    )
-                        .then((data) => resolve(data))
-                        .catch((error) => resolve(error))
+            const notifyMentions = await new Promise((resolve) => {
+                User.findAll({
+                    where: { handle: mentions, state: 'active' },
+                    attributes: ['id', 'name', 'email'],
                 })
+                    .then((users) => {
+                        Promise.all(
+                            users.map(
+                                (user) =>
+                                    new Promise(async (reso) => {
+                                        const sendNotification = await Notification.create({
+                                            ownerId: user.id,
+                                            type: 'post-mention',
+                                            seen: false,
+                                            userId: accountId,
+                                            postId: post.id,
+                                        })
 
-                const notifyMentions = await new Promise((resolve) => {
-                    User.findAll({
-                        where: { handle: mentions, state: 'active' },
-                        attributes: ['id', 'name', 'email'],
-                    })
-                        .then((users) => {
-                            Promise.all(
-                                users.map(
-                                    (user) =>
-                                        new Promise(async (reso) => {
-                                            const sendNotification = await Notification.create({
-                                                ownerId: user.id,
-                                                type: 'post-mention',
-                                                seen: false,
-                                                userId: accountId,
-                                                postId: post.id,
-                                            })
-
-                                            const sendEmail = await sgMail.send({
-                                                to: user.email,
-                                                from: {
-                                                    email: 'admin@weco.io',
-                                                    name: 'we { collective }',
-                                                },
-                                                subject: 'New notification',
-                                                text: `
+                                        const sendEmail = await sgMail.send({
+                                            to: user.email,
+                                            from: {
+                                                email: 'admin@weco.io',
+                                                name: 'we { collective }',
+                                            },
+                                            subject: 'New notification',
+                                            text: `
                                                     Hi ${user.name}, ${creatorName} just mentioned you in a post on weco:
                                                     http://${config.appURL}/p/${post.id}
                                                 `,
-                                                html: `
+                                            html: `
                                                     <p>
                                                         Hi ${user.name},
                                                         <br/>
@@ -748,265 +851,276 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                         on weco
                                                     </p>
                                                 `,
-                                            })
-
-                                            Promise.all([sendNotification, sendEmail])
-                                                .then(() => reso())
-                                                .catch((error) => reso(error))
                                         })
-                                )
+
+                                        Promise.all([sendNotification, sendEmail])
+                                            .then(() => reso())
+                                            .catch((error) => reso(error))
+                                    })
                             )
-                                .then((data) => resolve(data))
-                                .catch((error) => resolve(data, error))
-                        })
-                        .catch((error) => resolve(error))
-                })
+                        )
+                            .then((data) => resolve(data))
+                            .catch((error) => resolve(data, error))
+                    })
+                    .catch((error) => resolve(error))
+            })
 
-                const createUrls = await Promise.all(
-                    urls.map((urlData) =>
-                        Url.create({
-                            type: 'post',
-                            itemId: post.id,
-                            url: urlData.url,
-                            image: urlData.image,
-                            title: urlData.title,
-                            description: urlData.description,
-                            domain: urlData.domain,
-                        })
-                    )
+            const createUrls = await Promise.all(
+                urls.map((urlData) =>
+                    Url.create({
+                        type: 'post',
+                        itemId: post.id,
+                        url: urlData.url,
+                        image: urlData.image,
+                        title: urlData.title,
+                        description: urlData.description,
+                        domain: urlData.domain,
+                    })
                 )
+            )
 
-                const createEvent =
-                    type === 'event' || (type === 'glass-bead-game' && startTime)
-                        ? await Event.create({
-                              postId: post.id,
-                              state: 'active',
-                              title,
-                              startTime,
-                              endTime,
-                          })
-                        : null
-
-                const createInquiry =
-                    type === 'inquiry'
-                        ? await new Promise(async (resolve) => {
-                              Inquiry.create({
-                                  postId: post.id,
-                                  type: inquiryType,
-                                  title: inquiryTitle,
-                                  answersLocked,
-                                  endTime: inquiryEndTime || null,
-                              }).then((inquiry) => {
-                                  const answers = JSON.parse(inquiryAnswers)
-                                  Promise.all(
-                                      answers.map((answer) =>
-                                          InquiryAnswer.create({
-                                              inquiryId: inquiry.id,
-                                              creatorId: accountId,
-                                              text: answer.text,
-                                          })
-                                      )
-                                  ).then((data) => resolve(data))
+            const createImages =
+                type === 'image'
+                    ? await Promise.all(
+                          images.map((image, index) =>
+                              Image.create({
+                                  itemId: post.id,
+                                  type: 'post',
+                                  creatorId: accountId,
+                                  index,
+                                  url:
+                                      image.url ||
+                                      files.find((file) => Number(file.originalname) === index)
+                                          .location,
+                                  caption: image.caption,
                               })
-                          })
-                        : null
+                          )
+                      )
+                    : null
 
-                const createGBG =
-                    type === 'glass-bead-game'
-                        ? await GlassBeadGame.create({
+            const createAudio =
+                type === 'audio'
+                    ? await Audio.create({
+                          itemId: post.id,
+                          state: 'active',
+                          type: 'post',
+                          url: files[0].location,
+                      })
+                    : null
+
+            const createEvent =
+                type === 'event' || (type === 'glass-bead-game' && gbgSettings.startTime)
+                    ? await Event.create({
+                          postId: post.id,
+                          state: 'active',
+                          startTime: type === 'event' ? startTime : gbgSettings.startTime,
+                          endTime: type === 'event' ? endTime : gbgSettings.endTime,
+                      })
+                    : null
+
+            const createPoll =
+                type === 'poll'
+                    ? await new Promise(async (resolve) => {
+                          const newPoll = await Inquiry.create({
                               postId: post.id,
-                              topic,
-                              topicGroup,
-                              topicImage,
-                              locked: false,
+                              type: pollType,
+                              answersLocked: pollAnswersLocked,
+                              // endTime: inquiryEndTime || null,
                           })
-                        : null
-
-                const createImages =
-                    type === 'image'
-                        ? await Promise.all(
-                              imageData.map((image, index) =>
-                                  PostImage.create({
-                                      postId: post.id,
+                          Promise.all(
+                              pollAnswers.map((answer) =>
+                                  InquiryAnswer.create({
+                                      inquiryId: newPoll.id,
                                       creatorId: accountId,
-                                      index,
-                                      url:
-                                          image.url ||
-                                          files.find((file) => file.index === index).location,
-                                      caption: image.caption,
+                                      text: answer.text,
                                   })
                               )
-                          )
-                        : null
+                          ).then((data) => resolve(data))
+                      })
+                    : null
 
-                const createBeads =
-                    type === 'string'
-                        ? await new Promise(async (resolve) => {
-                              const linkSourceBead = sourcePostId
-                                  ? await Link.create({
-                                        state: 'visible',
-                                        type: 'string-post',
-                                        index: 0,
-                                        relationship: 'source',
-                                        creatorId: accountId,
-                                        itemAId: post.id,
-                                        itemBId: sourcePostId,
+            const createGBG =
+                type === 'glass-bead-game'
+                    ? await new Promise(async (resolve) => {
+                          console.log('files: ', files)
+                          const topicImageUpload = files.find((f) => f.fieldname === 'topicImage')
+
+                          const createGame = await GlassBeadGame2.create({
+                              postId: post.id,
+                              state: 'active',
+                              locked: false,
+                              topic,
+                              topicGroup,
+                              topicImage: topicImageUpload
+                                  ? topicImageUpload.location
+                                  : topicImageUrl || null,
+                              synchronous: gbgSettings.synchronous,
+                              multiplayer: gbgSettings.multiplayer,
+                              nextMoveDeadline: gbgSettings.nextMoveDeadline || null,
+                              allowedBeadTypes: gbgSettings.allowedBeadTypes
+                                  .join(',')
+                                  .toLowerCase(),
+                              playerOrder:
+                                  gbgSettings.players.length > 0
+                                      ? gbgSettings.players.map((p) => p.id).join(',')
+                                      : null,
+                              totalMoves: gbgSettings.totalMoves || null,
+                              movesPerPlayer: gbgSettings.movesPerPlayer || null,
+                              moveDuration: gbgSettings.moveDuration || null,
+                              moveTimeWindow: gbgSettings.moveTimeWindow || null,
+                              characterLimit: gbgSettings.characterLimit || null,
+                              introDuration: gbgSettings.introDuration || null,
+                              outroDuration: gbgSettings.outroDuration || null,
+                              intervalDuration: gbgSettings.intervalDuration || null,
+                              backgroundImage: null,
+                              backgroundVideo: null,
+                              backgroundVideoStartTime: null,
+                          })
+
+                          const linkSourceBead = sourcePostId
+                              ? await Link.create({
+                                    state: 'visible',
+                                    type: 'gbg-post',
+                                    index: 0,
+                                    relationship: 'source',
+                                    creatorId: accountId,
+                                    itemAId: sourcePostId,
+                                    itemBId: post.id,
+                                })
+                              : null
+
+                          const notifySourceCreator =
+                              sourcePostId && sourceCreatorId !== accountId
+                                  ? await new Promise(async (Resolve) => {
+                                        const sourceCreator = await User.findOne({
+                                            where: { id: sourceCreatorId },
+                                            attributes: ['name', 'email'],
+                                        })
+                                        const notifyCreator = await Notification.create({
+                                            type: 'new-gbg-from-your-post',
+                                            ownerId: sourceCreatorId,
+                                            userId: accountId,
+                                            postId: post.id,
+                                            seen: false,
+                                        })
+                                        const emailCreator = await sgMail.send({
+                                            to: sourceCreator.email,
+                                            from: {
+                                                email: 'admin@weco.io',
+                                                name: 'we { collective }',
+                                            },
+                                            subject: 'New notification',
+                                            text: `
+                                                Hi ${sourceCreator.name}, ${creatorName} just created a new galss bead game from your post on weco: https://${config.appURL}/p/${post.id}
+                                            `,
+                                            html: `
+                                                <p>
+                                                    Hi ${sourceCreator.name},
+                                                    <br/>
+                                                    <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+                                                    just created a new <a href='${config.appURL}/p/${post.id}'>glass bead game</a> from your post on weco.
+                                                </p>
+                                            `,
+                                        })
+                                        Promise.all([notifyCreator, emailCreator])
+                                            .then(() => Resolve())
+                                            .catch((error) => Resolve(error))
                                     })
                                   : null
-                              const notifySourcePlayer =
-                                  sourcePostId && sourceCreatorId !== accountId
-                                      ? await new Promise(async (Resolve) => {
-                                            const sourceCreator = await User.findOne({
-                                                where: { id: sourceCreatorId },
-                                                attributes: ['name', 'email'],
-                                            })
-                                            const notifyCreator = await Notification.create({
-                                                type: 'new-string-from-your-post',
-                                                ownerId: sourceCreatorId,
-                                                userId: accountId,
-                                                postId: post.id,
-                                                seen: false,
-                                            })
-                                            const emailCreator = await sgMail.send({
-                                                to: sourceCreator.email,
-                                                from: {
-                                                    email: 'admin@weco.io',
-                                                    name: 'we { collective }',
-                                                },
-                                                subject: 'New notification',
-                                                text: `
-                                                    Hi ${sourceCreator.name}, ${creatorName} just created a string from your post on Weco: https://${config.appURL}/p/${post.id}
-                                                `,
-                                                html: `
-                                                    <p>
-                                                        Hi ${sourceCreator.name},
-                                                        <br/>
-                                                        <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
-                                                        just created a <a href='${config.appURL}/p/${post.id}'>string</a> from your post on Weco.
-                                                    </p>
-                                                `,
-                                            })
-                                            Promise.all([notifyCreator, emailCreator])
-                                                .then(() => Resolve())
-                                                .catch((error) => Resolve(error))
-                                        })
-                                      : null
-                              const createNormalBeads = await Promise.all(
-                                  stringData.map(
-                                      (bead, index) =>
-                                          new Promise((Resolve, reject) => {
-                                              Post.create({
-                                                  type: `string-${bead.type}`,
-                                                  state: 'visible',
-                                                  creatorId: accountId,
-                                                  color: bead.color,
-                                                  text: bead.text || null,
-                                                  url:
-                                                      bead.type === 'audio'
-                                                          ? files.find(
-                                                                (file) => file.beadIndex === index
-                                                            ).location
-                                                          : bead.url,
-                                                  urlImage:
-                                                      bead.type === 'url'
-                                                          ? bead.urlData.image
-                                                          : null,
-                                                  urlDomain:
-                                                      bead.type === 'url'
-                                                          ? bead.urlData.domain
-                                                          : null,
-                                                  urlTitle:
-                                                      bead.type === 'url'
-                                                          ? bead.urlData.title
-                                                          : null,
-                                                  urlDescription:
-                                                      bead.type === 'url'
-                                                          ? bead.urlData.description
-                                                          : null,
-                                                  state: 'visible',
-                                              }).then(async (stringPost) => {
-                                                  const createPostImages =
-                                                      bead.type === 'image'
-                                                          ? await Promise.all(
-                                                                bead.images.map((image, i) =>
-                                                                    PostImage.create({
-                                                                        postId: stringPost.id,
-                                                                        creatorId: accountId,
-                                                                        index: i,
-                                                                        url:
-                                                                            image.url ||
-                                                                            files.find(
-                                                                                (file) =>
-                                                                                    file.beadIndex ===
-                                                                                        index &&
-                                                                                    file.imageIndex ===
-                                                                                        i
-                                                                            ).location,
-                                                                        caption: image.caption,
-                                                                    })
-                                                                )
-                                                            )
-                                                          : null
 
-                                                  const createStringLink = await Link.create({
-                                                      state: 'visible',
-                                                      type: 'string-post',
-                                                      index: index + 1,
-                                                      creatorId: accountId,
-                                                      itemAId: post.id,
-                                                      itemBId: stringPost.id,
-                                                  })
-
-                                                  Promise.all([
-                                                      createPostImages,
-                                                      createStringLink,
-                                                  ]).then((data) =>
-                                                      Resolve({
-                                                          stringPost,
-                                                          imageData: data[0],
-                                                          linkData: data[1],
-                                                      })
-                                                  )
-                                              })
+                          const createBeads = await Promise.all(
+                              beads.map(
+                                  (bead, index) =>
+                                      new Promise(async (Resolve) => {
+                                          const newBead = await Post.create({
+                                              type: `gbg-${bead.type}`,
+                                              state: 'visible',
+                                              creatorId: accountId,
+                                              color: bead.color || null,
+                                              text: bead.text || null,
+                                              lastActivity: new Date(),
                                           })
-                                  )
-                              )
-                              Promise.all([linkSourceBead, notifySourcePlayer, createNormalBeads])
-                                  .then((data) => resolve(data[2]))
-                                  .catch((error) => resolve(error))
-                          })
-                        : null
 
-                const createWeave =
-                    type === 'weave'
-                        ? new Promise((resolve, reject) => {
-                              const players = JSON.parse(playerData)
-                              Weave.create({
-                                  state: privacy === 'all-users-allowed' ? 'active' : 'pending',
-                                  numberOfMoves,
-                                  numberOfTurns,
-                                  allowedBeadTypes,
-                                  characterLimit,
-                                  audioTimeLimit,
-                                  moveTimeWindow,
-                                  privacy,
-                                  postId: post.id,
-                              }).then(async () => {
-                                  if (privacy === 'all-users-allowed') resolve()
-                                  else {
-                                      const playerAccounts = await User.findAll({
-                                          where: { id: players.map((p) => p.id) },
-                                          attributes: ['id', 'name', 'handle', 'email'],
+                                          const createBeadUrl =
+                                              bead.type === 'url'
+                                                  ? await Url.create({
+                                                        type: 'post',
+                                                        itemId: newBead.id,
+                                                        creatorId: accountId,
+                                                        ...bead.Urls[0],
+                                                    })
+                                                  : null
+
+                                          const createBeadAudio =
+                                              bead.type === 'audio'
+                                                  ? await Audio.create({
+                                                        type: 'post',
+                                                        itemId: newBead.id,
+                                                        creatorId: accountId,
+                                                        url:
+                                                            bead.Audios[0].url ||
+                                                            files.find(
+                                                                (file) =>
+                                                                    Number(file.originalname) ===
+                                                                    index
+                                                            ).location,
+                                                    })
+                                                  : null
+
+                                          const createBeadImage =
+                                              bead.type === 'image'
+                                                  ? await Image.create({
+                                                        type: 'post',
+                                                        itemId: newBead.id,
+                                                        creatorId: accountId,
+                                                        url:
+                                                            bead.Images[0].url ||
+                                                            files.find(
+                                                                (file) =>
+                                                                    Number(file.originalname) ===
+                                                                    index
+                                                            ).location,
+                                                        caption: bead.Images[0].caption,
+                                                    })
+                                                  : null
+
+                                          const createLink = await Link.create({
+                                              state: 'visible',
+                                              type: 'gbg-post',
+                                              index: index + 1,
+                                              creatorId: accountId,
+                                              itemAId: post.id,
+                                              itemBId: newBead.id,
+                                          })
+
+                                          Promise.all([
+                                              createBeadUrl,
+                                              createBeadAudio,
+                                              createBeadImage,
+                                              createLink,
+                                          ]).then((data) =>
+                                              Resolve({
+                                                  newBead,
+                                                  url: data[0],
+                                                  audio: data[1],
+                                                  image: data[2],
+                                                  link: data[3],
+                                              })
+                                          )
                                       })
-                                      const creatorAccount = playerAccounts.find(
-                                          (p) => p.id === accountId
-                                      )
-                                      Promise.all(
-                                          players.map((player, index) => {
-                                              return UserPost.create({
+                              )
+                          )
+
+                          const setUpPlayers = await new Promise(async (Resolve) => {
+                              const { multiplayer, players } = gbgSettings
+                              if (multiplayer && players.length > 0) {
+                                  const createRelationships = await Promise.all(
+                                      players.map(
+                                          async (player, index) =>
+                                              await UserPost.create({
                                                   userId: player.id,
                                                   postId: post.id,
-                                                  type: 'weave',
+                                                  type: 'glass-bead-game',
                                                   relationship: 'player',
                                                   index: index + 1,
                                                   color: player.color,
@@ -1014,445 +1128,183 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                       player.id === accountId
                                                           ? 'accepted'
                                                           : 'pending',
-                                              }).then(() => {
-                                                  if (player.id !== accountId) {
-                                                      // const moveTimeWindow = ''
-                                                      // send invite notification and email
-                                                      Notification.create({
-                                                          type: 'weave-invitation',
+                                              })
+                                      )
+                                  )
+
+                                  const otherPlayers = await User.findAll({
+                                      where: {
+                                          id: players
+                                              .filter((p) => p.id !== accountId)
+                                              .map((p) => p.id),
+                                      },
+                                      attributes: ['id', 'name', 'handle', 'email'],
+                                  })
+
+                                  const notifyOtherPlayers = await Promise.all(
+                                      otherPlayers.map(
+                                          async (player) =>
+                                              await new Promise(async (res) => {
+                                                  const createNotification =
+                                                      await Notification.create({
+                                                          type: 'gbg-invitation',
                                                           ownerId: player.id,
                                                           userId: accountId,
                                                           postId: post.id,
                                                           seen: false,
                                                           state: 'pending',
                                                       })
-                                                      const playerAccount = playerAccounts.find(
-                                                          (pa) => pa.id === player.id
-                                                      )
-                                                      sgMail.send({
-                                                          to: playerAccount.email,
-                                                          from: {
-                                                              email: 'admin@weco.io',
-                                                              name: 'we { collective }',
-                                                          },
-                                                          subject: 'New notification',
-                                                          text: `
-                                                    Hi ${playerAccount.name}, ${creatorAccount.name} just invited you to join a Weave on weco: https://${config.appURL}/p/${post.id}
-                                                    Log in and go to your notifications to accept or reject the invitation: https://${config.appURL}/u/${playerAccount.handle}/notifications
-                                                `,
-                                                          html: `
-                                                    <p>
-                                                        Hi ${playerAccount.name},
-                                                        <br/>
-                                                        <a href='${config.appURL}/u/${
-                                                              creatorAccount.handle
-                                                          }'>${creatorAccount.name}</a>
-                                                        just invited you to join a <a href='${
-                                                            config.appURL
-                                                        }/p/${post.id}'>Weave</a> on weco.
-                                                        <br/>
-                                                        Log in and go to your <a href='${
-                                                            config.appURL
-                                                        }/u/${
-                                                              playerAccount.handle
-                                                          }/notifications'>notifications</a> to accept or reject the invitation.
-                                                        <br/>
-                                                        <br/>
-                                                        Weave settings:
-                                                        <br/>
-                                                        <br/>
-                                                        Player order: ${playerAccounts
-                                                            .map((p) => p.name)
-                                                            .join(' → ')}
-                                                        <br/>
-                                                        Turns (moves per player): ${numberOfTurns}
-                                                        <br/>
-                                                        Allowed bead types: ${allowedBeadTypes}
-                                                        <br/>
-                                                        Time window for moves: ${
-                                                            moveTimeWindow
-                                                                ? `${moveTimeWindow} minutes`
-                                                                : 'Off'
-                                                        }
-                                                        <br/>
-                                                        Character limit: ${
-                                                            characterLimit
-                                                                ? `${characterLimit} characters`
-                                                                : 'Off'
-                                                        }
-                                                        <br/>
-                                                        Audio time limit: ${
-                                                            audioTimeLimit
-                                                                ? `${audioTimeLimit} seconds`
-                                                                : 'Off'
-                                                        }
-                                                        <br/>
-                                                    </p>
-                                                `,
-                                                      })
-                                                  }
-                                              })
-                                          })
-                                      ).then(() => resolve(playerAccounts))
-                                  }
-                              })
-                          })
-                        : null
 
-                Promise.all([
-                    createDirectRelationships,
-                    createIndirectRelationships,
-                    notifyMentions,
-                    createUrls,
-                    createEvent,
-                    createInquiry,
-                    createGBG,
-                    createImages,
-                    createBeads,
-                    createWeave,
-                ]).then((data) => {
-                    res.status(200).json({
-                        post,
-                        indirectRelationships: data[1],
-                        event: data[3],
-                        inquiryAnswers: data[4],
-                        images: data[6],
-                        string: data[7],
-                    })
+                                                  const sendEmail = await sgMail.send({
+                                                      to: playerAccount.email,
+                                                      from: {
+                                                          email: 'admin@weco.io',
+                                                          name: 'we { collective }',
+                                                      },
+                                                      subject: 'New notification',
+                                                      text: `
+                                            Hi ${player.name}, ${creatorName} just invited you to join a Weave on weco: https://${config.appURL}/p/${post.id}
+                                            Log in and go to your notifications to accept or reject the invitation: https://${config.appURL}/u/${player.handle}/notifications
+                                        `,
+                                                      html: `
+                                            <p>
+                                                Hi ${player.name},
+                                                <br/>
+                                                <a href='${
+                                                    config.appURL
+                                                }/u/${creatorHandle}'>${creatorName}</a> just invited you to join a 
+                                                <a href='${config.appURL}/p/${
+                                                          post.id
+                                                      }'>Weave</a> on weco.
+                                                <br/>
+                                                Log in and go to your <a href='${config.appURL}/u/${
+                                                          player.handle
+                                                      }/notifications'>notifications</a> 
+                                                to accept or reject the invitation.
+                                                <br/>
+                                                <br/>
+                                                Weave settings:
+                                                <br/>
+                                                <br/>
+                                                Player order: ${players
+                                                    .map((p) => p.name)
+                                                    .join(' → ')}
+                                                <br/>
+                                                Turns (moves per player): ${numberOfTurns}
+                                                <br/>
+                                                Allowed bead types: ${allowedBeadTypes}
+                                                <br/>
+                                                Time window for moves: ${
+                                                    moveTimeWindow
+                                                        ? `${moveTimeWindow} minutes`
+                                                        : 'Off'
+                                                }
+                                                <br/>
+                                                Character limit: ${
+                                                    characterLimit
+                                                        ? `${characterLimit} characters`
+                                                        : 'Off'
+                                                }
+                                                <br/>
+                                                Audio time limit: ${
+                                                    audioTimeLimit
+                                                        ? `${audioTimeLimit} seconds`
+                                                        : 'Off'
+                                                }
+                                                <br/>
+                                            </p>
+                                        `,
+                                                  })
+                                                  Promise.all([createNotification, sendEmail])
+                                                      .then(() => res())
+                                                      .catch((error) => res(error))
+                                              })
+                                      )
+                                  )
+
+                                  Promise.all([createRelationships, notifyOtherPlayers])
+                                      .then(() => Resolve())
+                                      .catch((error) => Resolve(error))
+                              } else Resolve()
+                          })
+                          Promise.all([
+                              createGame,
+                              linkSourceBead,
+                              notifySourceCreator,
+                              createBeads,
+                              setUpPlayers,
+                          ])
+                              .then(() => resolve())
+                              .catch((error) => resolve(error))
+                      })
+                    : null
+
+            Promise.all([
+                createDirectRelationships,
+                createIndirectRelationships,
+                notifyMentions,
+                createUrls,
+                createImages,
+                createAudio,
+                createEvent,
+                createPoll,
+                createGBG,
+            ]).then((data) => {
+                res.status(200).json({
+                    post,
+                    indirectRelationships: data[1],
+                    images: data[4],
+                    audio: data[5],
+                    event: data[6],
+                    pollAnswers: data[7],
+                    beads: data[8],
                 })
             })
         }
 
-        const baseUrl = `https://weco-${process.env.NODE_ENV}-`
-        const s3Url = '.s3.eu-west-1.amazonaws.com'
-
-        if (uploadType === 'image-post') {
-            multer({
-                limits: { fileSize: imageMBLimit * 1024 * 1024 },
-                storage: multerS3({
-                    s3: s3,
-                    bucket: `weco-${process.env.NODE_ENV}-post-images`,
-                    acl: 'public-read',
-                    contentType: function (req, file, cb) {
-                        cb(null, file.mimetype)
-                    },
-                    metadata: function (req, file, cb) {
-                        cb(null, { mimetype: file.mimetype })
-                    },
-                    key: function (req, file, cb) {
-                        const name = file.originalname
-                            .replace(/[^A-Za-z0-9]/g, '-')
-                            .substring(0, 30)
-                        const date = Date.now().toString()
-                        const fileName = `post-image-upload-${accountId}-${name}-${date}`
-                        cb(null, fileName)
-                    },
-                }),
-            }).any('file')(req, res, (error) => {
+        if (uploadType === 'image-file') {
+            multer(multerParams(uploadType, accountId)).any('file')(req, res, (error) => {
                 const { files, body } = req
-                if (error instanceof multer.MulterError) {
-                    if (error.code === 'LIMIT_FILE_SIZE')
-                        res.status(413).send({ message: 'File size too large' })
-                    else res.status(500).send(error)
-                } else if (error) {
-                    res.status(500).send(error)
-                } else {
-                    createPost(
-                        JSON.parse(body.postData),
-                        files.map((file) => {
-                            return { location: file.location, index: Number(file.originalname) }
-                        }),
-                        JSON.parse(body.imageData)
-                    )
-                }
+                if (noMulterErrors(error, res)) createPost(JSON.parse(body.postData), files)
             })
         } else if (uploadType === 'audio-file') {
-            multer({
-                limits: { fileSize: audioMBLimit * 1024 * 1024 },
-                storage: multerS3({
-                    s3: s3,
-                    bucket: `weco-${process.env.NODE_ENV}-post-audio`,
-                    acl: 'public-read',
-                    metadata: function (req, file, cb) {
-                        cb(null, { mimetype: file.mimetype })
-                    },
-                    key: function (req, file, cb) {
-                        const name = file.originalname
-                            .replace(/[^A-Za-z0-9]/g, '-')
-                            .substring(0, 30)
-                        const date = Date.now().toString()
-                        const fileName = `post-audio-upload-${accountId}-${name}-${date}.mp3`
-                        // console.log('fileName: ', fileName)
-                        cb(null, fileName)
-                    },
-                }),
-            }).single('file')(req, res, (error) => {
+            multer(multerParams(uploadType, accountId)).single('file')(req, res, (error) => {
                 const { file, body } = req
-                if (error instanceof multer.MulterError) {
-                    if (error.code === 'LIMIT_FILE_SIZE')
-                        res.status(413).send({ message: 'File size too large' })
-                    else res.status(500).send(error)
-                } else if (error) {
-                    res.status(500).send(error)
-                } else {
-                    if (file) createPost(JSON.parse(body.postData), [file])
-                    else res.status(500).json({ message: 'Failed', error })
-                }
+                if (noMulterErrors(error, res)) createPost(JSON.parse(body.postData), [file])
             })
         } else if (uploadType === 'audio-blob') {
-            multer({
-                fileFilter: (req, file, cb) => {
-                    if (file.mimetype === 'audio/mpeg-3') cb(null, true)
-                    else {
-                        cb(null, false)
-                        cb(new Error('Only audio/mpeg-3 files allowed'))
-                    }
-                },
-                limits: { fileSize: audioMBLimit * 1024 * 1024 },
-                dest: './audio/raw',
-            }).single('file')(req, res, (error) => {
+            multer(multerParams(uploadType, accountId)).single('file')(req, res, (error) => {
                 const { file, body } = req
-                // handle errors
-                if (error instanceof multer.MulterError) {
-                    if (error.code === 'LIMIT_FILE_SIZE')
-                        res.status(413).send({ message: 'File size too large' })
-                    else res.status(500).send(error)
-                } else if (error) {
-                    res.status(500).send(error)
-                } else {
-                    // convert raw audio to mp3
-                    ffmpeg(file.path)
-                        .output(`audio/mp3/${file.filename}.mp3`)
-                        .on('end', function () {
-                            // upload new mp3 file to s3 bucket
-                            fs.readFile(`audio/mp3/${file.filename}.mp3`, function (err, data) {
-                                if (!err) {
-                                    const name = file.originalname
-                                        .replace(/[^A-Za-z0-9]/g, '-')
-                                        .substring(0, 30)
-                                    const date = Date.now().toString()
-                                    const fileName = `post-audio-recording-${accountId}-${name}-${date}.mp3`
-                                    console.log('fileName: ', fileName)
-                                    s3.putObject(
-                                        {
-                                            Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
-                                            ACL: 'public-read',
-                                            Key: fileName,
-                                            Body: data,
-                                            Metadata: { mimetype: file.mimetype },
-                                        },
-                                        (err) => {
-                                            if (err) console.log(err)
-                                            else {
-                                                // delete old files
-                                                fs.unlink(`audio/raw/${file.filename}`, (err) => {
-                                                    if (err) console.log(err)
-                                                })
-                                                fs.unlink(
-                                                    `audio/mp3/${file.filename}.mp3`,
-                                                    (err) => {
-                                                        if (err) console.log(err)
-                                                    }
-                                                )
-                                                // create post
-                                                createPost(JSON.parse(body.postData), [
-                                                    {
-                                                        location: `https://weco-${process.env.NODE_ENV}-post-audio.s3.eu-west-1.amazonaws.com/${fileName}`,
-                                                    },
-                                                ])
-                                            }
-                                        }
-                                    )
-                                }
-                            })
-                        })
-                        .run()
+                if (noMulterErrors(error, res)) {
+                    convertAndUploadAudio(file, accountId).then((location) =>
+                        createPost(JSON.parse(body.postData), [{ location }])
+                    )
                 }
             })
         } else if (uploadType === 'glass-bead-game') {
-            multer({
-                limits: { fileSize: imageMBLimit * 1024 * 1024 },
-                dest: './stringData',
-            }).any()(req, res, (error) => {
+            multer(multerParams(uploadType, accountId)).any()(req, res, (error) => {
                 const { files, body } = req
-                Promise.all(
-                    files.map(
-                        (file) =>
-                            new Promise((resolve) => {
-                                if (file.fieldname === 'audioFile') {
-                                    fs.readFile(
-                                        `stringData/${file.filename}`,
-                                        function (err, data) {
-                                            s3.putObject(
-                                                {
-                                                    Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
-                                                    ACL: 'public-read',
-                                                    Key: file.filename,
-                                                    Body: data,
-                                                    Metadata: { mimetype: file.mimetype },
-                                                },
-                                                (err) => {
-                                                    if (err) console.log(err)
-                                                    else {
-                                                        resolve({
-                                                            fieldname: file.fieldname,
-                                                            beadIndex: +file.originalname,
-                                                            location: `${baseUrl}post-audio${s3Url}/${file.filename}`,
-                                                        })
-                                                        fs.unlink(
-                                                            `stringData/${file.filename}`,
-                                                            (err) => {
-                                                                if (err) console.log(err)
-                                                            }
-                                                        )
-                                                    }
-                                                }
-                                            )
-                                        }
-                                    )
-                                } else if (file.fieldname === 'audioRecording') {
-                                    // convert audio blob to mp3
-                                    ffmpeg(file.path)
-                                        .output(`audio/mp3/${file.filename}.mp3`)
-                                        .on('end', () => {
-                                            // upload mp3 to s3 bucket
-                                            fs.readFile(
-                                                `audio/mp3/${file.filename}.mp3`,
-                                                function (err, data) {
-                                                    if (!err) {
-                                                        const name = file.originalname
-                                                            .replace(/[^A-Za-z0-9]/g, '-')
-                                                            .substring(0, 30)
-                                                        const date = Date.now().toString()
-                                                        const fileName = `post-audio-recording-${accountId}-${name}-${date}.mp3`
-                                                        s3.putObject(
-                                                            {
-                                                                Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
-                                                                ACL: 'public-read',
-                                                                Key: fileName,
-                                                                Body: data,
-                                                                Metadata: {
-                                                                    mimetype: file.mimetype,
-                                                                },
-                                                            },
-                                                            (err) => {
-                                                                if (err) console.log(err)
-                                                                else {
-                                                                    resolve({
-                                                                        fieldname: file.fieldname,
-                                                                        beadIndex:
-                                                                            +file.originalname,
-                                                                        location: `${baseUrl}post-audio${s3Url}/${fileName}`,
-                                                                    })
-                                                                    console.log(
-                                                                        'delete files!!!!!!!'
-                                                                    )
-                                                                    fs.unlink(
-                                                                        `stringData/${file.filename}`,
-                                                                        (err) => {
-                                                                            if (err)
-                                                                                console.log(err)
-                                                                        }
-                                                                    )
-                                                                    fs.unlink(
-                                                                        `audio/mp3/${file.filename}.mp3`,
-                                                                        (err) => {
-                                                                            if (err)
-                                                                                console.log(err)
-                                                                        }
-                                                                    )
-                                                                }
-                                                            }
-                                                        )
-                                                    }
-                                                }
-                                            )
-                                        })
-                                        .run()
-                                } else if (file.fieldname === 'imageFile') {
-                                    fs.readFile(
-                                        `stringData/${file.filename}`,
-                                        function (err, data) {
-                                            const name = file.originalname
-                                                .replace(/[^A-Za-z0-9]/g, '-')
-                                                .substring(0, 30)
-                                            const date = Date.now().toString()
-                                            const fileName = `post-image-upload-${accountId}-${name}-${date}`
-                                            s3.putObject(
-                                                {
-                                                    Bucket: `weco-${process.env.NODE_ENV}-post-images`,
-                                                    ACL: 'public-read',
-                                                    Key: fileName,
-                                                    Body: data,
-                                                    ContentType: file.mimetype,
-                                                    Metadata: { mimetype: file.mimetype },
-                                                },
-                                                (err, response) => {
-                                                    if (err) console.log(err)
-                                                    else {
-                                                        const indexes = file.originalname.split('-')
-                                                        resolve({
-                                                            fieldname: file.fieldname,
-                                                            beadIndex: +indexes[0],
-                                                            imageIndex: +indexes[1],
-                                                            location: `${baseUrl}post-images${s3Url}/${fileName}`,
-                                                        })
-                                                        fs.unlink(
-                                                            `stringData/${file.filename}`,
-                                                            (err) => {
-                                                                if (err) console.log(err)
-                                                            }
-                                                        )
-                                                    }
-                                                }
-                                            )
-                                        }
-                                    )
-                                } else if (file.fieldname === 'topicImageFile') {
-                                    fs.readFile(
-                                        `stringData/${file.filename}`,
-                                        function (err, data) {
-                                            const name = file.originalname
-                                                .replace(/[^A-Za-z0-9]/g, '-')
-                                                .substring(0, 30)
-                                            const date = Date.now().toString()
-                                            const fileName = `gbg-topic-image-upload-${accountId}-${name}-${date}`
-                                            s3.putObject(
-                                                {
-                                                    Bucket: `weco-${process.env.NODE_ENV}-post-images`,
-                                                    ACL: 'public-read',
-                                                    Key: fileName,
-                                                    Body: data,
-                                                    ContentType: file.mimetype,
-                                                    Metadata: { mimetype: file.mimetype },
-                                                },
-                                                (err, response) => {
-                                                    if (err) console.log(err)
-                                                    else {
-                                                        // const indexes = file.originalname.split('-')
-                                                        resolve({
-                                                            fieldname: file.fieldname,
-                                                            // beadIndex: +indexes[0],
-                                                            // imageIndex: +indexes[1],
-                                                            location: `${baseUrl}post-images${s3Url}/${fileName}`,
-                                                        })
-                                                        fs.unlink(
-                                                            `stringData/${file.filename}`,
-                                                            (err) => {
-                                                                if (err) console.log(err)
-                                                            }
-                                                        )
-                                                    }
-                                                }
-                                            )
-                                        }
-                                    )
-                                } else resolve(null)
-                            })
-                    )
-                ).then((data) => {
-                    createPost(JSON.parse(body.postData), data, null, JSON.parse(body.stringData))
-                })
+                if (noMulterErrors(error, res)) {
+                    Promise.all(
+                        files.map(
+                            async (file) =>
+                                await new Promise((resolve) => {
+                                    if (file.fieldname === 'audioBlob') {
+                                        convertAndUploadAudio(file, accountId).then((url) =>
+                                            resolve({ ...file, location: url })
+                                        )
+                                    } else if (file.fieldname !== 'postData') {
+                                        uploadBeadFile(file, accountId).then((url) =>
+                                            resolve({ ...file, location: url })
+                                        )
+                                    }
+                                    resolve(null)
+                                })
+                        )
+                    ).then((newFiles) => {
+                        createPost(JSON.parse(body.postData), newFiles)
+                    })
+                }
             })
         } else {
             createPost(req.body)
@@ -1569,8 +1421,8 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                     type === 'image'
                         ? await Promise.all(
                               imageData.map((image, index) =>
-                                  PostImage.create({
-                                      postId: bead.id,
+                                  Image.create({
+                                      itemId: bead.id,
                                       creatorId: accountId,
                                       index,
                                       url:
@@ -1604,7 +1456,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                         },
                         {
                             model: User,
-                            as: 'StringPlayers',
+                            as: 'Players',
                             attributes: ['id', 'name', 'email'],
                             through: {
                                 where: { type: 'weave' },
@@ -1691,7 +1543,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                         )
                         // todo: add notification
                         const notifyPlayers = await Promise.all(
-                            post.StringPlayers.map(
+                            post.Players.map(
                                 (p) =>
                                     new Promise(async (Resolve) => {
                                         const notifyPlayer = await Notification.create({
@@ -1740,7 +1592,7 @@ router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
                               )
                             : null
                         // notify next player in private game
-                        const nextPlayer = post.StringPlayers.find((p) => p.id === nextPlayerId)
+                        const nextPlayer = post.Players.find((p) => p.id === nextPlayerId)
                         const nextMoveNumber = post.Beads.length + 1
                         const createMoveNotification = await Notification.create({
                             type: 'weave-move',
