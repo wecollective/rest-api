@@ -1060,8 +1060,8 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                     index: 0,
                                     relationship: 'source',
                                     creatorId: accountId,
-                                    itemAId: sourcePostId,
-                                    itemBId: post.id,
+                                    itemAId: post.id,
+                                    itemBId: sourcePostId,
                                 })
                               : null
 
