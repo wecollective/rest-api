@@ -71,7 +71,7 @@ function multerParams(type, accountId) {
     return params
 }
 
-function convertAndUploadAudio(file, accountId) {
+function convertAndUploadAudio(file, accountId, type) {
     return new Promise((resolve) => {
         // convert raw audio to mp3
         const outputPath = `temp/audio/mp3/${file.filename}.mp3`
@@ -92,7 +92,9 @@ function convertAndUploadAudio(file, accountId) {
                         }
                         s3.putObject(s3Object, (err) => {
                             // delete old files
-                            fs.unlink(`temp/audio/raw/${file.filename}`, (e) => console.log(e))
+                            if (type === 'post')
+                                fs.unlink(`temp/audio/raw/${file.filename}`, (e) => console.log(e))
+                            else fs.unlink(`temp/beads/${file.filename}`, (e) => console.log(e))
                             fs.unlink(`temp/audio/mp3/${file.filename}.mp3`, (e) => console.log(e))
                             // return audio url
                             resolve(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
@@ -689,11 +691,11 @@ function findPostType(type) {
               'image',
               'audio',
               'event',
-              'inquiry',
+              'poll',
               'glass-bead-game',
-              'string',
-              'weave',
-              'prism',
+              //   'string',
+              //   'weave',
+              //   'prism',
           ]
         : type.replace(/\s+/g, '-').toLowerCase()
 }
@@ -882,7 +884,8 @@ function findPostInclude(accountId) {
             as: 'Beads',
             attributes: findFullPostAttributes('Beads', accountId),
             through: {
-                where: { type: 'gbg-post' },
+                // todo: handle account deleted as well (visible used to hide drafts)
+                where: { type: 'gbg-post', state: ['visible', 'account-deleted'] },
                 attributes: ['index', 'relationship', 'state'],
             },
             include: [
@@ -924,7 +927,7 @@ function findPostInclude(accountId) {
             as: 'Players',
             attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
             through: {
-                where: { type: 'weave' },
+                where: { type: 'glass-bead-game' },
                 attributes: ['index', 'state', 'color'],
             },
         },

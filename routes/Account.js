@@ -19,6 +19,7 @@ const {
     UserEvent,
     Link,
     Reaction,
+    GlassBeadGame2,
 } = require('../models')
 const ScheduledTasks = require('../ScheduledTasks')
 const { unseenNotifications } = require('../Helpers')
@@ -304,7 +305,7 @@ router.post('/respond-to-mod-invite', authenticateToken, async (req, res) => {
     }
 })
 
-router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
+router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId, notificationId, response } = req.body
 
@@ -330,30 +331,28 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
                         attributes: ['id', 'name', 'handle', 'email'],
                     },
                     {
-                        model: Weave,
-                        attributes: ['state', 'moveTimeWindow'],
+                        model: GlassBeadGame2,
+                        // attributes: ['state', 'moveTimeWindow'],
                     },
                     {
                         model: User,
-                        as: 'StringPlayers',
+                        as: 'Players',
                         attributes: ['id', 'name', 'handle', 'email'],
                         through: {
-                            where: { type: 'weave' },
+                            where: { type: 'glass-bead-game' },
                             attributes: ['index', 'state'],
                         },
                     },
                 ],
             })
 
-            if (post && post.Weave.state !== 'cancelled') {
-                const players = post.StringPlayers.sort(
-                    (a, b) => a.UserPost.index - b.UserPost.index
-                )
-                const respondingPlayer = post.StringPlayers.find((p) => p.id === accountId)
-                const otherPlayers = post.StringPlayers.filter((p) => p.id !== accountId)
+            if (post && post.GlassBeadGame2.state !== 'cancelled') {
+                const players = post.Players.sort((a, b) => a.UserPost.index - b.UserPost.index)
+                const respondingPlayer = post.Players.find((p) => p.id === accountId)
+                const otherPlayers = post.Players.filter((p) => p.id !== accountId)
                 // if player rejected: update weave state, notify other players
                 if (response === 'rejected') {
-                    const updateWeaveState = await Weave.update(
+                    const updateWeaveState = await GlassBeadGame2.update(
                         { state: 'cancelled' },
                         { where: { postId } }
                     )
@@ -362,7 +361,7 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
                             (p) =>
                                 new Promise(async (resolve) => {
                                     const notifyPlayer = await Notification.create({
-                                        type: 'weave-rejected',
+                                        type: 'gbg-rejected',
                                         ownerId: p.id,
                                         userId: accountId,
                                         postId: postId,
@@ -400,7 +399,7 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
                 } else {
                     // if player accepted:
                     const notifyGameCreator = await Notification.create({
-                        type: 'weave-accepted',
+                        type: 'gbg-accepted',
                         ownerId: post.Creator.id,
                         userId: accountId,
                         postId: postId,
@@ -436,17 +435,18 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
                             res.status(200).json({ message: 'Success' })
                         } else {
                             // if all players ready: update weave state and notify first player
-                            const deadline = post.Weave.moveTimeWindow
+                            const deadline = post.GlassBeadGame2.moveTimeWindow
                                 ? new Date(
-                                      new Date().getTime() + post.Weave.moveTimeWindow * 60 * 1000
+                                      new Date().getTime() +
+                                          post.GlassBeadGame2.moveTimeWindow * 60 * 1000
                                   )
                                 : null
-                            const updateWeaveState = await Weave.update(
+                            const updateWeaveState = await GlassBeadGame2.update(
                                 { state: 'active', nextMoveDeadline: deadline },
                                 { where: { postId } }
                             )
                             const notifyFirstPlayer = await Notification.create({
-                                type: 'weave-move',
+                                type: 'gbg-move',
                                 ownerId: players[0].id,
                                 postId: postId,
                                 seen: false,
@@ -472,8 +472,8 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
                                         </p>
                                     `,
                             })
-                            const scheduleWeaveMoveJobs = post.Weave.moveTimeWindow
-                                ? ScheduledTasks.scheduleWeaveMoveJobs(
+                            const scheduleGBGMoveJobs = post.GlassBeadGame2.moveTimeWindow
+                                ? ScheduledTasks.scheduleGBGMoveJobs(
                                       postId,
                                       players[0],
                                       1,
@@ -484,7 +484,7 @@ router.post('/respond-to-weave-invite', authenticateToken, async (req, res) => {
                                 updateWeaveState,
                                 notifyFirstPlayer,
                                 emailFirstPlayer,
-                                scheduleWeaveMoveJobs,
+                                scheduleGBGMoveJobs,
                             ])
                                 .then(() => res.status(200).json({ message: 'Success' }))
                                 .catch((error) => res.status(500).json({ message: 'Error', error }))

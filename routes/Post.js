@@ -379,6 +379,67 @@ router.get('/test', async (req, res) => {
         // Post.update({ type: 'glass-bead-game' }, { where: { type: ['string', 'weave'] } })
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json(error))
+
+        // // Change UserPost type 'weave' to 'glass-bead-game'
+        // UserPost.update({ type: 'glass-bead-game' }, { where: { type: 'weave' } })
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // // Update notification types
+        // const invitation = await Notification.update(
+        //     { type: 'gbg-invitation' },
+        //     { where: { type: 'weave-invitation' } }
+        // )
+        // const accepted = await Notification.update(
+        //     { type: 'gbg-accepted' },
+        //     { where: { type: 'weave-accepted' } }
+        // )
+        // const rejected = await Notification.update(
+        //     { type: 'gbg-rejected' },
+        //     { where: { type: 'weave-rejected' } }
+        // )
+        // const move = await Notification.update(
+        //     { type: 'gbg-move' },
+        //     { where: { type: 'weave-move' } }
+        // )
+        // const moveFromOtherPlayer = await Notification.update(
+        //     { type: 'gbg-move-from-other-player' },
+        //     { where: { type: 'weave-move-from-other-player' } }
+        // )
+        // const creatorMoveFromOtherPlayer = await Notification.update(
+        //     { type: 'gbg-creator-move-from-other-player' },
+        //     { where: { type: 'gbg-creator-move-from-other-player' } }
+        // )
+        // const cancelled = await Notification.update(
+        //     { type: 'gbg-cancelled' },
+        //     { where: { type: 'weave-cancelled' } }
+        // )
+        // const ended = await Notification.update(
+        //     { type: 'gbg-ended' },
+        //     { where: { type: 'weave-ended' } }
+        // )
+        // const newGbgFromYourPost = await Notification.update(
+        //     { type: 'new-gbg-from-your-post' },
+        //     { where: { type: 'new-weave-from-your-post' } }
+        // )
+        // const vote = await Notification.update(
+        //     { type: 'poll-vote' },
+        //     { where: { type: 'inquiry-vote' } }
+        // )
+        // Promise.all([
+        //     invitation,
+        //     accepted,
+        //     rejected,
+        //     move,
+        //     moveFromOtherPlayer,
+        //     creatorMoveFromOtherPlayer,
+        //     cancelled,
+        //     ended,
+        //     newGbgFromYourPost,
+        //     vote,
+        // ])
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
     }
 })
 
@@ -724,6 +785,22 @@ router.get('/glass-bead-game-data', (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
+router.get('/glass-bead-game-comments', (req, res) => {
+    const { gameId } = req.query
+    Comment.findAll({
+        where: { type: 'glass-bead-game', itemId: gameId },
+        order: [['createdAt', 'ASC']],
+        attributes: ['id', 'itemId', 'text', 'state', 'createdAt', 'updatedAt'],
+        include: {
+            model: User,
+            as: 'Creator',
+            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        },
+    })
+        .then((comments) => res.status(200).json(comments))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
+})
+
 // POST
 router.post('/create-post', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
@@ -942,7 +1019,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
             const createGBG =
                 type === 'glass-bead-game'
                     ? await new Promise(async (resolve) => {
-                          console.log('files: ', files)
                           const topicImageUpload = files.find((f) => f.fieldname === 'topicImage')
 
                           const createGame = await GlassBeadGame2.create({
@@ -1011,7 +1087,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             },
                                             subject: 'New notification',
                                             text: `
-                                                Hi ${sourceCreator.name}, ${creatorName} just created a new galss bead game from your post on weco: https://${config.appURL}/p/${post.id}
+                                                Hi ${sourceCreator.name}, ${creatorName} just created a new glass bead game from your post on weco: https://${config.appURL}/p/${post.id}
                                             `,
                                             html: `
                                                 <p>
@@ -1156,7 +1232,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                       })
 
                                                   const sendEmail = await sgMail.send({
-                                                      to: playerAccount.email,
+                                                      to: player.email,
                                                       from: {
                                                           email: 'admin@weco.io',
                                                           name: 'we { collective }',
@@ -1190,25 +1266,27 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                     .map((p) => p.name)
                                                     .join(' → ')}
                                                 <br/>
-                                                Turns (moves per player): ${numberOfTurns}
+                                                Turns (moves per player): ${
+                                                    gbgSettings.movesPerPlayer
+                                                }
                                                 <br/>
-                                                Allowed bead types: ${allowedBeadTypes}
+                                                Allowed bead types: ${gbgSettings.allowedBeadTypes}
                                                 <br/>
                                                 Time window for moves: ${
-                                                    moveTimeWindow
-                                                        ? `${moveTimeWindow} minutes`
+                                                    gbgSettings.moveTimeWindow
+                                                        ? `${gbgSettings.moveTimeWindow} minutes`
                                                         : 'Off'
                                                 }
                                                 <br/>
                                                 Character limit: ${
-                                                    characterLimit
-                                                        ? `${characterLimit} characters`
+                                                    gbgSettings.characterLimit
+                                                        ? `${gbgSettings.characterLimit} characters`
                                                         : 'Off'
                                                 }
                                                 <br/>
                                                 Audio time limit: ${
-                                                    audioTimeLimit
-                                                        ? `${audioTimeLimit} seconds`
+                                                    gbgSettings.moveDuration
+                                                        ? `${gbgSettings.moveDuration} seconds`
                                                         : 'Off'
                                                 }
                                                 <br/>
@@ -1234,7 +1312,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               createBeads,
                               setUpPlayers,
                           ])
-                              .then(() => resolve())
+                              .then((data) => resolve({ game: data[0], beads: data[3] }))
                               .catch((error) => resolve(error))
                       })
                     : null
@@ -1252,12 +1330,12 @@ router.post('/create-post', authenticateToken, (req, res) => {
             ]).then((data) => {
                 res.status(200).json({
                     post,
-                    indirectRelationships: data[1],
+                    indirectSpaces: data[1],
                     images: data[4],
                     audio: data[5],
                     event: data[6],
                     pollAnswers: data[7],
-                    beads: data[8],
+                    gbg: data[8],
                 })
             })
         }
@@ -1276,7 +1354,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             multer(multerParams(uploadType, accountId)).single('file')(req, res, (error) => {
                 const { file, body } = req
                 if (noMulterErrors(error, res)) {
-                    convertAndUploadAudio(file, accountId).then((location) =>
+                    convertAndUploadAudio(file, accountId, 'post').then((location) =>
                         createPost(JSON.parse(body.postData), [{ location }])
                     )
                 }
@@ -1290,7 +1368,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                             async (file) =>
                                 await new Promise((resolve) => {
                                     if (file.fieldname === 'audioBlob') {
-                                        convertAndUploadAudio(file, accountId).then((url) =>
+                                        convertAndUploadAudio(file, accountId, 'bead').then((url) =>
                                             resolve({ ...file, location: url })
                                         )
                                     } else if (file.fieldname !== 'postData') {
@@ -1298,7 +1376,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             resolve({ ...file, location: url })
                                         )
                                     }
-                                    resolve(null)
                                 })
                         )
                     ).then((newFiles) => {
@@ -1383,570 +1460,371 @@ router.post('/update-post', authenticateToken, async (req, res) => {
     }
 })
 
-router.post('/create-next-weave-bead', authenticateToken, (req, res) => {
+router.post('/create-next-bead', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { uploadType } = req.query
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        function createBead(beadData, files, imageData) {
+        async function createBead(beadData, files) {
             const {
                 creatorName,
                 creatorHandle,
                 postId,
-                beadIndex,
                 mentions,
-                privacy,
-                nextPlayerId,
                 type,
-                color,
                 text,
-                url,
-                urlData,
+                color,
+                Audios,
+                Urls,
+                Images,
+                // beadIndex,
+                // mentions,
+                // privacy,
+                // nextPlayerId,
+                // type,
+                // color,
+                // text,
+                // url,
+                // urlData,
             } = beadData
 
-            Post.create({
-                type: `string-${type}`,
+            const bead = await Post.create({
+                type: `gbg-${type}`,
                 state: 'visible',
                 creatorId: accountId,
-                color,
+                color: color || null,
+                // title: title || null,
                 text: text || null,
-                url: type === 'audio' ? files[0].location : url,
-                urlImage: urlData ? urlData.image : null,
-                urlDomain: urlData ? urlData.domain : null,
-                urlTitle: urlData ? urlData.title : null,
-                urlDescription: urlData ? urlData.description : null,
-            }).then(async (bead) => {
-                const createImages =
-                    type === 'image'
-                        ? await Promise.all(
-                              imageData.map((image, index) =>
-                                  Image.create({
-                                      itemId: bead.id,
-                                      creatorId: accountId,
-                                      index,
-                                      url:
-                                          image.url ||
-                                          files.find((file) => file.index === index).location,
-                                      caption: image.caption,
-                                  })
-                              )
-                          )
-                        : null
+                lastActivity: new Date(),
+            })
 
-                const createStringLink = await Link.create({
-                    state: 'visible',
-                    type: 'string-post',
-                    index: beadIndex,
-                    creatorId: accountId,
-                    itemAId: postId,
-                    itemBId: bead.id,
-                })
+            // Post.create({
+            //     type: `string-${type}`,
+            //     state: 'visible',
+            //     creatorId: accountId,
+            //     color,
+            //     text: text || null,
+            //     url: type === 'audio' ? files[0].location : url,
+            //     urlImage: urlData ? urlData.image : null,
+            //     urlDomain: urlData ? urlData.domain : null,
+            //     urlTitle: urlData ? urlData.title : null,
+            //     urlDescription: urlData ? urlData.description : null,
+            // }).then(async (bead) => {
 
-                const post = await Post.findOne({
-                    where: { id: postId, state: 'visible' },
-                    include: [
-                        {
+            const createUrl =
+                type === 'url'
+                    ? await Url.create({
+                          itemId: bead.id,
+                          type: 'post',
+                          creatorId: accountId,
+                          url: Urls[0].url,
+                          image: Urls[0].image,
+                          title: Urls[0].title,
+                          description: Urls[0].description,
+                          domain: Urls[0].domain,
+                      })
+                    : null
+
+            const createAudio =
+                type === 'audio'
+                    ? await Audio.create({
+                          itemId: bead.id,
+                          type: 'post',
+                          creatorId: accountId,
+                          url: Audios[0].url || files[0].location,
+                      })
+                    : null
+
+            const createImage =
+                type === 'image'
+                    ? await Image.create({
+                          itemId: bead.id,
+                          type: 'post',
+                          creatorId: accountId,
+                          url: Images[0].url || files[0].location,
+                          caption: Images[0].caption,
+                      })
+                    : null
+
+            const notifyMentions =
+                type === 'text'
+                    ? await new Promise((resolve) => {
+                          User.findAll({
+                              where: { handle: mentions, state: 'active' },
+                              attributes: ['id', 'name', 'email'],
+                          })
+                              .then((users) => {
+                                  Promise.all(
+                                      users.map(
+                                          (user) =>
+                                              new Promise(async (reso) => {
+                                                  const sendNotification =
+                                                      await Notification.create({
+                                                          ownerId: user.id,
+                                                          type: 'bead-mention',
+                                                          seen: false,
+                                                          userId: accountId,
+                                                          postId: bead.id,
+                                                      })
+
+                                                  const sendEmail = await sgMail.send({
+                                                      to: user.email,
+                                                      from: {
+                                                          email: 'admin@weco.io',
+                                                          name: 'we { collective }',
+                                                      },
+                                                      subject: 'New notification',
+                                                      text: `
+                                                            Hi ${user.name}, ${creatorName} just mentioned you in a bead on weco:
+                                                            http://${config.appURL}/p/${bead.id}
+                                                        `,
+                                                      html: `
+                                                            <p>
+                                                                Hi ${user.name},
+                                                                <br/>
+                                                                <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+                                                                just mentioned you in a 
+                                                                <a href='${config.appURL}/p/${bead.id}'>bead</a>
+                                                                on weco
+                                                            </p>
+                                                        `,
+                                                  })
+
+                                                  Promise.all([sendNotification, sendEmail])
+                                                      .then(() => reso())
+                                                      .catch((error) => reso(error))
+                                              })
+                                      )
+                                  )
+                                      .then((data) => resolve(data))
+                                      .catch((error) => resolve(data, error))
+                              })
+                              .catch((error) => resolve(error))
+                      })
+                    : null
+
+            const post = await Post.findOne({
+                where: { id: postId },
+                include: [
+                    {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'name', 'handle', 'email'],
+                    },
+                    {
+                        model: GlassBeadGame2,
+                    },
+                    {
+                        model: User,
+                        as: 'Players',
+                        attributes: ['id', 'name', 'handle', 'email'],
+                        through: {
+                            where: { type: 'glass-bead-game' },
+                            attributes: ['index'],
+                        },
+                    },
+                    {
+                        model: Post,
+                        as: 'Beads',
+                        required: false,
+                        through: {
+                            where: { state: 'visible' },
+                            attributes: ['index'],
+                        },
+                        include: {
                             model: User,
                             as: 'Creator',
                             attributes: ['id', 'name', 'handle', 'email'],
                         },
-                        {
-                            model: Weave,
-                        },
-                        {
-                            model: User,
-                            as: 'Players',
-                            attributes: ['id', 'name', 'email'],
-                            through: {
-                                where: { type: 'weave' },
-                                attributes: ['index'],
-                            },
-                        },
-                        {
-                            model: Post,
-                            as: 'Beads',
-                            required: false,
-                            through: {
-                                where: { state: 'visible' },
-                                attributes: ['index'],
-                            },
-                            include: [
-                                {
-                                    model: User,
-                                    as: 'Creator',
-                                    attributes: ['id', 'name', 'handle', 'email'],
-                                },
-                            ],
-                        },
-                    ],
-                })
+                    },
+                ],
+            })
 
-                const updateWeaveStateAndNotifyPlayers = await new Promise(async (resolve) => {
-                    const openGameFinished =
-                        privacy === 'all-users-allowed' &&
-                        post.Beads.length === post.Weave.numberOfMoves
-                    const privateGameFinished = privacy === 'only-selected-users' && !nextPlayerId
-                    if (openGameFinished) {
-                        // find open game players
-                        const openGamePlayers = []
-                        post.Beads.forEach((bead) => {
-                            if (!openGamePlayers.find((p) => p.id === bead.Creator.id))
-                                openGamePlayers.push(bead.Creator)
-                        })
-                        const updateWeaveState = await Weave.update(
-                            { state: 'ended' },
-                            { where: { postId } }
-                        )
-                        const notifyPlayers = await Promise.all(
-                            openGamePlayers.map(
-                                (p) =>
-                                    new Promise(async (Resolve) => {
-                                        const notifyPlayer = await Notification.create({
-                                            type: 'weave-ended',
-                                            ownerId: p.id,
-                                            postId: postId,
-                                            seen: false,
-                                        })
-                                        const emailPlayer = await sgMail.send({
-                                            to: p.email,
-                                            from: {
-                                                email: 'admin@weco.io',
-                                                name: 'we { collective }',
-                                            },
-                                            subject: 'New notification',
-                                            text: `
-                                                Hi ${p.name}, a weave you participated in has now finished.
-                                                https://${config.appURL}/p/${postId}
-                                            `,
-                                            html: `
-                                                <p>
-                                                    Hi ${p.name},
-                                                    <br/>
-                                                    A <a href='${config.appURL}/p/${postId}'>weave</a> you participated in has now finished.
-                                                </p>
-                                            `,
-                                        })
-                                        Promise.all([notifyPlayer, emailPlayer])
-                                            .then(() => Resolve())
-                                            .catch((error) => Resolve(error))
-                                    })
-                            )
-                        )
-                        Promise.all([updateWeaveState, notifyPlayers])
-                            .then(() => resolve())
-                            .catch(() => resolve())
-                    } else if (privateGameFinished) {
-                        const updateWeaveState = await Weave.update(
-                            { state: 'ended' },
-                            { where: { postId } }
-                        )
-                        // todo: add notification
-                        const notifyPlayers = await Promise.all(
-                            post.Players.map(
-                                (p) =>
-                                    new Promise(async (Resolve) => {
-                                        const notifyPlayer = await Notification.create({
-                                            type: 'weave-ended',
-                                            ownerId: p.id,
-                                            postId: postId,
-                                            seen: false,
-                                        })
-                                        const emailPlayer = await sgMail.send({
-                                            to: p.email,
-                                            from: {
-                                                email: 'admin@weco.io',
-                                                name: 'we { collective }',
-                                            },
-                                            subject: 'New notification',
-                                            text: `
-                                            Hi ${p.name}, a weave you participated in has now finished.
-                                            https://${config.appURL}/p/${postId}
-                                        `,
-                                            html: `
-                                            <p>
-                                                Hi ${p.name},
-                                                <br/>
-                                                A <a href='${config.appURL}/p/${postId}'>weave</a> you participated in has now finished.
-                                            </p>
-                                        `,
-                                        })
-                                        Promise.all([notifyPlayer, emailPlayer])
-                                            .then(() => Resolve())
-                                            .catch((error) => Resolve(error))
-                                    })
-                            )
-                        )
-                        Promise.all([updateWeaveState, notifyPlayers])
-                            .then(() => resolve())
-                            .catch(() => resolve())
-                    } else if (privacy === 'only-selected-users') {
-                        // update next move deadline
-                        const deadline = post.Weave.moveTimeWindow
-                            ? new Date(new Date().getTime() + post.Weave.moveTimeWindow * 60 * 1000)
-                            : null
-                        const updateWeaveState = deadline
-                            ? await Weave.update(
-                                  { nextMoveDeadline: deadline },
-                                  { where: { postId } }
-                              )
-                            : null
-                        // notify next player in private game
-                        const nextPlayer = post.Players.find((p) => p.id === nextPlayerId)
-                        const nextMoveNumber = post.Beads.length + 1
-                        const createMoveNotification = await Notification.create({
-                            type: 'weave-move',
-                            ownerId: nextPlayerId,
-                            postId: postId,
-                            seen: false,
-                        })
-                        const sendMoveEmail = await sgMail.send({
-                            to: nextPlayer.email,
-                            from: {
-                                email: 'admin@weco.io',
-                                name: 'we { collective }',
-                            },
-                            subject: 'New notification',
-                            text: `
-                                Hi ${nextPlayer.name}, it's your move!
-                                Add a new bead to the Weave on weco: https://${config.appURL}/p/${postId}
-                            `,
-                            html: `
-                                <p>
-                                    Hi ${nextPlayer.name},
-                                    <br/>
-                                    It's your move!
-                                    <br/>
-                                    Add a new bead to the <a href='${config.appURL}/p/${postId}'>Weave</a> on weco.
-                                </p>
-                            `,
-                        })
-                        const scheduleWeaveMoveJobs = ScheduledTasks.scheduleWeaveMoveJobs(
-                            postId,
-                            nextPlayer,
-                            nextMoveNumber,
-                            deadline
-                        )
-                        Promise.all([
-                            updateWeaveState,
-                            createMoveNotification,
-                            sendMoveEmail,
-                            scheduleWeaveMoveJobs,
-                        ])
-                            .then(() => resolve(deadline))
-                            .catch(() => resolve())
+            const createLink = await Link.create({
+                state: 'visible',
+                type: 'gbg-post',
+                index: post.Beads.length + 1,
+                creatorId: accountId,
+                itemAId: postId,
+                itemBId: bead.id,
+            })
+
+            const notifyPlayers = await new Promise(async (resolve) => {
+                const { synchronous, multiplayer, moveTimeWindow, movesPerPlayer, playerOrder } =
+                    post.GlassBeadGame2
+                if (synchronous || !multiplayer) resolve()
+                else {
+                    // find other players to notify
+                    let otherPlayers = []
+                    if (post.Players.length) {
+                        // if restricted game, use linked Players
+                        otherPlayers = post.Players.filter((p) => p.id !== accountId)
                     } else {
-                        // find open game players
-                        const openGamePlayers = []
+                        // if open game, use linked Bead Creators
                         post.Beads.forEach((bead) => {
                             // filter out game creator and existing records
                             if (
-                                bead.Creator.id !== post.Creator.id &&
-                                !openGamePlayers.find((p) => p.id === bead.Creator.id)
+                                bead.Creator.id !== accountId &&
+                                !otherPlayers.find((p) => p.id === bead.Creator.id)
                             )
-                                openGamePlayers.push(bead.Creator)
+                                otherPlayers.push(bead.Creator)
                         })
-                        const notifyGameCreator =
-                            post.Creator.id === accountId
-                                ? null
-                                : await new Promise(async (Resolve) => {
-                                      const respondingPlayer = openGamePlayers.find(
-                                          (p) => p.id === accountId
-                                      )
-                                      const notifyCreator = await Notification.create({
-                                          type: 'weave-creator-move-from-other-player',
-                                          ownerId: post.Creator.id,
-                                          postId: postId,
-                                          userId: accountId,
-                                          seen: false,
-                                      })
-                                      const emailCreator = await sgMail.send({
-                                          to: post.Creator.email,
-                                          from: {
-                                              email: 'admin@weco.io',
-                                              name: 'we { collective }',
-                                          },
-                                          subject: 'New notification',
-                                          text: `
-                                    Hi ${post.Creator.name}, ${respondingPlayer.name} just added a new bead to a weave you created.
-                                    https://${config.appURL}/p/${postId}
-                                `,
-                                          html: `
-                                    <p>
-                                        Hi ${post.Creator.name},
-                                        <br/>
-                                        <a href='${config.appURL}/u/${respondingPlayer.handle}'>${respondingPlayer.name}</a> just added a new bead to a
-                                        <a href='${config.appURL}/p/${postId}'>Weave</a> you created.
-                                    </p>
-                                `,
-                                      })
-                                      Promise.all([notifyCreator, emailCreator])
-                                          .then(() => Resolve())
-                                          .catch((error) => Resolve(error))
-                                  })
-                        const notifyOtherPlayers = await Promise.all(
-                            openGamePlayers.map(
-                                (p) =>
-                                    new Promise(async (Resolve) => {
-                                        if (p.id !== accountId) {
-                                            const respondingPlayer =
-                                                openGamePlayers.find((p) => p.id === accountId) ||
-                                                post.Creator
-                                            const notifyPlayer = await Notification.create({
-                                                type: 'weave-move-from-other-player',
-                                                ownerId: p.id,
-                                                postId: postId,
-                                                userId: accountId,
-                                                seen: false,
-                                            })
-                                            const emailPlayer = await sgMail.send({
-                                                to: p.email,
-                                                from: {
-                                                    email: 'admin@weco.io',
-                                                    name: 'we { collective }',
-                                                },
-                                                subject: 'New notification',
-                                                text: `
-                                                    Hi ${p.name}, ${respondingPlayer.name} just added a new bead to a weave you participated in.
-                                                    https://${config.appURL}/p/${postId}
-                                                `,
-                                                html: `
-                                                    <p>
-                                                        Hi ${p.name},
-                                                        <br/>
-                                                        <a href='${config.appURL}/u/${respondingPlayer.handle}'>${respondingPlayer.name}</a> just added a new bead to a
-                                                        <a href='${config.appURL}/p/${postId}'>Weave</a> you participated in.
-                                                    </p>
-                                                `,
-                                            })
-                                            Promise.all([notifyPlayer, emailPlayer])
-                                                .then(() => Resolve())
-                                                .catch((error) => Resolve(error))
-                                        } else Resolve()
-                                    })
-                            )
-                        )
-                        Promise.all([notifyGameCreator, notifyOtherPlayers])
-                            .then(() => resolve())
-                            .catch((error) => resolve(error))
                     }
-                })
-
-                const notifyMentions = await new Promise((resolve) => {
-                    User.findAll({
-                        where: { handle: mentions, state: 'active' },
-                        attributes: ['id', 'name', 'email'],
-                    })
-                        .then((users) => {
-                            Promise.all(
-                                users.map(
-                                    (user) =>
-                                        new Promise(async (reso) => {
-                                            const sendNotification = await Notification.create({
-                                                ownerId: user.id,
-                                                type: 'bead-mention',
-                                                seen: false,
-                                                userId: accountId,
-                                                postId: bead.id,
-                                            })
-
-                                            const sendEmail = await sgMail.send({
-                                                to: user.email,
-                                                from: {
-                                                    email: 'admin@weco.io',
-                                                    name: 'we { collective }',
-                                                },
-                                                subject: 'New notification',
-                                                text: `
-                                                    Hi ${user.name}, ${creatorName} just mentioned you in a bead on weco:
-                                                    http://${config.appURL}/p/${bead.id}
-                                                `,
-                                                html: `
-                                                    <p>
-                                                        Hi ${user.name},
-                                                        <br/>
-                                                        <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
-                                                        just mentioned you in a 
-                                                        <a href='${config.appURL}/p/${bead.id}'>bead</a>
-                                                        on weco
-                                                    </p>
-                                                `,
-                                            })
-
-                                            Promise.all([sendNotification, sendEmail])
-                                                .then(() => reso())
-                                                .catch((error) => reso(error))
-                                        })
-                                )
-                            )
-                                .then((data) => resolve(data))
-                                .catch((error) => resolve(data, error))
-                        })
-                        .catch((error) => resolve(error))
-                })
-
-                Promise.all([
-                    createImages,
-                    createStringLink,
-                    updateWeaveStateAndNotifyPlayers,
-                    notifyMentions,
-                ])
-                    .then((data) =>
-                        res.status(200).json({
-                            bead,
-                            imageData: data[0],
-                            linkData: data[1],
-                            newDeadline: data[2],
-                        })
+                    // notify players
+                    const sendNotifications = await Promise.all(
+                        otherPlayers.map(
+                            (p) =>
+                                new Promise(async (Resolve) => {
+                                    const notifyPlayer = await Notification.create({
+                                        type: 'gbg-move-from-other-player',
+                                        ownerId: p.id,
+                                        postId: postId,
+                                        userId: accountId,
+                                        seen: false,
+                                    })
+                                    const emailPlayer = await sgMail.send({
+                                        to: p.email,
+                                        from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                        subject: 'New notification',
+                                        text: `
+                                            Hi ${p.name}, ${creatorName} just added a new bead.
+                                            https://${config.appURL}/p/${postId}
+                                        `,
+                                        html: `
+                                            <p>
+                                                Hi ${p.name},
+                                                <br/>
+                                                <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+                                                just added a new <a href='${config.appURL}/p/${postId}'>bead</a>.
+                                            </p>
+                                        `,
+                                    })
+                                    Promise.all([notifyPlayer, emailPlayer])
+                                        .then(() => Resolve())
+                                        .catch((error) => Resolve(error))
+                                })
+                        )
                     )
-                    .catch((error) => res.status(500).json({ message: 'Error', error }))
+                    // schedule next deadline
+                    const scheduleNewDeadline = moveTimeWindow
+                        ? await new Promise(async (Resolve) => {
+                              const gameFinished =
+                                  movesPerPlayer &&
+                                  post.Beads.length + 1 >= movesPerPlayer * post.Players.length
+                              if (gameFinished) {
+                                  GlassBeadGame2.update(
+                                      { state: 'finished', nextMoveDeadline: null },
+                                      { where: { postId } }
+                                  )
+                                      .then(() => Resolve())
+                                      .catch(() => Resolve())
+                              } else {
+                                  const newDeadline = new Date(
+                                      new Date().getTime() + moveTimeWindow * 60 * 1000
+                                  )
+                                  const updateDeadline = await GlassBeadGame2.update(
+                                      { nextMoveDeadline: newDeadline },
+                                      { where: { postId } }
+                                  )
+                                  // notify next player
+                                  const order = playerOrder.split(',')
+                                  const nextPlayerId =
+                                      +order[(post.Beads.length + 1) % post.Players.length]
+                                  const nextPlayer = post.Players.find((p) => p.id === nextPlayerId)
+                                  const nextMoveNumber = post.Beads.length + 1
+                                  const createMoveNotification = await Notification.create({
+                                      type: 'gbg-move',
+                                      ownerId: nextPlayer.id,
+                                      postId: postId,
+                                      seen: false,
+                                  })
+                                  const sendMoveEmail = await sgMail.send({
+                                      to: nextPlayer.email,
+                                      from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                      subject: 'New notification',
+                                      text: `
+                                            Hi ${nextPlayer.name}, it's your move!
+                                            Add a new bead to the glass bead game: https://${config.appURL}/p/${postId}
+                                        `,
+                                      html: `
+                                            <p>
+                                                Hi ${nextPlayer.name},
+                                                <br/>
+                                                It's your move!
+                                                <br/>
+                                                Add a new bead to the <a href='${config.appURL}/p/${postId}'>glass bead game</a>.
+                                            </p>
+                                        `,
+                                  })
+                                  const scheduleGBGMoveJobs = ScheduledTasks.scheduleGBGMoveJobs(
+                                      postId,
+                                      nextPlayer,
+                                      nextMoveNumber,
+                                      newDeadline
+                                  )
+                                  Promise.all([
+                                      updateDeadline,
+                                      createMoveNotification,
+                                      sendMoveEmail,
+                                      scheduleGBGMoveJobs,
+                                  ])
+                                      .then(() => Resolve(newDeadline))
+                                      .catch(() => Resolve())
+                              }
+                          })
+                        : null
+
+                    Promise.all([sendNotifications, scheduleNewDeadline])
+                        .then((data) => resolve(data[1]))
+                        .catch((error) => resolve(error))
+                }
             })
+
+            Promise.all([
+                createUrl,
+                createAudio,
+                createImage,
+                notifyMentions,
+                createLink,
+                notifyPlayers,
+            ])
+                .then((data) =>
+                    res.status(200).json({
+                        bead,
+                        url: data[0],
+                        audio: data[1],
+                        image: data[2],
+                        link: data[4],
+                        newDeadline: data[5],
+                    })
+                )
+                .catch((error) => res.status(500).json({ message: 'Error', error }))
+            // })
         }
 
-        if (uploadType === 'image-post') {
-            multer({
-                limits: { fileSize: imageMBLimit * 1024 * 1024 },
-                storage: multerS3({
-                    s3: s3,
-                    bucket: `weco-${process.env.NODE_ENV}-post-images`,
-                    acl: 'public-read',
-                    contentType: function (req, file, cb) {
-                        cb(null, file.mimetype)
-                    },
-                    metadata: function (req, file, cb) {
-                        cb(null, { mimetype: file.mimetype })
-                    },
-                    key: function (req, file, cb) {
-                        const name = file.originalname
-                            .replace(/[^A-Za-z0-9]/g, '-')
-                            .substring(0, 30)
-                        const date = Date.now().toString()
-                        const fileName = `post-image-upload-${accountId}-${name}-${date}`
-                        cb(null, fileName)
-                    },
-                }),
-            }).any('file')(req, res, (error) => {
+        if (uploadType === 'image-file') {
+            multer(multerParams(uploadType, accountId)).any('file')(req, res, (error) => {
                 const { files, body } = req
-                if (error instanceof multer.MulterError) {
-                    if (error.code === 'LIMIT_FILE_SIZE')
-                        res.status(413).send({ message: 'File size too large' })
-                    else res.status(500).send(error)
-                } else if (error) {
-                    res.status(500).send(error)
-                } else {
-                    createBead(
-                        JSON.parse(body.beadData),
-                        files.map((file) => {
-                            return { location: file.location, index: Number(file.originalname) }
-                        }),
-                        JSON.parse(body.imageData)
+                if (noMulterErrors(error, res)) createBead(JSON.parse(body.beadData), files)
+            })
+        } else if (uploadType === 'audio-file') {
+            multer(multerParams(uploadType, accountId)).single('file')(req, res, (error) => {
+                const { file, body } = req
+                if (noMulterErrors(error, res)) createBead(JSON.parse(body.beadData), [file])
+            })
+        } else if (uploadType === 'audio-blob') {
+            multer(multerParams(uploadType, accountId)).single('file')(req, res, (error) => {
+                const { file, body } = req
+                if (noMulterErrors(error, res)) {
+                    convertAndUploadAudio(file, accountId, 'post').then((location) =>
+                        createBead(JSON.parse(body.beadData), [{ location }])
                     )
                 }
             })
-        } else if (uploadType === 'audio-file') {
-            multer({
-                limits: { fileSize: audioMBLimit * 1024 * 1024 },
-                storage: multerS3({
-                    s3: s3,
-                    bucket: `weco-${process.env.NODE_ENV}-post-audio`,
-                    acl: 'public-read',
-                    metadata: function (req, file, cb) {
-                        cb(null, { mimetype: file.mimetype })
-                    },
-                    key: function (req, file, cb) {
-                        const name = file.originalname
-                            .replace(/[^A-Za-z0-9]/g, '-')
-                            .substring(0, 30)
-                        const date = Date.now().toString()
-                        const fileName = `post-audio-upload-${accountId}-${name}-${date}.mp3`
-                        console.log('fileName: ', fileName)
-                        cb(null, fileName)
-                    },
-                }),
-            }).single('file')(req, res, (error) => {
-                const { file, body } = req
-                if (error instanceof multer.MulterError) {
-                    if (error.code === 'LIMIT_FILE_SIZE')
-                        res.status(413).send({ message: 'File size too large' })
-                    else res.status(500).send(error)
-                } else if (error) {
-                    res.status(500).send(error)
-                } else {
-                    if (file) createBead(JSON.parse(body.beadData), [file])
-                    else res.status(500).json({ message: 'Failed', error })
-                }
-            })
-        } else if (uploadType === 'audio-blob') {
-            multer({
-                fileFilter: (req, file, cb) => {
-                    if (file.mimetype === 'audio/mpeg-3') cb(null, true)
-                    else {
-                        cb(null, false)
-                        cb(new Error('Only audio/mpeg-3 files allowed'))
-                    }
-                },
-                limits: { fileSize: audioMBLimit * 1024 * 1024 },
-                dest: './audio/raw',
-            }).single('file')(req, res, (error) => {
-                const { file, body } = req
-                // handle errors
-                if (error instanceof multer.MulterError) {
-                    if (error.code === 'LIMIT_FILE_SIZE')
-                        res.status(413).send({ message: 'File size too large' })
-                    else res.status(500).send(error)
-                } else if (error) {
-                    res.status(500).send(error)
-                } else {
-                    // convert raw audio to mp3
-                    ffmpeg(file.path)
-                        .output(`audio/mp3/${file.filename}.mp3`)
-                        .on('end', function () {
-                            // upload new mp3 file to s3 bucket
-                            fs.readFile(`audio/mp3/${file.filename}.mp3`, function (err, data) {
-                                if (!err) {
-                                    const name = file.originalname
-                                        .replace(/[^A-Za-z0-9]/g, '-')
-                                        .substring(0, 30)
-                                    const date = Date.now().toString()
-                                    const fileName = `post-audio-recording-${accountId}-${name}-${date}.mp3`
-                                    console.log('fileName: ', fileName)
-                                    s3.putObject(
-                                        {
-                                            Bucket: `weco-${process.env.NODE_ENV}-post-audio`,
-                                            ACL: 'public-read',
-                                            Key: fileName,
-                                            Body: data,
-                                            Metadata: { mimetype: file.mimetype },
-                                        },
-                                        (err) => {
-                                            if (err) console.log(err)
-                                            else {
-                                                // delete old files
-                                                fs.unlink(`audio/raw/${file.filename}`, (err) => {
-                                                    if (err) console.log(err)
-                                                })
-                                                fs.unlink(
-                                                    `audio/mp3/${file.filename}.mp3`,
-                                                    (err) => {
-                                                        if (err) console.log(err)
-                                                    }
-                                                )
-                                                // create post
-                                                createBead(JSON.parse(body.beadData), [
-                                                    {
-                                                        location: `https://weco-${process.env.NODE_ENV}-post-audio.s3.eu-west-1.amazonaws.com/${fileName}`,
-                                                    },
-                                                ])
-                                            }
-                                        }
-                                    )
-                                }
-                            })
-                        })
-                        .run()
-                }
-            })
-        } else createBead(req.body)
+        } else {
+            createBead(req.body)
+        }
     }
 })
 
@@ -2376,6 +2254,7 @@ router.post('/remove-link', authenticateToken, (req, res) => {
 router.post('/create-comment', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { text, postId, commentId, replyId, spaceId, mentions } = req.body
+    console.log(999, 'req.body: ', req.body)
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -2427,7 +2306,8 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             state: 'visible',
             creatorId: accountId,
             text,
-            postId,
+            type: 'post',
+            itemId: postId,
             parentCommentId: commentId,
             spaceId,
         })
@@ -2750,7 +2630,7 @@ router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
         const createNewReactions = await Promise.all(
             voteData.map((answer) =>
                 Reaction.create({
-                    type: 'inquiry-vote',
+                    type: 'poll-vote',
                     value: answer.value || null,
                     state: 'active',
                     spaceId,
@@ -2765,7 +2645,7 @@ router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
             post.Creator.id !== accountId
                 ? await Notification.create({
                       ownerId: post.Creator.id,
-                      type: 'inquiry-vote',
+                      type: 'poll-vote',
                       seen: false,
                       userId: accountId,
                       postId,
@@ -2804,54 +2684,81 @@ router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
 })
 
 // todo: add authenticateToken to all endpoints below
-router.post('/save-glass-bead-game', (req, res) => {
-    const { gameId, beads } = req.body
+router.post('/save-glass-bead-game', async (req, res) => {
+    const { postId } = req.body
 
-    GlassBeadGame.update({ locked: true }, { where: { id: gameId, locked: false } }).then(() => {
-        beads.forEach((bead) => {
-            GlassBead.create({
-                gameId,
-                index: bead.index,
-                userId: bead.user.id,
-                beadUrl: bead.beadUrl,
-                state: 'visible',
-            })
-        })
-        res.status(200).send({ message: 'Game saved' })
-    })
+    const updateLinks = await Link.update(
+        { state: 'visible' },
+        { where: { type: 'gbg-post', itemAId: postId, state: 'draft' } }
+    )
+    const updateGame = await GlassBeadGame2.update({ locked: true }, { where: { postId } })
+
+    Promise.all([updateLinks, updateGame])
+        .then(() => res.status(200).send({ message: 'Game saved' }))
+        .catch((error) => res.status(500).json({ error }))
+
+    // GlassBeadGame.update({ locked: true }, { where: { id: gameId, locked: false } }).then(() => {
+    //     beads.forEach((bead) => {
+    //         GlassBead.create({
+    //             gameId,
+    //             index: bead.index,
+    //             userId: bead.user.id,
+    //             beadUrl: bead.beadUrl,
+    //             state: 'visible',
+    //         })
+    //     })
+    //     res.status(200).send({ message: 'Game saved' })
+    // })
 })
 
 router.post('/glass-bead-game-comment', (req, res) => {
     const { gameId, userId, text } = req.body
-    GlassBeadGameComment.create({
-        gameId,
-        userId,
+    Comment.create({
+        state: 'visible',
+        type: 'glass-bead-game',
+        itemId: gameId,
+        creatorId: userId,
         text,
-    }).then(res.status(200).send({ message: 'Success' }))
+    })
+        .then(() => res.status(200).send({ message: 'Success' }))
+        .catch((error) => res.status(500).json({ error }))
+
+    // GlassBeadGameComment.create({
+    //     gameId,
+    //     userId,
+    //     text,
+    // }).then(res.status(200).send({ message: 'Success' }))
 })
 
-router.post('/save-glass-bead-game-settings', (req, res) => {
+router.post('/save-glass-bead-game-settings', async (req, res) => {
     const {
+        postId,
         gameId,
         playerOrder,
         introDuration,
-        numberOfTurns,
+        movesPerPlayer,
         moveDuration,
         intervalDuration,
         outroDuration,
     } = req.body
 
-    GlassBeadGame.update(
+    const removeDraftBeads = await Link.update(
+        { state: 'deleted' },
+        { where: { type: 'gbg-post', itemAId: postId, state: 'draft' } }
+    )
+    const updateGame = await GlassBeadGame2.update(
         {
             playerOrder,
             introDuration,
-            numberOfTurns,
+            movesPerPlayer,
             moveDuration,
             intervalDuration,
             outroDuration,
         },
         { where: { id: gameId } }
     )
+
+    Promise.all([removeDraftBeads, updateGame])
         .then(res.status(200).send({ message: 'Success' }))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
@@ -2859,7 +2766,7 @@ router.post('/save-glass-bead-game-settings', (req, res) => {
 router.post('/save-gbg-topic', (req, res) => {
     const { gameId, newTopic } = req.body
 
-    GlassBeadGame.update({ topic: newTopic, topicGroup: null }, { where: { id: gameId } })
+    GlassBeadGame2.update({ topic: newTopic, topicGroup: null }, { where: { id: gameId } })
         .then(() => res.status(200).send({ message: 'Success' }))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })

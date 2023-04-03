@@ -20,6 +20,7 @@ module.exports = (sequelize, DataTypes) => {
             totalReposts: DataTypes.INTEGER,
             totalRatings: DataTypes.INTEGER,
             totalGlassBeadGames: DataTypes.INTEGER,
+            lastActivity: DataTypes.DATE,
             // todo: remove urls
             url: DataTypes.TEXT,
             urlImage: DataTypes.TEXT,
@@ -70,7 +71,7 @@ module.exports = (sequelize, DataTypes) => {
 
         Post.belongsToMany(models.User, {
             through: models.UserPost,
-            as: 'StringPlayers',
+            as: 'Players',
             foreignKey: 'postId',
         })
 
@@ -94,8 +95,8 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'itemId',
         })
 
-        Post.hasMany(models.PostImage, {
-            foreignKey: 'postId',
+        Post.hasMany(models.Image, {
+            foreignKey: 'itemId',
         })
 
         Post.hasMany(models.Audio, {

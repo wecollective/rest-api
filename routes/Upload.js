@@ -6,7 +6,7 @@ var aws = require('aws-sdk')
 var multer = require('multer')
 var multerS3 = require('multer-s3')
 
-const { User, Space, GlassBeadGame } = require('../models')
+const { User, Space, GlassBeadGame, GlassBeadGame2, Post, Link, Audio } = require('../models')
 
 const authenticateToken = require('../middleware/authenticateToken')
 
@@ -41,7 +41,7 @@ router.post('/image-upload', authenticateToken, async (req, res) => {
                 case 'space-cover':
                     return Space.update({ coverImagePath: url }, { where: { id } })
                 case 'gbg-topic':
-                    return GlassBeadGame.update({ topicImage: url }, { where: { id } })
+                    return GlassBeadGame2.update({ topicImage: url }, { where: { id } })
                 default:
                     break
             }
@@ -92,7 +92,7 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         if (imageURL) {
-            GlassBeadGame.update(
+            GlassBeadGame2.update(
                 {
                     backgroundImage: imageURL,
                     backgroundVideo: null,
@@ -101,7 +101,7 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
                 { where: { id: gameId } }
             ).then(res.status(200).json({ message: 'Success' }))
         } else if (videoURL) {
-            GlassBeadGame.update(
+            GlassBeadGame2.update(
                 {
                     backgroundImage: null,
                     backgroundVideo: videoURL,
@@ -131,7 +131,7 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
             }).single('image')(req, res, (err) => {
                 const { file } = req
                 if (file) {
-                    GlassBeadGame.update(
+                    GlassBeadGame2.update(
                         {
                             backgroundImage: file.location,
                             backgroundVideo: null,
@@ -145,8 +145,9 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
     }
 })
 
-router.post('/audio-upload', (req, res) => {
-    const { postId } = req.query
+router.post('/gbg-audio-upload', authenticateToken, (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId, moveNumber } = req.query
 
     // Glass Bead Audio uploads only...
     // check file type and limits, then save raw audio in 'audio/raw' folder
@@ -159,7 +160,7 @@ router.post('/audio-upload', (req, res) => {
             }
         },
         limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-        dest: './audio/raw',
+        dest: './temp/audio/raw',
     }).single('file')(req, res, (error) => {
         // handle errors
         if (error instanceof multer.MulterError) {
@@ -172,10 +173,10 @@ router.post('/audio-upload', (req, res) => {
             const bucket = `weco-${process.env.NODE_ENV}-gbg-audio`
             // convert raw audio to mp3
             ffmpeg(req.file.path)
-                .output(`audio/mp3/${req.file.filename}.mp3`)
+                .output(`temp/audio/mp3/${req.file.filename}.mp3`)
                 .on('end', function () {
                     // upload new mp3 file to s3 bucket
-                    fs.readFile(`audio/mp3/${req.file.filename}.mp3`, function (err, data) {
+                    fs.readFile(`temp/audio/mp3/${req.file.filename}.mp3`, function (err, data) {
                         if (!err) {
                             const fileName = `glass-bead-${postId}-${Date.now().toString()}.mp3`
                             s3.putObject(
@@ -186,20 +187,50 @@ router.post('/audio-upload', (req, res) => {
                                     Body: data,
                                     Metadata: { type: 'mp3', postId: postId },
                                 },
-                                (err) => {
+                                async (err) => {
                                     if (err) console.log(err)
                                     else {
                                         // delete old files
-                                        fs.unlink(`audio/raw/${req.file.filename}`, (err) => {
+                                        fs.unlink(`temp/audio/raw/${req.file.filename}`, (err) => {
                                             if (err) console.log(err)
                                         })
-                                        fs.unlink(`audio/mp3/${req.file.filename}.mp3`, (err) => {
-                                            if (err) console.log(err)
-                                        })
-                                        // send back the mp3's url
-                                        res.send(
-                                            `https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`
+                                        fs.unlink(
+                                            `temp/audio/mp3/${req.file.filename}.mp3`,
+                                            (err) => {
+                                                if (err) console.log(err)
+                                            }
                                         )
+                                        // // send back the mp3's url
+                                        // res.send(
+                                        //     `https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`
+                                        // )
+                                        const url = `https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`
+                                        const bead = await Post.create({
+                                            type: 'gbg-audio',
+                                            state: 'visible',
+                                            creatorId: accountId,
+                                            lastActivity: new Date(),
+                                        })
+
+                                        const createAudio = await Audio.create({
+                                            type: 'post',
+                                            itemId: bead.id,
+                                            creatorId: accountId,
+                                            url,
+                                        })
+
+                                        const createLink = await Link.create({
+                                            state: 'draft',
+                                            type: 'gbg-post',
+                                            index: moveNumber,
+                                            creatorId: accountId,
+                                            itemAId: postId,
+                                            itemBId: bead.id,
+                                        })
+
+                                        Promise.all([createAudio, createLink])
+                                            .then(() => res.status(200).json({ id: bead.id, url }))
+                                            .catch((error) => res.status(500).json({ error }))
                                     }
                                 }
                             )

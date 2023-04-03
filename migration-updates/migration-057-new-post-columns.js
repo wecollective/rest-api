@@ -58,6 +58,14 @@ module.exports = {
                     },
                     { transaction: t }
                 ),
+                queryInterface.addColumn(
+                    'Posts',
+                    'lastActivity',
+                    {
+                        type: Sequelize.DataTypes.DATE,
+                    },
+                    { transaction: t }
+                ),
             ])
         })
     },
@@ -72,6 +80,7 @@ module.exports = {
                 queryInterface.removeColumn('Posts', 'totalReposts', { transaction: t }),
                 queryInterface.removeColumn('Posts', 'totalRatings', { transaction: t }),
                 queryInterface.removeColumn('Posts', 'totalGlassBeadGames', { transaction: t }),
+                queryInterface.removeColumn('Posts', 'lastActivity', { transaction: t }),
             ])
         })
     },

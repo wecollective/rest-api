@@ -19,7 +19,7 @@ const {
     Notification,
     GlassBeadGame2,
     Event,
-    PostImage,
+    Image,
 } = require('../models')
 const {
     totalSpaceSpaces,
@@ -690,7 +690,7 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
                 through,
             },
             {
-                model: GlassBeadGame,
+                model: GlassBeadGame2,
                 required: false,
                 attributes: ['topic', 'topicGroup'],
             },
@@ -716,7 +716,7 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
                 through,
             },
             {
-                model: GlassBeadGame,
+                model: GlassBeadGame2,
                 required: false,
                 attributes: ['topic', 'topicGroup'],
             },
@@ -757,7 +757,7 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
                 ],
             },
             {
-                model: PostImage,
+                model: Image,
                 required: false,
                 attributes: ['url'],
                 limit: 1,
@@ -844,7 +844,7 @@ router.get('/space-events', authenticateToken, (req, res) => {
             state: 'visible',
             type: ['event', 'glass-bead-game'],
         },
-        attributes: ['id', 'type', postAccess(accountId)],
+        attributes: ['id', 'type', 'title', postAccess(accountId)],
         having: { ['access']: 1 },
         include: [
             {
@@ -854,10 +854,11 @@ router.get('/space-events', authenticateToken, (req, res) => {
             },
             {
                 model: Event,
-                attributes: ['id', 'title', 'startTime'],
+                attributes: ['id', 'startTime'],
             },
             {
-                model: GlassBeadGame,
+                model: GlassBeadGame2,
+                // required: false,
                 attributes: ['topic', 'topicGroup', 'topicImage'],
             },
         ],

@@ -124,9 +124,9 @@ relationship: turn, text
 
 `npx sequelize-cli model:generate --name GlassBeadGameComment --attributes postId:integer,index:integer,userId:integer,text:text`
 
-### PostImage
+### Image
 
-`npx sequelize-cli model:generate --name PostImage --attributes creatorId:integer,postId:integer,index:integer,url:string,caption:text`
+`npx sequelize-cli model:generate --name Image --attributes creatorId:integer,postId:integer,index:integer,url:string,caption:text`
 
 ### UserPost
 

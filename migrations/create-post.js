@@ -60,6 +60,9 @@ module.exports = {
             urlDescription: {
                 type: Sequelize.TEXT,
             },
+            lastActivity: {
+                type: Sequelize.DATE,
+            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE,

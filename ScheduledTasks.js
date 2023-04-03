@@ -2,7 +2,7 @@ const config = require('./Config')
 const schedule = require('node-schedule')
 const sequelize = require('sequelize')
 const { Op } = sequelize
-const { User, Event, UserEvent, Notification, Post, Weave } = require('./models')
+const { User, Event, UserEvent, Notification, Post, Weave, GlassBeadGame2 } = require('./models')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
@@ -51,7 +51,7 @@ function scheduleEventNotification(data) {
     }
 }
 
-async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
+async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
     const reminderTime = new Date(deadline.getTime() - 15 * 60 * 1000) // 15 minutes before
     // schedule reminder
     if (reminderTime > new Date()) {
@@ -60,7 +60,7 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                 where: { id: postId, state: 'visible' },
                 include: [
                     {
-                        model: Weave,
+                        model: GlassBeadGame2,
                         attributes: ['state'],
                     },
                     {
@@ -84,11 +84,11 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
             if (post) {
                 const beads = post.Beads.sort((a, b) => a.Link.index - b.Link.index)
                 const moveTaken = beads.length >= moveNumber
-                if (post.Weave.state === 'active' && !moveTaken) {
+                if (post.GlassBeadGame2.state === 'active' && !moveTaken) {
                     // create notification
                     Notification.create({
                         ownerId: player.id,
-                        type: 'weave-move-reminder',
+                        type: 'gbg-move-reminder',
                         seen: false,
                         postId,
                     })
@@ -98,7 +98,7 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                         from: { email: 'admin@weco.io', name: 'we { collective }' },
                         subject: 'New notification',
                         text: `
-                            Hi ${player.name}, you have 15 minutes left to complete your move on this Weave:
+                            Hi ${player.name}, you have 15 minutes left to complete your move on this glass bead game:
                             http://${config.appURL}/p/${postId}
                             If you fail to do this, the game ends!
                         `,
@@ -107,7 +107,7 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                                 Hi ${player.name},
                                 <br/>
                                 <br/>
-                                You have 15 minutes left to complete your move on <a href='${config.appURL}/p/${postId}'>this Weave</a>.
+                                You have 15 minutes left to complete your move on this <a href='${config.appURL}/p/${postId}'>glass bead game</a>.
                                 <br/>
                                 <br/>
                                 If you fail to do this, the game ends!
@@ -125,15 +125,15 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                 where: { id: postId, state: 'visible' },
                 include: [
                     {
-                        model: Weave,
+                        model: GlassBeadGame2,
                         attributes: ['state'],
                     },
                     {
                         model: User,
-                        as: 'StringPlayers',
+                        as: 'Players',
                         attributes: ['id', 'name', 'email'],
                         through: {
-                            where: { type: 'weave' },
+                            where: { type: 'glass-bead-game' },
                             attributes: ['index'],
                         },
                     },
@@ -158,19 +158,19 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
             if (post) {
                 const beads = post.Beads.sort((a, b) => a.Link.index - b.Link.index)
                 const moveTaken = beads.length >= moveNumber
-                if (post.Weave.state === 'active' && !moveTaken) {
+                if (post.GlassBeadGame2.state === 'active' && !moveTaken) {
                     // cancel game and notify other players
-                    const updateWeaveState = await Weave.update(
-                        { state: 'cancelled' },
+                    const updateGBGState = await GlassBeadGame2.update(
+                        { state: 'cancelled', nextMoveDeadline: null },
                         { where: { postId } }
                     )
                     const notifyPlayers = await Promise.all[
-                        post.StringPlayers.map(
+                        post.Players.map(
                             (p) =>
                                 new Promise(async (resolve) => {
                                     const createNotification = await Notification.create({
                                         ownerId: p.id,
-                                        type: 'weave-cancelled',
+                                        type: 'gbg-cancelled',
                                         userId: player.id,
                                         postId,
                                         seen: false,
@@ -185,7 +185,7 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                                             you ? 'You' : player.name
                                         } failed to make ${
                                             you ? 'your' : 'their'
-                                        } move in time on this Weave:
+                                        } move in time on this glass bead game:
                                             http://${config.appURL}/p/${postId}
                                             The game has now ended!
                                         `,
@@ -198,7 +198,7 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                                             you ? 'your' : 'their'
                                         } move in time on <a href='${
                                             config.appURL
-                                        }/p/${postId}'>this Weave</a>.
+                                        }/p/${postId}'>this glass bead game</a>.
                                                 <br/>
                                                 <br/>
                                                 The game has now ended!
@@ -211,7 +211,7 @@ async function scheduleWeaveMoveJobs(postId, player, moveNumber, deadline) {
                                 })
                         )
                     ]
-                    Promise.all([updateWeaveState, notifyPlayers])
+                    Promise.all([updateGBGState, notifyPlayers])
                 }
             }
         })
@@ -271,26 +271,32 @@ module.exports = {
             )
         })
         // weave moves
-        const weavePosts = await Post.findAll({
-            where: { state: 'visible', type: 'weave' },
+        // todo: only grab games with nextMoveDeadline
+        const gbgPosts = await Post.findAll({
+            where: {
+                state: 'visible',
+                type: 'glass-bead-game',
+                '$GlassBeadGame2.nextMoveDeadline$': { [Op.not]: null },
+            },
             attributes: ['id'],
             include: [
                 {
-                    model: Weave,
+                    model: GlassBeadGame2,
                     attributes: [
-                        'privacy',
+                        // 'privacy',
                         'state',
-                        'numberOfTurns',
+                        'movesPerPlayer',
                         'moveTimeWindow',
                         'nextMoveDeadline',
+                        'playerOrder',
                     ],
                 },
                 {
                     model: User,
-                    as: 'StringPlayers',
+                    as: 'Players',
                     attributes: ['id', 'name', 'email'],
                     through: {
-                        where: { type: 'weave' },
+                        where: { type: 'glass-bead-game' },
                         attributes: ['index'],
                     },
                 },
@@ -305,26 +311,26 @@ module.exports = {
                 },
             ],
         })
-        weavePosts.forEach((weavePost) => {
-            const { id, Beads, StringPlayers } = weavePost
-            const { privacy, state, numberOfTurns, moveTimeWindow, nextMoveDeadline } =
-                weavePost.Weave
-            const movesLeft = Beads.length < StringPlayers.length * numberOfTurns
+        gbgPosts.forEach((gbg) => {
+            const { id, Beads, Players } = gbg
+            const { state, movesPerPlayer, moveTimeWindow, nextMoveDeadline, playerOrder } =
+                gbg.GlassBeadGame2
+            const movesLeft = Beads.length < Players.length * movesPerPlayer
             if (
                 state === 'active' &&
-                privacy === 'only-selected-users' &&
+                Players.length > 0 &&
                 moveTimeWindow &&
                 movesLeft &&
                 new Date(nextMoveDeadline) > new Date()
             ) {
-                const players = StringPlayers.sort((a, b) => a.UserPost.index - b.UserPost.index)
-                const activePlayer = players[Beads.length % players.length]
+                const order = playerOrder.split(',')
+                const nextPlayerId = +order[Beads.length % Players.length]
+                const nextPlayer = Players.find((p) => p.id === nextPlayerId)
                 const moveNumber = Beads.length + 1
-                if (activePlayer)
-                    scheduleWeaveMoveJobs(id, activePlayer, moveNumber, nextMoveDeadline)
+                if (nextPlayer) scheduleGBGMoveJobs(id, nextPlayer, moveNumber, nextMoveDeadline)
             }
         })
     },
     scheduleEventNotification,
-    scheduleWeaveMoveJobs,
+    scheduleGBGMoveJobs,
 }
