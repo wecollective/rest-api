@@ -74,7 +74,7 @@ router.get('/account-notifications', authenticateToken, (req, res) => {
                     as: 'relatedPost',
                     include: [
                         {
-                            model: Weave,
+                            model: GlassBeadGame2,
                             attributes: ['state'],
                             required: false,
                         },

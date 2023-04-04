@@ -22,11 +22,11 @@ module.exports = (sequelize, DataTypes) => {
             totalGlassBeadGames: DataTypes.INTEGER,
             lastActivity: DataTypes.DATE,
             // todo: remove urls
-            url: DataTypes.TEXT,
-            urlImage: DataTypes.TEXT,
-            urlDomain: DataTypes.TEXT,
-            urlTitle: DataTypes.TEXT,
-            urlDescription: DataTypes.TEXT,
+            // url: DataTypes.TEXT,
+            // urlImage: DataTypes.TEXT,
+            // urlDomain: DataTypes.TEXT,
+            // urlTitle: DataTypes.TEXT,
+            // urlDescription: DataTypes.TEXT,
             mmId: DataTypes.INTEGER,
         },
         {}
@@ -115,9 +115,9 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'postId',
         })
 
-        Post.hasOne(models.Weave, {
-            foreignKey: 'postId',
-        })
+        // Post.hasOne(models.Weave, {
+        //     foreignKey: 'postId',
+        // })
     }
     return Post
 }

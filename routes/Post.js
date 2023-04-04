@@ -78,10 +78,18 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
-        //// 1. Create new URLs
+        // // //// 1. Create new URLs
         // const urlPosts = await Post.findAll({
         //     where: { state: 'visible', type: ['url', 'string-url'] },
-        //     attributes: ['id', 'url', 'urlImage', 'urlTitle', 'urlDescription', 'urlDomain', 'createdAt'],
+        //     attributes: [
+        //         'id',
+        //         'url',
+        //         'urlImage',
+        //         'urlTitle',
+        //         'urlDescription',
+        //         'urlDomain',
+        //         'createdAt',
+        //     ],
         // })
 
         // Promise.all(
@@ -103,7 +111,7 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json(error))
 
-        //// 2. Create new Audio
+        // // 2. Create new Audio
         // const audioPosts = await Post.findAll({
         //     where: { state: 'visible', type: ['audio', 'string-audio'] },
         //     attributes: ['id', 'url'],
@@ -129,23 +137,23 @@ router.get('/test', async (req, res) => {
         //     .catch((error) => res.status(500).json(error))
 
         // Post.update({ type: 'gbg-text' }, { where: { type: 'string-text' } })
-        // .then(() => res.status(200).json({ message: 'success' }))
-        // .catch((error) => res.status(500).json(error))
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
 
         // Post.update({ type: 'gbg-image' }, { where: { type: 'string-image' } })
-        // .then(() => res.status(200).json({ message: 'success' }))
-        // .catch((error) => res.status(500).json(error))
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
 
         // Post.update({ type: 'gbg-url' }, { where: { type: 'string-url' } })
-        // .then(() => res.status(200).json({ message: 'success' }))
-        // .catch((error) => res.status(500).json(error))
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
 
-        //// 4. Update comment types for old comments
+        // // 4. Update comment types for old comments
         // Comment.update({ type: 'post' }, { where: { type: null } })
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json(error))
 
-        //// 5. Migrate old GBGs
+        // // 5. Migrate old GBGs
         // const oldGBGs = await GlassBeadGame.findAll()
         // Promise.all(
         //     oldGBGs.map(
@@ -256,8 +264,8 @@ router.get('/test', async (req, res) => {
 
         // //// 8. Update old Link types
         // Link.update({ type: 'gbg-post' }, { where: { type: 'string-post' } })
-        // .then(() => res.status(200).json({ message: 'success' }))
-        // .catch((error) => res.status(500).json(error))
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json(error))
 
         // // 9. Create old string GBG entries
         // const stringPosts = await Post.findAll({ where: { type: 'string' } })
@@ -370,7 +378,7 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json(error))
 
-        // Change post type 'inquiry' to 'poll'
+        // // Change post type 'inquiry' to 'poll'
         // Post.update({ type: 'poll' }, { where: { type: 'inquiry' } })
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json(error))

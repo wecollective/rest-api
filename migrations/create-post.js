@@ -45,21 +45,21 @@ module.exports = {
                 type: Sequelize.INTEGER,
             },
             // todo: remove urls
-            url: {
-                type: Sequelize.TEXT,
-            },
-            urlImage: {
-                type: Sequelize.TEXT,
-            },
-            urlDomain: {
-                type: Sequelize.TEXT,
-            },
-            urlTitle: {
-                type: Sequelize.TEXT,
-            },
-            urlDescription: {
-                type: Sequelize.TEXT,
-            },
+            // url: {
+            //     type: Sequelize.TEXT,
+            // },
+            // urlImage: {
+            //     type: Sequelize.TEXT,
+            // },
+            // urlDomain: {
+            //     type: Sequelize.TEXT,
+            // },
+            // urlTitle: {
+            //     type: Sequelize.TEXT,
+            // },
+            // urlDescription: {
+            //     type: Sequelize.TEXT,
+            // },
             lastActivity: {
                 type: Sequelize.DATE,
             },

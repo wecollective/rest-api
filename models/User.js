@@ -43,14 +43,14 @@ module.exports = (sequelize, DataTypes) => {
             //as: 'createdComments'
         })
 
-        User.hasMany(models.GlassBead, {
-            foreignKey: 'userId',
-            // as: 'user'
-        })
+        // User.hasMany(models.GlassBead, {
+        //     foreignKey: 'userId',
+        //     // as: 'user'
+        // })
 
-        User.hasMany(models.GlassBeadGameComment, {
-            foreignKey: 'userId',
-        })
+        // User.hasMany(models.GlassBeadGameComment, {
+        //     foreignKey: 'userId',
+        // })
 
         User.belongsToMany(models.Space, {
             through: models.SpaceUser,

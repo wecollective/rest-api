@@ -20,6 +20,7 @@ const {
     GlassBeadGame2,
     Event,
     Image,
+    Url,
 } = require('../models')
 const {
     totalSpaceSpaces,
@@ -345,34 +346,23 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
     const posts = Post.findAll({
         where: {
             state: 'visible',
-            // todo: include 'restircted: false' when set up
-            urlImage: { [Op.ne]: null },
+            type: ['image', 'url'],
         },
-        attributes: ['urlImage'],
-        //attributes: ['urlImage', postAccess(accountId)],
-        //having: { ['access']: 1 },
         order: [['createdAt', 'DESC']],
         limit: 3,
-        // where: {
-        //     '$AllPostSpaces.id$': 1,
-        //     state: 'visible',
-        //     urlImage: { [Op.ne]: null },
-        // },
-        // attributes: ['urlImage'],
-        // order: [['createdAt', 'DESC']],
-        // limit: 3,
-        // subQuery: false,
-        // include: [
-        //     {
-        //         model: Space,
-        //         as: 'AllPostSpaces',
-        //         attributes: [],
-        //         through: {
-        //             where: { relationship: { [Op.or]: ['direct', 'indirect'] } },
-        //             attributes: [],
-        //         },
-        //     },
-        // ],
+        attributes: ['type'],
+        include: [
+            {
+                model: Url,
+                attributes: ['image'],
+                limit: 1,
+            },
+            {
+                model: Image,
+                attributes: ['url'],
+                limit: 1,
+            },
+        ],
     })
 
     const spaces = Space.findAll({
@@ -385,17 +375,6 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
         order: [['createdAt', 'DESC']],
         limit: 3,
     })
-
-    // const spaces = Space.findAll({
-    //     where: {
-    //         state: 'active',
-    //         privacy: 'public',
-    //         flagImagePath: { [Op.ne]: null },
-    //     },
-    //     attributes: ['flagImagePath'],
-    //     order: [['createdAt', 'DESC']],
-    //     limit: 3,
-    // })
 
     const users = User.findAll({
         where: {
@@ -411,7 +390,11 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
     Promise.all([totals, posts, spaces, users]).then((data) =>
         res.send({
             totals: data[0],
-            posts: data[1].map((p) => p.urlImage),
+            posts: data[1],
+            posts: data[1].map((p) => {
+                if (p.type === 'image') return p.Images[0].url
+                return p.Urls[0].image
+            }),
             spaces: data[2].map((s) => s.flagImagePath),
             users: data[3].map((u) => u.flagImagePath),
         })
