@@ -1,7 +1,7 @@
 'use strict'
 module.exports = (sequelize, DataTypes) => {
-    const Inquiry = sequelize.define(
-        'Inquiry',
+    const Poll = sequelize.define(
+        'Poll',
         {
             postId: DataTypes.INTEGER,
             type: DataTypes.STRING,
@@ -11,10 +11,10 @@ module.exports = (sequelize, DataTypes) => {
         },
         {}
     )
-    Inquiry.associate = function (models) {
-        Inquiry.hasMany(models.InquiryAnswer, {
-            foreignKey: 'inquiryId',
+    Poll.associate = function (models) {
+        Poll.hasMany(models.PollAnswer, {
+            foreignKey: 'pollId',
         })
     }
-    return Inquiry
+    return Poll
 }

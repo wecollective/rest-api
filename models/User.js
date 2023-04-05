@@ -76,11 +76,11 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'userId',
         })
 
-        User.belongsToMany(models.Prism, {
-            through: models.PrismUser,
-            //as: 'ModeratedSpaces',
-            foreignKey: 'userId',
-        })
+        // User.belongsToMany(models.Prism, {
+        //     through: models.PrismUser,
+        //     //as: 'ModeratedSpaces',
+        //     foreignKey: 'userId',
+        // })
 
         User.belongsToMany(models.Event, {
             through: models.UserEvent,

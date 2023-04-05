@@ -1,27 +1,21 @@
 'use strict'
 module.exports = {
     up: (queryInterface, Sequelize) => {
-        return queryInterface.createTable('Inquiries', {
+        return queryInterface.createTable('PollAnswers', {
             id: {
                 allowNull: false,
                 autoIncrement: true,
                 primaryKey: true,
                 type: Sequelize.INTEGER,
             },
-            postId: {
+            creatorId: {
                 type: Sequelize.INTEGER,
             },
-            type: {
-                type: Sequelize.STRING,
+            pollId: {
+                type: Sequelize.INTEGER,
             },
-            title: {
+            text: {
                 type: Sequelize.TEXT,
-            },
-            answersLocked: {
-                type: Sequelize.BOOLEAN,
-            },
-            endTime: {
-                type: Sequelize.DATE,
             },
             createdAt: {
                 allowNull: false,
@@ -34,6 +28,6 @@ module.exports = {
         })
     },
     down: (queryInterface, Sequelize) => {
-        return queryInterface.dropTable('Inquiries')
+        return queryInterface.dropTable('PollAnswers')
     },
 }

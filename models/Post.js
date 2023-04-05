@@ -21,12 +21,7 @@ module.exports = (sequelize, DataTypes) => {
             totalRatings: DataTypes.INTEGER,
             totalGlassBeadGames: DataTypes.INTEGER,
             lastActivity: DataTypes.DATE,
-            // todo: remove urls
-            // url: DataTypes.TEXT,
-            // urlImage: DataTypes.TEXT,
-            // urlDomain: DataTypes.TEXT,
-            // urlTitle: DataTypes.TEXT,
-            // urlDescription: DataTypes.TEXT,
+            // todo: remove
             mmId: DataTypes.INTEGER,
         },
         {}
@@ -107,17 +102,13 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'postId',
         })
 
-        Post.hasOne(models.Inquiry, {
+        Post.hasOne(models.Poll, {
             foreignKey: 'postId',
         })
 
         Post.hasOne(models.GlassBeadGame2, {
             foreignKey: 'postId',
         })
-
-        // Post.hasOne(models.Weave, {
-        //     foreignKey: 'postId',
-        // })
     }
     return Post
 }

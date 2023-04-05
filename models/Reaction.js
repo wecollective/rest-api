@@ -15,7 +15,7 @@ module.exports = (sequelize, DataTypes) => {
             userId: DataTypes.INTEGER,
             postId: DataTypes.INTEGER,
             commentId: DataTypes.INTEGER,
-            inquiryAnswerId: DataTypes.INTEGER,
+            pollAnswerId: DataTypes.INTEGER,
             linkId: DataTypes.INTEGER,
         },
         {}
@@ -32,8 +32,8 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'spaceId',
             as: 'Space',
         })
-        Reaction.belongsTo(models.InquiryAnswer, {
-            foreignKey: 'inquiryAnswerId',
+        Reaction.belongsTo(models.PollAnswer, {
+            foreignKey: 'pollAnswerId',
         })
     }
     return Reaction

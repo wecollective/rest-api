@@ -9,8 +9,8 @@ const {
     GlassBeadGame2,
     GlassBead,
     Event,
-    Inquiry,
-    InquiryAnswer,
+    Poll,
+    PollAnswer,
     Image,
     Weave,
     Url,
@@ -827,11 +827,11 @@ function findPostInclude(accountId) {
             ],
         },
         {
-            model: Inquiry,
+            model: Poll,
             attributes: ['title', 'type'],
             include: [
                 {
-                    model: InquiryAnswer,
+                    model: PollAnswer,
                     attributes: ['id', 'text', 'createdAt'],
                     include: [
                         {
@@ -844,7 +844,7 @@ function findPostInclude(accountId) {
                             attributes: [
                                 'value',
                                 'state',
-                                'inquiryAnswerId',
+                                'pollAnswerId',
                                 'createdAt',
                                 'updatedAt',
                             ],

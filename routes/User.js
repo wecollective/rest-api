@@ -26,8 +26,8 @@ const {
     GlassBeadGame2,
     GlassBead,
     Weave,
-    Inquiry,
-    InquiryAnswer,
+    Poll,
+    PollAnswer,
 } = require('../models')
 
 // GET

@@ -52,8 +52,8 @@ const {
     Image,
     Weave,
     UserPost,
-    Inquiry,
-    InquiryAnswer,
+    Poll,
+    PollAnswer,
     Url,
     Audio,
 } = require('../models')
@@ -368,7 +368,7 @@ router.get('/test', async (req, res) => {
         //     .catch((error) => res.status(500).json(error))
 
         // // Move poll titles to post table
-        // const polls = await Inquiry.findAll()
+        // const polls = await Poll.findAll()
         // Promise.all(
         //     polls.map(
         //         async (poll) =>
@@ -1006,7 +1006,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
             const createPoll =
                 type === 'poll'
                     ? await new Promise(async (resolve) => {
-                          const newPoll = await Inquiry.create({
+                          const newPoll = await Poll.create({
                               postId: post.id,
                               type: pollType,
                               answersLocked: pollAnswersLocked,
@@ -1014,7 +1014,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                           })
                           Promise.all(
                               pollAnswers.map((answer) =>
-                                  InquiryAnswer.create({
+                                  PollAnswer.create({
                                       inquiryId: newPoll.id,
                                       creatorId: accountId,
                                       text: answer.text,
@@ -2612,7 +2612,7 @@ router.post('/respond-to-event', authenticateToken, async (req, res) => {
     }
 })
 
-router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
+router.post('/vote-on-poll', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { userName, userHandle, spaceId, postId, voteData } = req.body
 
@@ -2644,7 +2644,7 @@ router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
                     spaceId,
                     userId: accountId,
                     postId,
-                    inquiryAnswerId: answer.id,
+                    pollAnswerId: answer.id,
                 })
             )
         )
@@ -2670,7 +2670,7 @@ router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
                       },
                       subject: 'New notification',
                       text: `
-                Hi ${post.Creator.name}, ${userName} just voted on your Inquiry:
+                Hi ${post.Creator.name}, ${userName} just voted on your Poll:
                 http://${config.appURL}/p/${postId}
             `,
                       html: `
@@ -2679,7 +2679,7 @@ router.post('/vote-on-inquiry', authenticateToken, async (req, res) => {
                     <br/>
                     <a href='${config.appURL}/u/${userHandle}'>${userName}</a>
                     just voted on your
-                    <a href='${config.appURL}/p/${postId}'>Inquiry</a>
+                    <a href='${config.appURL}/p/${postId}'>Poll</a>
                 </p>
             `,
                   })
