@@ -6,13 +6,10 @@ const {
     Post,
     Reaction,
     GlassBeadGame,
-    GlassBeadGame2,
-    GlassBead,
     Event,
     Poll,
     PollAnswer,
     Image,
-    Weave,
     Url,
     Audio,
 } = require('./models')
@@ -660,7 +657,7 @@ const totalUserPosts = [
         SELECT COUNT(*)
         FROM Posts
         WHERE Posts.state = 'visible'
-        AND Posts.type IN ('text', 'url', 'images', 'audio', 'event', 'string', 'glass-bead-game', 'prism')
+        AND Posts.type IN ('text', 'url', 'images', 'audio', 'event', glass-bead-game')
         AND Posts.creatorId = User.id
     )`),
     'totalPosts',
@@ -685,18 +682,7 @@ const unseenNotifications = [
 // post functions
 function findPostType(type) {
     return type === 'All Types'
-        ? [
-              'text',
-              'url',
-              'image',
-              'audio',
-              'event',
-              'poll',
-              'glass-bead-game',
-              //   'string',
-              //   'weave',
-              //   'prism',
-          ]
+        ? ['text', 'url', 'image', 'audio', 'event', 'poll', 'glass-bead-game']
         : type.replace(/\s+/g, '-').toLowerCase()
 }
 
@@ -728,11 +714,6 @@ function findFullPostAttributes(model, accountId) {
         'color',
         'title',
         'text',
-        // 'url',
-        // 'urlImage',
-        // 'urlDomain',
-        // 'urlTitle',
-        // 'urlDescription',
         'createdAt',
         'updatedAt',
         totalPostLikes(model),
@@ -765,10 +746,10 @@ function findPostWhere(location, id, startDate, type, searchQuery) {
     if (searchQuery) {
         where[Op.or] = [
             { text: { [Op.like]: `%${searchQuery}%` } },
-            { urlTitle: { [Op.like]: `%${searchQuery}%` } },
-            { urlDescription: { [Op.like]: `%${searchQuery}%` } },
-            { urlDomain: { [Op.like]: `%${searchQuery}%` } },
-            { '$GlassBeadGame2.topic$': { [Op.like]: `%${searchQuery}%` } },
+            { title: { [Op.like]: `%${searchQuery}%` } },
+            { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery}%` } },
+            { '$Urls.title$': { [Op.like]: `%${searchQuery}%` } },
+            { '$Urls.description$': { [Op.like]: `%${searchQuery}%` } },
         ]
     }
     return where
@@ -861,7 +842,7 @@ function findPostInclude(accountId) {
             ],
         },
         {
-            model: GlassBeadGame2,
+            model: GlassBeadGame,
             // attributes: ['topic', 'topicGroup', 'topicImage'],
             // include: [
             //     {

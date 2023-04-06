@@ -106,7 +106,7 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'postId',
         })
 
-        Post.hasOne(models.GlassBeadGame2, {
+        Post.hasOne(models.GlassBeadGame, {
             foreignKey: 'postId',
         })
     }

@@ -23,7 +23,7 @@ const {
     Link,
     Image,
     Event,
-    GlassBeadGame2,
+    GlassBeadGame,
     GlassBead,
     Weave,
     Poll,
@@ -155,7 +155,7 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
         having: { ['access']: 1 },
         include: [
             {
-                model: GlassBeadGame2,
+                model: GlassBeadGame,
                 required: false,
                 attributes: ['topic'],
             },

@@ -2,7 +2,7 @@ const config = require('./Config')
 const schedule = require('node-schedule')
 const sequelize = require('sequelize')
 const { Op } = sequelize
-const { User, Event, UserEvent, Notification, Post, Weave, GlassBeadGame2 } = require('./models')
+const { User, Event, UserEvent, Notification, Post, Weave, GlassBeadGame } = require('./models')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
@@ -60,7 +60,7 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
                 where: { id: postId, state: 'visible' },
                 include: [
                     {
-                        model: GlassBeadGame2,
+                        model: GlassBeadGame,
                         attributes: ['state'],
                     },
                     {
@@ -84,7 +84,7 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
             if (post) {
                 const beads = post.Beads.sort((a, b) => a.Link.index - b.Link.index)
                 const moveTaken = beads.length >= moveNumber
-                if (post.GlassBeadGame2.state === 'active' && !moveTaken) {
+                if (post.GlassBeadGame.state === 'active' && !moveTaken) {
                     // create notification
                     Notification.create({
                         ownerId: player.id,
@@ -125,7 +125,7 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
                 where: { id: postId, state: 'visible' },
                 include: [
                     {
-                        model: GlassBeadGame2,
+                        model: GlassBeadGame,
                         attributes: ['state'],
                     },
                     {
@@ -158,9 +158,9 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
             if (post) {
                 const beads = post.Beads.sort((a, b) => a.Link.index - b.Link.index)
                 const moveTaken = beads.length >= moveNumber
-                if (post.GlassBeadGame2.state === 'active' && !moveTaken) {
+                if (post.GlassBeadGame.state === 'active' && !moveTaken) {
                     // cancel game and notify other players
-                    const updateGBGState = await GlassBeadGame2.update(
+                    const updateGBGState = await GlassBeadGame.update(
                         { state: 'cancelled', nextMoveDeadline: null },
                         { where: { postId } }
                     )
@@ -276,12 +276,12 @@ module.exports = {
             where: {
                 state: 'visible',
                 type: 'glass-bead-game',
-                '$GlassBeadGame2.nextMoveDeadline$': { [Op.not]: null },
+                '$GlassBeadGame.nextMoveDeadline$': { [Op.not]: null },
             },
             attributes: ['id'],
             include: [
                 {
-                    model: GlassBeadGame2,
+                    model: GlassBeadGame,
                     attributes: [
                         // 'privacy',
                         'state',
@@ -314,7 +314,7 @@ module.exports = {
         gbgPosts.forEach((gbg) => {
             const { id, Beads, Players } = gbg
             const { state, movesPerPlayer, moveTimeWindow, nextMoveDeadline, playerOrder } =
-                gbg.GlassBeadGame2
+                gbg.GlassBeadGame
             const movesLeft = Beads.length < Players.length * movesPerPlayer
             if (
                 state === 'active' &&

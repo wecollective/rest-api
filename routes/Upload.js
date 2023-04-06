@@ -6,7 +6,7 @@ var aws = require('aws-sdk')
 var multer = require('multer')
 var multerS3 = require('multer-s3')
 
-const { User, Space, GlassBeadGame, GlassBeadGame2, Post, Link, Audio } = require('../models')
+const { User, Space, GlassBeadGame, Post, Link, Audio } = require('../models')
 
 const authenticateToken = require('../middleware/authenticateToken')
 
@@ -41,7 +41,7 @@ router.post('/image-upload', authenticateToken, async (req, res) => {
                 case 'space-cover':
                     return Space.update({ coverImagePath: url }, { where: { id } })
                 case 'gbg-topic':
-                    return GlassBeadGame2.update({ topicImage: url }, { where: { id } })
+                    return GlassBeadGame.update({ topicImage: url }, { where: { id } })
                 default:
                     break
             }
@@ -92,7 +92,7 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         if (imageURL) {
-            GlassBeadGame2.update(
+            GlassBeadGame.update(
                 {
                     backgroundImage: imageURL,
                     backgroundVideo: null,
@@ -101,7 +101,7 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
                 { where: { id: gameId } }
             ).then(res.status(200).json({ message: 'Success' }))
         } else if (videoURL) {
-            GlassBeadGame2.update(
+            GlassBeadGame.update(
                 {
                     backgroundImage: null,
                     backgroundVideo: videoURL,
@@ -131,7 +131,7 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
             }).single('image')(req, res, (err) => {
                 const { file } = req
                 if (file) {
-                    GlassBeadGame2.update(
+                    GlassBeadGame.update(
                         {
                             backgroundImage: file.location,
                             backgroundVideo: null,

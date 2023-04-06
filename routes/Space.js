@@ -17,7 +17,7 @@ const {
     Post,
     Link,
     Notification,
-    GlassBeadGame2,
+    GlassBeadGame,
     Event,
     Image,
     Url,
@@ -630,7 +630,12 @@ router.get('/space-posts', authenticateToken, async (req, res) => {
                 through,
             },
             {
-                model: GlassBeadGame2,
+                model: Url,
+                required: false,
+                attributes: ['title', 'description'],
+            },
+            {
+                model: GlassBeadGame,
                 required: false,
                 attributes: ['topic'],
             },
@@ -673,9 +678,14 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
                 through,
             },
             {
-                model: GlassBeadGame2,
+                model: Url,
                 required: false,
-                attributes: ['topic', 'topicGroup'],
+                attributes: ['title', 'description'],
+            },
+            {
+                model: GlassBeadGame,
+                required: false,
+                attributes: ['topic'],
             },
         ],
     })
@@ -699,7 +709,12 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
                 through,
             },
             {
-                model: GlassBeadGame2,
+                model: Url,
+                required: false,
+                attributes: ['title', 'description'],
+            },
+            {
+                model: GlassBeadGame,
                 required: false,
                 attributes: ['topic', 'topicGroup'],
             },
@@ -840,7 +855,7 @@ router.get('/space-events', authenticateToken, (req, res) => {
                 attributes: ['id', 'startTime'],
             },
             {
-                model: GlassBeadGame2,
+                model: GlassBeadGame,
                 // required: false,
                 attributes: ['topic', 'topicGroup', 'topicImage'],
             },

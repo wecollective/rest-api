@@ -1,7 +1,7 @@
 'use strict'
 module.exports = (sequelize, DataTypes) => {
-    const GlassBeadGame2 = sequelize.define(
-        'GlassBeadGame2',
+    const GlassBeadGame = sequelize.define(
+        'GlassBeadGame',
         {
             id: {
                 primaryKey: true,
@@ -34,8 +34,8 @@ module.exports = (sequelize, DataTypes) => {
         },
         {}
     )
-    GlassBeadGame2.associate = function (models) {
+    GlassBeadGame.associate = function (models) {
         // associations can be defined here
     }
-    return GlassBeadGame2
+    return GlassBeadGame
 }

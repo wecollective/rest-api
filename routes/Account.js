@@ -19,7 +19,7 @@ const {
     UserEvent,
     Link,
     Reaction,
-    GlassBeadGame2,
+    GlassBeadGame,
 } = require('../models')
 const ScheduledTasks = require('../ScheduledTasks')
 const { unseenNotifications } = require('../Helpers')
@@ -74,7 +74,7 @@ router.get('/account-notifications', authenticateToken, (req, res) => {
                     as: 'relatedPost',
                     include: [
                         {
-                            model: GlassBeadGame2,
+                            model: GlassBeadGame,
                             attributes: ['state'],
                             required: false,
                         },
@@ -331,7 +331,7 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                         attributes: ['id', 'name', 'handle', 'email'],
                     },
                     {
-                        model: GlassBeadGame2,
+                        model: GlassBeadGame,
                         // attributes: ['state', 'moveTimeWindow'],
                     },
                     {
@@ -346,13 +346,13 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                 ],
             })
 
-            if (post && post.GlassBeadGame2.state !== 'cancelled') {
+            if (post && post.GlassBeadGame.state !== 'cancelled') {
                 const players = post.Players.sort((a, b) => a.UserPost.index - b.UserPost.index)
                 const respondingPlayer = post.Players.find((p) => p.id === accountId)
                 const otherPlayers = post.Players.filter((p) => p.id !== accountId)
                 // if player rejected: update weave state, notify other players
                 if (response === 'rejected') {
-                    const updateWeaveState = await GlassBeadGame2.update(
+                    const updateWeaveState = await GlassBeadGame.update(
                         { state: 'cancelled' },
                         { where: { postId } }
                     )
@@ -435,13 +435,13 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                             res.status(200).json({ message: 'Success' })
                         } else {
                             // if all players ready: update weave state and notify first player
-                            const deadline = post.GlassBeadGame2.moveTimeWindow
+                            const deadline = post.GlassBeadGame.moveTimeWindow
                                 ? new Date(
                                       new Date().getTime() +
-                                          post.GlassBeadGame2.moveTimeWindow * 60 * 1000
+                                          post.GlassBeadGame.moveTimeWindow * 60 * 1000
                                   )
                                 : null
-                            const updateWeaveState = await GlassBeadGame2.update(
+                            const updateWeaveState = await GlassBeadGame.update(
                                 { state: 'active', nextMoveDeadline: deadline },
                                 { where: { postId } }
                             )
@@ -472,7 +472,7 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                                         </p>
                                     `,
                             })
-                            const scheduleGBGMoveJobs = post.GlassBeadGame2.moveTimeWindow
+                            const scheduleGBGMoveJobs = post.GlassBeadGame.moveTimeWindow
                                 ? ScheduledTasks.scheduleGBGMoveJobs(
                                       postId,
                                       players[0],

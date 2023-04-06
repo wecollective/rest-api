@@ -1,5 +1,5 @@
 require('dotenv').config()
-console.log(999, `Node environment: ${process.env.NODE_ENV}, Database: ${process.env.DEV_DB_HOST}`)
+console.log(999, `Node environment: ${process.env.NODE_ENV}`)
 const config = require('./Config')
 const passport = require('passport')
 const { v4: uuidv4 } = require('uuid')
