@@ -74,6 +74,20 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
         res.send('first attempt')
+
+        // const posts = await Post.findAll({ attributes: ['id', 'createdAt'] })
+
+        // Promise.all(
+        //     posts.map(
+        //         async (post) =>
+        //             await Post.update(
+        //                 { lastActivity: post.createdAt },
+        //                 { where: { id: post.id }, silent: true }
+        //             )
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json({ error }))
     }
 })
 
@@ -1112,15 +1126,6 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                 Audios,
                 Urls,
                 Images,
-                // beadIndex,
-                // mentions,
-                // privacy,
-                // nextPlayerId,
-                // type,
-                // color,
-                // text,
-                // url,
-                // urlData,
             } = beadData
 
             const bead = await Post.create({
@@ -1128,23 +1133,9 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                 state: 'visible',
                 creatorId: accountId,
                 color: color || null,
-                // title: title || null,
                 text: text || null,
                 lastActivity: new Date(),
             })
-
-            // Post.create({
-            //     type: `string-${type}`,
-            //     state: 'visible',
-            //     creatorId: accountId,
-            //     color,
-            //     text: text || null,
-            //     url: type === 'audio' ? files[0].location : url,
-            //     urlImage: urlData ? urlData.image : null,
-            //     urlDomain: urlData ? urlData.domain : null,
-            //     urlTitle: urlData ? urlData.title : null,
-            //     urlDescription: urlData ? urlData.description : null,
-            // }).then(async (bead) => {
 
             const createUrl =
                 type === 'url'
@@ -1415,6 +1406,11 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                 }
             })
 
+            const updateLastPostActivity = await Post.update(
+                { lastActivity: new Date() },
+                { where: { id: postId }, silent: true }
+            )
+
             Promise.all([
                 createUrl,
                 createAudio,
@@ -1422,6 +1418,7 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                 notifyMentions,
                 createLink,
                 notifyPlayers,
+                updateLastPostActivity,
             ])
                 .then((data) =>
                     res.status(200).json({
@@ -1434,7 +1431,6 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                     })
                 )
                 .catch((error) => res.status(500).json({ message: 'Error', error }))
-            // })
         }
 
         if (uploadType === 'image-file') {
@@ -1888,7 +1884,6 @@ router.post('/remove-link', authenticateToken, (req, res) => {
 router.post('/create-comment', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { text, postId, commentId, replyId, spaceId, mentions } = req.body
-    console.log(999, 'req.body: ', req.body)
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -2115,7 +2110,18 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                 )
         )
 
-        Promise.all([notifyPostCreator, notifyCommentCreator, notifyReplyCreator, notifyMentions])
+        const updateLastPostActivity = await Post.update(
+            { lastActivity: new Date() },
+            { where: { id: postId }, silent: true }
+        )
+
+        Promise.all([
+            notifyPostCreator,
+            notifyCommentCreator,
+            notifyReplyCreator,
+            notifyMentions,
+            updateLastPostActivity,
+        ])
             .then(() => res.status(200).json(newComment))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
@@ -2311,7 +2317,18 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
                   })
                 : null
 
-        Promise.all([removeOldReactions, createNewReactions, createNotification, sendEmail])
+        const updateLastPostActivity = await Post.update(
+            { lastActivity: new Date() },
+            { where: { id: postId }, silent: true }
+        )
+
+        Promise.all([
+            removeOldReactions,
+            createNewReactions,
+            createNotification,
+            sendEmail,
+            updateLastPostActivity,
+        ])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }

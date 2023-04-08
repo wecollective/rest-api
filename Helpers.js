@@ -145,16 +145,21 @@ function findStartDate(timeRange) {
 
 function findOrder(sortBy, sortOrder) {
     const direction = sortOrder === 'Ascending' ? 'ASC' : 'DESC'
-    return sortBy === 'Date'
-        ? [
-              ['createdAt', direction],
-              ['id', 'ASC'],
-          ]
-        : [
-              [sequelize.literal(`total${sortBy}`), direction],
-              ['createdAt', 'DESC'],
-              ['id', 'ASC'],
-          ]
+    if (sortBy === 'Date Created')
+        return [
+            ['createdAt', direction],
+            ['id', 'ASC'],
+        ]
+    if (sortBy === 'Recent Activity')
+        return [
+            ['lastActivity', direction],
+            ['id', 'ASC'],
+        ]
+    return [
+        [sequelize.literal(`total${sortBy}`), direction],
+        ['createdAt', 'DESC'],
+        ['id', 'ASC'],
+    ]
 }
 
 // post literals (model prop used to distinguish between Post and Beads)
