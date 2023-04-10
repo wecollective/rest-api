@@ -721,6 +721,7 @@ function findFullPostAttributes(model, accountId) {
         'text',
         'createdAt',
         'updatedAt',
+        'lastActivity',
         totalPostLikes(model),
         totalPostComments(model),
         totalPostRatings(model),
