@@ -194,6 +194,15 @@ router.post('/find-people', (req, res) => {
         where,
         include,
         limit: 20,
+        order: [
+            [sequelize.literal(`User.handle = '${query}'`), 'DESC'],
+            [sequelize.literal(`User.name = '${query}'`), 'DESC'],
+            [sequelize.literal(`User.name LIKE '%${query}%'`), 'DESC'],
+            [sequelize.literal(`POSITION('${query}' IN User.name)`), 'ASC'],
+            // [sequelize.literal(`totalLikes`), 'DESC'],
+            ['createdAt', 'ASC'],
+            ['id', 'ASC'],
+        ],
         attributes: ['id', 'handle', 'name', 'flagImagePath'],
         subQuery: false,
     }).then((users) => res.send(users))

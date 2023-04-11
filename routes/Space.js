@@ -1348,7 +1348,6 @@ router.post('/find-spaces', authenticateToken, (req, res) => {
             [Op.or]: [
                 { handle: { [Op.like]: `%${query}%` } },
                 { name: { [Op.like]: `%${query}%` } },
-                // { description: { [Op.like]: `%${query}%` } },
             ],
         }
         if (blacklist && blacklist.length) where[Op.not] = [{ id: blacklist }]
@@ -1383,6 +1382,15 @@ router.post('/find-spaces', authenticateToken, (req, res) => {
             through: { attributes: [], where: { state: { [Op.or]: ['open', 'closed'] } } },
         },
         limit: 20,
+        order: [
+            [sequelize.literal(`Space.handle = '${query}'`), 'DESC'],
+            [sequelize.literal(`Space.name = '${query}'`), 'DESC'],
+            [sequelize.literal(`Space.name LIKE '%${query}%'`), 'DESC'],
+            [sequelize.literal(`POSITION('${query}' IN Space.name)`), 'ASC'],
+            // [sequelize.literal(`totalLikes`), 'DESC'],
+            ['createdAt', 'ASC'],
+            ['id', 'ASC'],
+        ],
         attributes: findAttributes(),
         having: findHaving(),
         subQuery: false,
