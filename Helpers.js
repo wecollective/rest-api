@@ -790,7 +790,7 @@ function findPostInclude(accountId) {
         },
         {
             model: Event,
-            attributes: ['id', 'title', 'startTime', 'endTime'],
+            attributes: ['id', 'startTime', 'endTime'],
             include: [
                 // todo: count and grab latest 3 instead of getting all users
                 {
@@ -815,7 +815,7 @@ function findPostInclude(accountId) {
         },
         {
             model: Poll,
-            attributes: ['title', 'type'],
+            attributes: ['id', 'type', 'answersLocked'],
             include: [
                 {
                     model: PollAnswer,
@@ -850,21 +850,6 @@ function findPostInclude(accountId) {
         {
             model: GlassBeadGame,
             // attributes: ['topic', 'topicGroup', 'topicImage'],
-            // include: [
-            //     {
-            //         model: GlassBead,
-            //         where: { state: 'visible' },
-            //         attributes: ['id', 'index', 'beadUrl'],
-            //         required: false,
-            //         include: [
-            //             {
-            //                 model: User,
-            //                 as: 'user',
-            //                 attributes: ['handle', 'name', 'flagImagePath'],
-            //             },
-            //         ],
-            //     },
-            // ],
         },
         {
             model: Post,
@@ -895,20 +880,6 @@ function findPostInclude(accountId) {
                 },
             ],
         },
-        // {
-        //     model: Weave,
-        //     attributes: [
-        //         'numberOfTurns',
-        //         'numberOfMoves',
-        //         'allowedBeadTypes',
-        //         'moveTimeWindow',
-        //         'nextMoveDeadline',
-        //         'audioTimeLimit',
-        //         'characterLimit',
-        //         'state',
-        //         'privacy',
-        //     ],
-        // },
         {
             model: User,
             as: 'Players',

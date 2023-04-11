@@ -655,12 +655,12 @@ router.post('/create-post', authenticateToken, (req, res) => {
                           Promise.all(
                               pollAnswers.map((answer) =>
                                   PollAnswer.create({
-                                      inquiryId: newPoll.id,
+                                      pollId: newPoll.id,
                                       creatorId: accountId,
                                       text: answer.text,
                                   })
                               )
-                          ).then((data) => resolve(data))
+                          ).then((answers) => resolve({ poll: newPoll, answers }))
                       })
                     : null
 
@@ -982,7 +982,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     images: data[4],
                     audio: data[5],
                     event: data[6],
-                    pollAnswers: data[7],
+                    pollData: data[7],
                     gbg: data[8],
                 })
             })
@@ -2253,13 +2253,11 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
         const post = await Post.findOne({
             where: { id: postId },
             attributes: [],
-            include: [
-                {
-                    model: User,
-                    as: 'Creator',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
-                },
-            ],
+            include: {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+            },
         })
 
         const removeOldReactions = await Reaction.update(
@@ -2331,6 +2329,22 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
         ])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/new-poll-answer', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { pollId, newAnswer } = req.body
+
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        PollAnswer.create({
+            pollId,
+            creatorId: accountId,
+            text: newAnswer,
+        })
+            .then((pollAnswer) => res.status(200).json({ pollAnswer }))
+            .catch((error) => res.status(500).json({ error }))
     }
 })
 
