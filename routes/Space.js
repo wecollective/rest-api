@@ -629,11 +629,13 @@ router.get('/space-posts', authenticateToken, async (req, res) => {
                 attributes: [],
                 through,
             },
-            {
-                model: Url,
-                required: false,
-                attributes: ['title', 'description'],
-            },
+            // removed for now because unable to 1 to many URL includes for search queries with subQuery: false and separate: true
+            // {
+            //     model: Url,
+            //     required: false,
+            //     attributes: ['title', 'description'],
+            //     separate: true,
+            // },
             {
                 model: GlassBeadGame,
                 required: false,
@@ -677,11 +679,11 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
                 attributes: [],
                 through,
             },
-            {
-                model: Url,
-                required: false,
-                attributes: ['title', 'description'],
-            },
+            // {
+            //     model: Url,
+            //     required: false,
+            //     attributes: ['title', 'description'],
+            // },
             {
                 model: GlassBeadGame,
                 required: false,
@@ -708,11 +710,11 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
                 attributes: [],
                 through,
             },
-            {
-                model: Url,
-                required: false,
-                attributes: ['title', 'description'],
-            },
+            // {
+            //     model: Url,
+            //     required: false,
+            //     attributes: ['title', 'description'],
+            // },
             {
                 model: GlassBeadGame,
                 required: false,

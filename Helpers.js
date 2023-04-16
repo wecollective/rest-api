@@ -754,8 +754,8 @@ function findPostWhere(location, id, startDate, type, searchQuery) {
             { text: { [Op.like]: `%${searchQuery}%` } },
             { title: { [Op.like]: `%${searchQuery}%` } },
             { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery}%` } },
-            { '$Urls.title$': { [Op.like]: `%${searchQuery}%` } },
-            { '$Urls.description$': { [Op.like]: `%${searchQuery}%` } },
+            // { '$Urls.title$': { [Op.like]: `%${searchQuery}%` } },
+            // { '$Urls.description$': { [Op.like]: `%${searchQuery}%` } },
         ]
     }
     return where
