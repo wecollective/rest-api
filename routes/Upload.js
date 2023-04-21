@@ -152,13 +152,6 @@ router.post('/gbg-audio-upload', authenticateToken, (req, res) => {
     // Glass Bead Audio uploads only...
     // check file type and limits, then save raw audio in 'audio/raw' folder
     multer({
-        fileFilter: (req, file, cb) => {
-            if (file.mimetype === 'audio/mpeg-3') cb(null, true) // 'audio/webm'
-            else {
-                cb(null, false)
-                cb(new Error('Only audio/mpeg-3 files allowed'))
-            }
-        },
         limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
         dest: './temp/audio/raw',
     }).single('file')(req, res, (error) => {
