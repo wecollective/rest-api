@@ -203,6 +203,12 @@ router.post('/gbg-audio-upload', authenticateToken, (req, res) => {
                                             state: 'visible',
                                             creatorId: accountId,
                                             lastActivity: new Date(),
+                                            totalLikes: 0,
+                                            totalComments: 0,
+                                            totalReposts: 0,
+                                            totalRatings: 0,
+                                            totalLinks: 0,
+                                            totalGlassBeadGames: 0,
                                         })
 
                                         const createAudio = await Audio.create({

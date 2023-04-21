@@ -693,21 +693,21 @@ function findPostType(type) {
 
 function findInitialPostAttributes(sortBy) {
     const attributes = ['id']
-    if (sortBy === 'Links') attributes.push(totalPostLinks('Post'))
-    if (sortBy === 'Comments') attributes.push(totalPostComments('Post'))
-    if (sortBy === 'Likes') attributes.push(totalPostLikes('Post'))
-    if (sortBy === 'Ratings') attributes.push(totalPostRatings('Post'))
-    if (sortBy === 'Reposts') attributes.push(totalPostReposts('Post'))
+    if (sortBy === 'Links') attributes.push('totalLinks')
+    if (sortBy === 'Comments') attributes.push('totalComments')
+    if (sortBy === 'Likes') attributes.push('totalLikes')
+    if (sortBy === 'Ratings') attributes.push('totalRatings')
+    if (sortBy === 'Reposts') attributes.push('totalReposts')
     return attributes
 }
 
 function findInitialPostAttributesWithAccess(sortBy, accountId) {
     const attributes = ['id', postAccess(accountId)]
-    if (sortBy === 'Links') attributes.push(totalPostLinks('Post'))
-    if (sortBy === 'Comments') attributes.push(totalPostComments('Post'))
-    if (sortBy === 'Likes') attributes.push(totalPostLikes('Post'))
-    if (sortBy === 'Ratings') attributes.push(totalPostRatings('Post'))
-    if (sortBy === 'Reposts') attributes.push(totalPostReposts('Post'))
+    if (sortBy === 'Links') attributes.push('totalLinks')
+    if (sortBy === 'Comments') attributes.push('totalComments')
+    if (sortBy === 'Likes') attributes.push('totalLikes')
+    if (sortBy === 'Ratings') attributes.push('totalRatings')
+    if (sortBy === 'Reposts') attributes.push('totalReposts')
     return attributes
 }
 
@@ -722,12 +722,12 @@ function findFullPostAttributes(model, accountId) {
         'createdAt',
         'updatedAt',
         'lastActivity',
-        totalPostLikes(model),
-        totalPostComments(model),
-        totalPostRatings(model),
-        totalPostReposts(model),
+        'totalLikes',
+        'totalComments',
+        'totalReposts',
+        'totalRatings',
+        'totalLinks',
         totalPostRatingPoints(model),
-        totalPostLinks(model),
         accountLike(model, accountId),
         accountRating(model, accountId),
         accountRepost(model, accountId),

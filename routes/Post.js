@@ -2,28 +2,18 @@ require('dotenv').config()
 const config = require('../Config')
 const express = require('express')
 const router = express.Router()
-const sequelize = require('sequelize')
-const Op = sequelize.Op
 const sgMail = require('@sendgrid/mail')
 const ScheduledTasks = require('../ScheduledTasks')
 const puppeteer = require('puppeteer')
 const aws = require('aws-sdk')
 const multer = require('multer')
-const multerS3 = require('multer-s3')
-const s3 = new aws.S3({})
-const fs = require('fs')
 const ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 const authenticateToken = require('../middleware/authenticateToken')
 const {
-    imageMBLimit,
-    audioMBLimit,
     findFullPostAttributes,
     findPostInclude,
     postAccess,
-    totalUserPosts,
-    totalUserComments,
-    totalSpacePosts,
     multerParams,
     noMulterErrors,
     convertAndUploadAudio,
@@ -73,15 +63,30 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
-        res.send('first attempt')
 
-        // const posts = await Post.findAll({ attributes: ['id', 'createdAt'] })
+        // const posts = await Post.findAll({
+        //     attributes: [
+        //         'id',
+        //         totalPostLikes('Post'),
+        //         totalPostComments('Post'),
+        //         totalPostLinks('Post'),
+        //         totalPostRatings('Post'),
+        //         totalPostReposts('Post'),
+        //     ],
+        // })
 
         // Promise.all(
         //     posts.map(
         //         async (post) =>
         //             await Post.update(
-        //                 { lastActivity: post.createdAt },
+        //                 {
+        //                     totalLikes: post.totalLikes,
+        //                     totalComments: post.totalComments,
+        //                     totalLinks: post.totalLinks,
+        //                     totalRatings: post.totalRatings,
+        //                     totalReposts: post.totalReposts,
+        //                     totalGlassBeadGames: 0,
+        //                 },
         //                 { where: { id: post.id }, silent: true }
         //             )
         //     )
@@ -381,58 +386,6 @@ router.get('/scrape-url', async (req, res) => {
     }
 })
 
-router.get('/glass-bead-game-data', (req, res) => {
-    const { postId } = req.query
-    GlassBeadGame.findOne({
-        where: { postId },
-        attributes: [
-            'id',
-            'topic',
-            'topicGroup',
-            'topicImage',
-            'backgroundImage',
-            'backgroundVideo',
-            'backgroundVideoStartTime',
-            'numberOfTurns',
-            'moveDuration',
-            'introDuration',
-            'intervalDuration',
-            'outroDuration',
-            'locked',
-        ],
-        order: [
-            [GlassBeadGameComment, 'createdAt', 'ASC'],
-            [GlassBead, 'createdAt', 'DESC'],
-        ],
-        include: [
-            {
-                model: GlassBead,
-                where: { state: 'visible' },
-                required: false,
-                include: [
-                    {
-                        model: User,
-                        as: 'user',
-                        attributes: ['handle', 'name', 'flagImagePath'],
-                    },
-                ],
-            },
-            {
-                model: GlassBeadGameComment,
-                include: [
-                    {
-                        model: User,
-                        as: 'user',
-                        attributes: ['handle', 'name', 'flagImagePath'],
-                    },
-                ],
-            },
-        ],
-    })
-        .then((post) => res.json(post))
-        .catch((error) => res.status(500).json({ message: 'Error', error }))
-})
-
 router.get('/glass-bead-game-comments', (req, res) => {
     const { gameId } = req.query
     Comment.findAll({
@@ -488,6 +441,12 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 title: title || null,
                 text: text || null,
                 lastActivity: new Date(),
+                totalLikes: 0,
+                totalComments: 0,
+                totalReposts: 0,
+                totalRatings: 0,
+                totalLinks: 0,
+                totalGlassBeadGames: 0,
             })
 
             const createDirectRelationships = await Promise.all(
@@ -763,6 +722,12 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                               color: bead.color || null,
                                               text: bead.text || null,
                                               lastActivity: new Date(),
+                                              totalLikes: 0,
+                                              totalComments: 0,
+                                              totalReposts: 0,
+                                              totalRatings: 0,
+                                              totalLinks: 0,
+                                              totalGlassBeadGames: 0,
                                           })
 
                                           const createBeadUrl =
@@ -1135,6 +1100,12 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                 color: color || null,
                 text: text || null,
                 lastActivity: new Date(),
+                totalLikes: 0,
+                totalComments: 0,
+                totalReposts: 0,
+                totalRatings: 0,
+                totalLinks: 0,
+                totalGlassBeadGames: 0,
             })
 
             const createUrl =
@@ -1466,15 +1437,18 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
     else {
         const post = await Post.findOne({
             where: { id: postId },
-            attributes: [],
-            include: [
-                {
-                    model: User,
-                    as: 'Creator',
-                    attributes: ['id', 'name', 'email'],
-                },
-            ],
+            attributes: ['totalReposts'],
+            include: {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'name', 'email'],
+            },
         })
+
+        const updateTotalReposts = await Post.update(
+            { totalReposts: post.totalReposts + spaceIds.length },
+            { where: { id: postId }, silent: true }
+        )
 
         const isOwnPost = post.Creator.id === accountId
 
@@ -1499,19 +1473,19 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                   },
                   subject: 'New notification',
                   text: `
-                Hi ${post.Creator.name}, ${accountName} just reposted your post on weco:
-                http://${config.appURL}/p/${postId}
-            `,
+                        Hi ${post.Creator.name}, ${accountName} just reposted your post on weco:
+                        http://${config.appURL}/p/${postId}
+                    `,
                   html: `
-                <p>
-                    Hi ${post.Creator.name},
-                    <br/>
-                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                    just reposted your
-                    <a href='${config.appURL}/p/${postId}'>post</a>
-                    on weco
-                </p>
-            `,
+                        <p>
+                            Hi ${post.Creator.name},
+                            <br/>
+                            <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                            just reposted your
+                            <a href='${config.appURL}/p/${postId}'>post</a>
+                            on weco
+                        </p>
+                    `,
               })
 
         const createReactions = await Promise.all(
@@ -1587,13 +1561,14 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
         })
 
         Promise.all([
+            updateTotalReposts,
             sendNotification,
             sendEmail,
             createReactions,
             createDirectRelationships,
             createIndirectRelationships,
         ])
-            .then((data) => res.status(200).json({ message: 'Success' }))
+            .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
@@ -1606,15 +1581,18 @@ router.post('/add-like', authenticateToken, async (req, res) => {
     else {
         const post = await Post.findOne({
             where: { id: postId },
-            attributes: [],
-            include: [
-                {
-                    model: User,
-                    as: 'Creator',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
-                },
-            ],
+            attributes: ['totalLikes'],
+            include: {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+            },
         })
+
+        const updateTotalLikes = await Post.update(
+            { totalLikes: post.totalLikes + 1 },
+            { where: { id: postId }, silent: true }
+        )
 
         const createReaction = await Reaction.create({
             type: 'like',
@@ -1662,7 +1640,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                     `,
               })
 
-        Promise.all([createReaction, createNotification, sendEmail])
+        Promise.all([updateTotalLikes, createReaction, createNotification, sendEmail])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
@@ -1674,7 +1652,17 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        Reaction.update(
+        const post = await Post.findOne({
+            where: { id: postId },
+            attributes: ['totalLikes'],
+        })
+
+        const updateTotalLikes = await Post.update(
+            { totalLikes: post.totalLikes - 1 },
+            { where: { id: postId }, silent: true }
+        )
+
+        const removeReaction = await Reaction.update(
             { state: 'removed' },
             {
                 where: {
@@ -1685,6 +1673,8 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
                 },
             }
         )
+
+        Promise.all([updateTotalLikes, removeReaction])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
@@ -1698,15 +1688,18 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
     else {
         const post = await Post.findOne({
             where: { id: postId },
-            attributes: [],
-            include: [
-                {
-                    model: User,
-                    as: 'Creator',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
-                },
-            ],
+            attributes: ['totalRatings'],
+            include: {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+            },
         })
+
+        const updateTotalRatings = await Post.update(
+            { totalRatings: post.totalRatings + 1 },
+            { where: { id: postId }, silent: true }
+        )
 
         const isOwnPost = post.Creator.id === accountId
 
@@ -1755,19 +1748,29 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
             `,
               })
 
-        Promise.all([createReaction, sendNotification, sendEmail])
+        Promise.all([updateTotalRatings, createReaction, sendNotification, sendEmail])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
-router.post('/remove-rating', authenticateToken, (req, res) => {
+router.post('/remove-rating', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { postId, spaceId } = req.body
+    const { postId } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        Reaction.update(
+        const post = await Post.findOne({
+            where: { id: postId },
+            attributes: ['totalRatings'],
+        })
+
+        const updateTotalRatings = await Post.update(
+            { totalRatings: post.totalRatings - 1 },
+            { where: { id: postId }, silent: true }
+        )
+
+        const removeReaction = await Reaction.update(
             { state: 'removed' },
             {
                 where: {
@@ -1778,6 +1781,8 @@ router.post('/remove-rating', authenticateToken, (req, res) => {
                 },
             }
         )
+
+        Promise.all([updateTotalRatings, removeReaction])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
@@ -1786,7 +1791,15 @@ router.post('/remove-rating', authenticateToken, (req, res) => {
 router.post('/add-link', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { accountHandle, accountName, spaceId, description, itemAId, itemBId } = req.body
-    const itemB = await Post.findOne({ where: { id: itemBId } })
+    const itemB = await Post.findOne({
+        where: { id: itemBId },
+        attributes: ['id', 'totalLinks'],
+        include: {
+            model: User,
+            as: 'Creator',
+            attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+        },
+    })
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else if (!itemB) res.status(404).send({ message: 'Item B not found' })
@@ -1802,27 +1815,23 @@ router.post('/add-link', authenticateToken, async (req, res) => {
 
         const itemA = await Post.findOne({
             where: { id: itemAId },
-            attributes: [],
-            include: [
-                {
-                    model: User,
-                    as: 'Creator',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
-                },
-            ],
+            attributes: ['totalLinks'],
+            include: {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+            },
         })
 
-        const itemB = await Post.findOne({
-            where: { id: itemBId },
-            attributes: ['id'],
-            include: [
-                {
-                    model: User,
-                    as: 'Creator',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
-                },
-            ],
-        })
+        const updatePostATotalLinks = await Post.update(
+            { totalLinks: itemA.totalLinks + 1 },
+            { where: { id: itemAId }, silent: true }
+        )
+
+        const updatePostBTotalLinks = await Post.update(
+            { totalLinks: itemB.totalLinks + 1 },
+            { where: { id: itemBId }, silent: true }
+        )
 
         const isOwnPost = itemA.Creator.id === accountId
 
@@ -1863,19 +1872,47 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             `,
               })
 
-        Promise.all([createLink, sendNotification, sendEmail])
+        Promise.all([
+            createLink,
+            updatePostATotalLinks,
+            updatePostBTotalLinks,
+            sendNotification,
+            sendEmail,
+        ])
             .then((data) => res.status(200).json({ itemB, link: data[0], message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
-router.post('/remove-link', authenticateToken, (req, res) => {
+router.post('/remove-link', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    let { linkId } = req.body
+    let { linkId, itemAId, itemBId } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        Link.update({ state: 'hidden' }, { where: { id: linkId } })
+        const itemA = await Post.findOne({
+            where: { id: itemAId },
+            attributes: ['totalLinks'],
+        })
+
+        const itemB = await Post.findOne({
+            where: { id: itemBId },
+            attributes: ['totalLinks'],
+        })
+
+        const updatePostATotalLinks = await Post.update(
+            { totalLinks: itemA.totalLinks - 1 },
+            { where: { id: itemAId }, silent: true }
+        )
+
+        const updatePostBTotalLinks = await Post.update(
+            { totalLinks: itemB.totalLinks - 1 },
+            { where: { id: itemBId }, silent: true }
+        )
+
+        const removeLink = await Link.update({ state: 'hidden' }, { where: { id: linkId } })
+
+        Promise.all([updatePostATotalLinks, updatePostBTotalLinks, removeLink])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
@@ -1894,13 +1931,18 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
 
         const post = await Post.findOne({
             where: { id: postId },
-            attributes: [],
+            attributes: ['totalComments'],
             include: {
                 model: User,
                 as: 'Creator',
                 attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
             },
         })
+
+        const updateLastPostActivity = await Post.update(
+            { lastActivity: new Date(), totalComments: post.totalComments + 1 },
+            { where: { id: postId }, silent: true }
+        )
 
         const comment = commentId
             ? await Comment.findOne({
@@ -2110,17 +2152,12 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                 )
         )
 
-        const updateLastPostActivity = await Post.update(
-            { lastActivity: new Date() },
-            { where: { id: postId }, silent: true }
-        )
-
         Promise.all([
+            updateLastPostActivity,
             notifyPostCreator,
             notifyCommentCreator,
             notifyReplyCreator,
             notifyMentions,
-            updateLastPostActivity,
         ])
             .then(() => res.status(200).json(newComment))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
@@ -2191,6 +2228,33 @@ router.post('/update-comment', authenticateToken, async (req, res) => {
         )
 
         Promise.all([updateComment, notifyMentions])
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/delete-comment', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId, commentId } = req.body
+
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const post = await Post.findOne({
+            where: { id: postId },
+            attributes: ['totalComments'],
+        })
+
+        const updateTotalComments = await Post.update(
+            { totalComments: post.totalComments - 1 },
+            { where: { id: postId }, silent: true }
+        )
+
+        const removeComment = await Comment.update(
+            { state: 'deleted' },
+            { where: { id: commentId, creatorId: accountId } }
+        )
+
+        Promise.all([updateTotalComments, removeComment])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
@@ -2444,13 +2508,11 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
     else {
         const post = await Post.findOne({
             where: { id: postId, creatorId: accountId },
-            include: [
-                {
-                    model: Event,
-                    attributes: ['id'],
-                    required: false,
-                },
-            ],
+            include: {
+                model: Event,
+                attributes: ['id'],
+                required: false,
+            },
         })
         const removePost = await post.update({ state: 'deleted' })
         const removeEvent = post.Event
@@ -2458,18 +2520,6 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
             : null
 
         Promise.all([removePost, removeEvent])
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
-    }
-})
-
-router.post('/delete-comment', authenticateToken, (req, res) => {
-    const accountId = req.user ? req.user.id : null
-    const { commentId } = req.body
-
-    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
-    else {
-        Comment.update({ state: 'deleted' }, { where: { id: commentId, creatorId: accountId } })
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
