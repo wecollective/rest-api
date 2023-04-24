@@ -43,6 +43,7 @@ router.get('/all-users', (req, res) => {
                 FROM Posts
                 WHERE Posts.state = 'visible'
                 AND Posts.creatorId = User.id
+                AND Posts.type IN ('text', 'url', 'image', 'audio', 'event', 'poll', 'glass-bead-game')
             )`),
                 'totalPosts',
             ])

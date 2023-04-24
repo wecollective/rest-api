@@ -31,10 +31,10 @@ ffmpeg.setFfmpegPath(ffmpegPath)
 const imageMBLimit = 10
 const audioMBLimit = 25
 
-function findFileName(file, accountId) {
+function findFileName(file, accountId, isAudio) {
     const date = Date.now().toString()
     const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
-    const extension = file.mimetype.split('/')[1]
+    const extension = isAudio ? 'mp3' : file.mimetype.split('/')[1]
     return `${accountId}-${date}-${name}.${extension}`
 }
 
@@ -51,18 +51,19 @@ function noMulterErrors(error, res) {
 
 function multerParams(type, accountId) {
     // types: 'image-file', 'audio-file', 'audio-blob', 'glass-bead-game'
-    const limit = type.includes('audio') ? audioMBLimit : imageMBLimit
+    const isAudio = type.includes('audio')
+    const limit = isAudio ? audioMBLimit : imageMBLimit
     const params = { limits: { fileSize: limit * 1024 * 1024 } }
     if (type === 'audio-blob') params.dest = './temp/audio/raw'
     else if (type === 'glass-bead-game') params.dest = './temp/beads'
     else {
-        const bucketType = type.includes('audio') ? 'post-audio' : 'post-images'
+        const bucketType = isAudio ? 'post-audio' : 'post-images'
         params.storage = multerS3({
             s3: s3,
             bucket: `weco-${process.env.NODE_ENV}-${bucketType}`,
             acl: 'public-read',
             metadata: (req, file, cb) => cb(null, { mimetype: file.mimetype }),
-            key: (req, file, cb) => cb(null, findFileName(file, accountId)),
+            key: (req, file, cb) => cb(null, findFileName(file, accountId, isAudio)),
         })
     }
     return params
@@ -78,14 +79,14 @@ function convertAndUploadAudio(file, accountId, type) {
                 // upload new mp3 file to s3 bucket
                 fs.readFile(outputPath, (err, data) => {
                     if (!err) {
-                        const fileName = findFileName(file, accountId)
+                        const fileName = findFileName(file, accountId, true)
                         const bucket = `weco-${process.env.NODE_ENV}-post-audio`
                         const s3Object = {
                             Bucket: bucket,
                             ACL: 'public-read',
                             Key: fileName,
                             Body: data,
-                            Metadata: { mimetype: file.mimetype },
+                            Metadata: { mimetype: 'audio/mp3' },
                         }
                         s3.putObject(s3Object, (err) => {
                             // delete old files
@@ -106,8 +107,9 @@ function convertAndUploadAudio(file, accountId, type) {
 function uploadBeadFile(file, accountId) {
     return new Promise((resolve) => {
         // fieldnames include: 'topicImage', 'imageFile', 'audioFile',
-        const bucketType = file.fieldname.includes('audio') ? 'post-audio' : 'post-images'
-        const fileName = findFileName(file, accountId)
+        const isAudio = file.fieldname.includes('audio')
+        const bucketType = isAudio ? 'post-audio' : 'post-images'
+        const fileName = findFileName(file, accountId, isAudio)
         const bucket = `weco-${process.env.NODE_ENV}-${bucketType}`
         fs.readFile(`temp/beads/${file.filename}`, (err, data) => {
             const s3Object = {
@@ -662,8 +664,8 @@ const totalUserPosts = [
         SELECT COUNT(*)
         FROM Posts
         WHERE Posts.state = 'visible'
-        AND Posts.type IN ('text', 'url', 'images', 'audio', 'event', glass-bead-game')
         AND Posts.creatorId = User.id
+        AND Posts.type IN ('text', 'url', 'image', 'audio', 'event', 'poll', 'glass-bead-game')
     )`),
     'totalPosts',
 ]
