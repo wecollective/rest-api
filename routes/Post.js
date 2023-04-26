@@ -745,7 +745,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                   ? await Audio.create({
                                                         type: 'post',
                                                         itemId: newBead.id,
-                                                        creatorId: accountId,
+                                                        state: 'active',
                                                         url:
                                                             bead.Audios[0].url ||
                                                             files.find(
@@ -1127,7 +1127,7 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                     ? await Audio.create({
                           itemId: bead.id,
                           type: 'post',
-                          creatorId: accountId,
+                          state: 'active',
                           url: Audios[0].url || files[0].location,
                       })
                     : null
