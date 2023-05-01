@@ -29,7 +29,7 @@ const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 ffmpeg.setFfmpegPath(ffmpegPath)
 
 const imageMBLimit = 10
-const audioMBLimit = 25
+const audioMBLimit = 30
 
 function findFileName(file, accountId, isAudio) {
     const date = Date.now().toString()
