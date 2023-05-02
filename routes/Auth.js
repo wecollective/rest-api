@@ -16,7 +16,7 @@ async function verifyRecaptch(reCaptchaToken) {
     const secret = recaptchaSecretKey
     const url = 'https://www.google.com/recaptcha/api/siteverify'
     const response = await axios.post(`${url}?secret=${secret}&response=${reCaptchaToken}`)
-    return response.data.success && response.data.score > 0.5
+    return response.data.success && response.data.score > 0.3
 }
 
 // POST
