@@ -32,7 +32,6 @@ const imageMBLimit = 10
 const audioMBLimit = 30
 const defaultPostValues = {
     state: 'visible',
-    lastActivity: new Date(),
     watermark: false,
     totalLikes: 0,
     totalComments: 0,
@@ -700,7 +699,7 @@ const unseenNotifications = [
 // post functions
 function findPostType(type) {
     return type === 'All Types'
-        ? ['text', 'url', 'image', 'audio', 'event', 'poll', 'glass-bead-game']
+        ? ['text', 'url', 'image', 'audio', 'event', 'poll', 'glass-bead-game', 'card']
         : type.replace(/\s+/g, '-').toLowerCase()
 }
 
@@ -729,7 +728,6 @@ function findFullPostAttributes(model, accountId) {
         'id',
         'type',
         'state',
-        'color',
         'title',
         'text',
         'createdAt',
@@ -867,7 +865,7 @@ function findPostInclude(accountId) {
         {
             model: Post,
             as: 'Beads',
-            attributes: findFullPostAttributes('Beads', accountId),
+            attributes: [...findFullPostAttributes('Beads', accountId), 'color'],
             through: {
                 // todo: handle account deleted as well (visible used to hide drafts)
                 where: { type: 'gbg-post', state: ['visible', 'account-deleted'] },
@@ -900,6 +898,19 @@ function findPostInclude(accountId) {
             through: {
                 where: { type: 'glass-bead-game' },
                 attributes: ['index', 'state', 'color'],
+            },
+        },
+        {
+            model: Post,
+            as: 'CardSides',
+            attributes: [...findFullPostAttributes('CardSides', accountId), 'watermark'],
+            through: {
+                where: { type: 'card-post', state: ['visible', 'account-deleted'] },
+                attributes: ['state'],
+            },
+            include: {
+                model: Image,
+                attributes: ['id', 'url'],
             },
         },
     ]

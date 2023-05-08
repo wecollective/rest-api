@@ -445,6 +445,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 creatorId: accountId,
                 title: title || null,
                 text: text || null,
+                lastActivity: new Date(),
             })
 
             const createDirectRelationships = await Promise.all(
@@ -719,6 +720,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                               creatorId: accountId,
                                               color: bead.color || null,
                                               text: bead.text || null,
+                                              lastActivity: new Date(),
                                           })
 
                                           const createBeadUrl =
@@ -932,6 +934,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               creatorId: accountId,
                               text: cardFrontText || null,
                               watermark: cardFrontWatermark,
+                              lastActivity: new Date(),
                           })
                           const createCardBack = await Post.create({
                               ...defaultPostValues,
@@ -939,11 +942,12 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               creatorId: accountId,
                               text: cardBackText || null,
                               watermark: cardBackWatermark,
+                              lastActivity: new Date(),
                           })
                           const linkCardFront = await Link.create({
                               state: 'visible',
                               type: 'card-post',
-                              index: 1,
+                              // relationship: 'front',
                               creatorId: accountId,
                               itemAId: post.id,
                               itemBId: createCardFront.id,
@@ -951,7 +955,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                           const linkCardBack = await Link.create({
                               state: 'visible',
                               type: 'card-post',
-                              index: 2,
+                              // relationship: 'back',
                               creatorId: accountId,
                               itemAId: post.id,
                               itemBId: createCardBack.id,
@@ -1157,6 +1161,7 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                 creatorId: accountId,
                 color: color || null,
                 text: text || null,
+                lastActivity: new Date(),
             })
 
             const createUrl =

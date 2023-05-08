@@ -629,7 +629,7 @@ router.get('/space-posts', authenticateToken, async (req, res) => {
                 attributes: [],
                 through,
             },
-            // removed for now because unable to 1 to many URL includes for search queries with subQuery: false and separate: true
+            // removed for now because unable to use 1 to many includes (used with URL) for search queries with subQuery: false and separate: true
             // {
             //     model: Url,
             //     required: false,
