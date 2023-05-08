@@ -19,6 +19,7 @@ const {
     noMulterErrors,
     convertAndUploadAudio,
     uploadBeadFile,
+    sourcePostId,
 } = require('../Helpers')
 const {
     Space,
@@ -101,9 +102,12 @@ router.get('/test', async (req, res) => {
 router.get('/post-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.query
-    const attributes = [postAccess(accountId), ...findFullPostAttributes('Post', accountId)]
+    const attributes = [
+        postAccess(accountId),
+        sourcePostId(),
+        ...findFullPostAttributes('Post', accountId),
+    ]
     const include = findPostInclude(accountId)
-
     const post = await Post.findOne({
         where: { id: postId, state: 'visible' },
         attributes,
@@ -1966,7 +1970,7 @@ router.post('/remove-link', authenticateToken, async (req, res) => {
             { where: { id: itemBId }, silent: true }
         )
 
-        const removeLink = await Link.update({ state: 'hidden' }, { where: { id: linkId } })
+        const removeLink = await Link.update({ state: 'deleted' }, { where: { id: linkId } })
 
         Promise.all([updatePostATotalLinks, updatePostBTotalLinks, removeLink])
             .then(() => res.status(200).json({ message: 'Success' }))

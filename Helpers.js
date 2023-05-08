@@ -220,6 +220,19 @@ function totalPostRatingPoints(model) {
     ]
 }
 
+function sourcePostId() {
+    return [
+        sequelize.literal(`(
+            SELECT Link.itemAId
+            FROM Links
+            AS Link
+            WHERE Link.itemBId = Post.id
+            AND (Link.type = 'gbg-post' OR Link.type = 'card-post')
+        )`),
+        'sourcePostId',
+    ]
+}
+
 function totalPostLinks(model) {
     return [
         sequelize.literal(
@@ -1002,5 +1015,6 @@ module.exports = {
     multerParams,
     convertAndUploadAudio,
     uploadBeadFile,
+    sourcePostId,
     restrictedAncestors,
 }
