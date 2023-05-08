@@ -11,6 +11,7 @@ const ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 const authenticateToken = require('../middleware/authenticateToken')
 const {
+    defaultPostValues,
     findFullPostAttributes,
     findPostInclude,
     postAccess,
@@ -432,21 +433,18 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 beads,
                 sourcePostId,
                 sourceCreatorId,
+                cardFrontText,
+                cardBackText,
+                cardFrontWatermark,
+                cardBackWatermark,
             } = postData
 
             const post = await Post.create({
+                ...defaultPostValues,
                 type,
-                state: 'visible',
                 creatorId: accountId,
                 title: title || null,
                 text: text || null,
-                lastActivity: new Date(),
-                totalLikes: 0,
-                totalComments: 0,
-                totalReposts: 0,
-                totalRatings: 0,
-                totalLinks: 0,
-                totalGlassBeadGames: 0,
             })
 
             const createDirectRelationships = await Promise.all(
@@ -716,18 +714,11 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                   (bead, index) =>
                                       new Promise(async (Resolve) => {
                                           const newBead = await Post.create({
+                                              ...defaultPostValues,
                                               type: `gbg-${bead.type}`,
-                                              state: 'visible',
                                               creatorId: accountId,
                                               color: bead.color || null,
                                               text: bead.text || null,
-                                              lastActivity: new Date(),
-                                              totalLikes: 0,
-                                              totalComments: 0,
-                                              totalReposts: 0,
-                                              totalRatings: 0,
-                                              totalLinks: 0,
-                                              totalGlassBeadGames: 0,
                                           })
 
                                           const createBeadUrl =
@@ -930,6 +921,71 @@ router.post('/create-post', authenticateToken, (req, res) => {
                       })
                     : null
 
+            const createCard =
+                type === 'card'
+                    ? await new Promise(async (resolve) => {
+                          const cardFrontImage = files.find((file) => file.originalname === 'front')
+                          const cardBackImage = files.find((file) => file.originalname === 'back')
+                          const createCardFront = await Post.create({
+                              ...defaultPostValues,
+                              type: 'card-front',
+                              creatorId: accountId,
+                              text: cardFrontText || null,
+                              watermark: cardFrontWatermark,
+                          })
+                          const createCardBack = await Post.create({
+                              ...defaultPostValues,
+                              type: 'card-back',
+                              creatorId: accountId,
+                              text: cardBackText || null,
+                              watermark: cardBackWatermark,
+                          })
+                          const linkCardFront = await Link.create({
+                              state: 'visible',
+                              type: 'card-post',
+                              index: 1,
+                              creatorId: accountId,
+                              itemAId: post.id,
+                              itemBId: createCardFront.id,
+                          })
+                          const linkCardBack = await Link.create({
+                              state: 'visible',
+                              type: 'card-post',
+                              index: 2,
+                              creatorId: accountId,
+                              itemAId: post.id,
+                              itemBId: createCardBack.id,
+                          })
+                          const createCardFrontImage = cardFrontImage
+                              ? await Image.create({
+                                    type: 'post',
+                                    itemId: createCardFront.id,
+                                    creatorId: accountId,
+                                    url: cardFrontImage.location,
+                                })
+                              : null
+                          const createCardBackImage = cardBackImage
+                              ? await Image.create({
+                                    type: 'post',
+                                    itemId: createCardBack.id,
+                                    creatorId: accountId,
+                                    url: cardBackImage.location,
+                                })
+                              : null
+
+                          Promise.all([
+                              createCardFront,
+                              createCardBack,
+                              linkCardFront,
+                              linkCardBack,
+                              createCardFrontImage,
+                              createCardBackImage,
+                          ])
+                              .then((data) => resolve({ front: data[0], back: data[1] }))
+                              .catch((error) => resolve(error))
+                      })
+                    : null
+
             Promise.all([
                 createDirectRelationships,
                 createIndirectRelationships,
@@ -940,6 +996,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 createEvent,
                 createPoll,
                 createGBG,
+                createCard,
             ]).then((data) => {
                 res.status(200).json({
                     post,
@@ -949,6 +1006,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     event: data[6],
                     pollData: data[7],
                     gbg: data[8],
+                    card: data[9],
                 })
             })
         }
@@ -1094,18 +1152,11 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
             } = beadData
 
             const bead = await Post.create({
+                ...defaultPostValues,
                 type: `gbg-${type}`,
-                state: 'visible',
                 creatorId: accountId,
                 color: color || null,
                 text: text || null,
-                lastActivity: new Date(),
-                totalLikes: 0,
-                totalComments: 0,
-                totalReposts: 0,
-                totalRatings: 0,
-                totalLinks: 0,
-                totalGlassBeadGames: 0,
             })
 
             const createUrl =

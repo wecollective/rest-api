@@ -30,6 +30,17 @@ ffmpeg.setFfmpegPath(ffmpegPath)
 
 const imageMBLimit = 10
 const audioMBLimit = 30
+const defaultPostValues = {
+    state: 'visible',
+    lastActivity: new Date(),
+    watermark: false,
+    totalLikes: 0,
+    totalComments: 0,
+    totalReposts: 0,
+    totalRatings: 0,
+    totalLinks: 0,
+    totalGlassBeadGames: 0,
+}
 
 function findFileName(file, accountId, isAudio) {
     const date = Date.now().toString()
@@ -943,6 +954,7 @@ function findSpaceSpacesInclude(depth) {
 module.exports = {
     imageMBLimit,
     audioMBLimit,
+    defaultPostValues,
     totalUsers,
     totalSpaceUsers,
     totalSpaceFollowers,

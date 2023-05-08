@@ -11,9 +11,6 @@ module.exports = {
             type: {
                 type: Sequelize.STRING,
             },
-            color: {
-                type: Sequelize.STRING,
-            },
             state: {
                 type: Sequelize.STRING,
             },
@@ -25,6 +22,12 @@ module.exports = {
             },
             text: {
                 type: Sequelize.TEXT,
+            },
+            color: {
+                type: Sequelize.STRING,
+            },
+            watermark: {
+                type: Sequelize.BOOLEAN,
             },
             totalLikes: {
                 type: Sequelize.INTEGER,
