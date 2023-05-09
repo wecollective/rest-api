@@ -989,7 +989,18 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               createCardFrontImage,
                               createCardBackImage,
                           ])
-                              .then((data) => resolve({ front: data[0], back: data[1] }))
+                              .then((data) =>
+                                  resolve({
+                                      front: {
+                                          ...data[0].dataValues,
+                                          Images: cardFrontImage ? [data[4].dataValues] : [],
+                                      },
+                                      back: {
+                                          ...data[1].dataValues,
+                                          Images: cardBackImage ? [data[5].dataValues] : [],
+                                      },
+                                  })
+                              )
                               .catch((error) => resolve(error))
                       })
                     : null
