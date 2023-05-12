@@ -37,6 +37,15 @@ module.exports = {
                 ),
                 queryInterface.removeColumn('Posts', 'columnName', { transaction: t }),
                 queryInterface.renameColumn('Posts', 'currentName', 'newName'),
+                queryInterface.changeColumn(
+                    'Posts',
+                    'columnName',
+                    {
+                        type: Sequelize.TEXT,
+                        allowNull: true,
+                    },
+                    { transaction: t }
+                ),
             ])
         })
     },
