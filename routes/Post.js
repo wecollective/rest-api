@@ -66,31 +66,29 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
-        // const posts = await Post.findAll({
-        //     attributes: [
-        //         'id',
-        //         totalPostLikes('Post'),
-        //         totalPostComments('Post'),
-        //         totalPostLinks('Post'),
-        //         totalPostRatings('Post'),
-        //         totalPostReposts('Post'),
-        //     ],
-        // })
+        // // rename old vote reaction types
+        // Reaction.update({ type: 'poll-vote' }, { where: { type: 'inquiry-vote' }, silent: true })
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json({ error }))
 
+        // // update reaction values
+        // const reactions = await Reaction.findAll()
         // Promise.all(
-        //     posts.map(
-        //         async (post) =>
-        //             await Post.update(
-        //                 {
-        //                     totalLikes: post.totalLikes,
-        //                     totalComments: post.totalComments,
-        //                     totalLinks: post.totalLinks,
-        //                     totalRatings: post.totalRatings,
-        //                     totalReposts: post.totalReposts,
-        //                     totalGlassBeadGames: 0,
-        //                 },
-        //                 { where: { id: post.id }, silent: true }
-        //             )
+        //     reactions.map(
+        //         async (reaction) =>
+        //             await new Promise((resolve) => {
+        //                 if (reaction.type === 'poll-vote') {
+        //                     Reaction.update(
+        //                         { item: 'poll-answer', itemId: reaction.pollAnswerId },
+        //                         { where: { id: reaction.id }, silent: true }
+        //                     ).then(() => resolve())
+        //                 } else {
+        //                     Reaction.update(
+        //                         { item: 'post', itemId: reaction.postId },
+        //                         { where: { id: reaction.id }, silent: true }
+        //                     ).then(() => resolve())
+        //                 }
+        //             })
         //     )
         // )
         //     .then(() => res.status(200).json({ message: 'success' }))
@@ -2408,7 +2406,6 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
                     state: 'active',
                     spaceId,
                     userId: accountId,
-                    postId,
                     pollAnswerId: answer.id,
                 })
             )

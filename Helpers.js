@@ -249,7 +249,7 @@ function accountLike(model, accountId) {
             FROM Reactions
             AS Reaction
             WHERE Reaction.postId = ${model}.id
-            AND Reaction.userId = ${accountId}
+            AND Reaction.creatorId = ${accountId}
             AND Reaction.type = 'like'
             AND Reaction.state = 'active'
         )`),
@@ -264,7 +264,7 @@ function accountRating(model, accountId) {
             FROM Reactions
             AS Reaction
             WHERE Reaction.postId = ${model}.id
-            AND Reaction.userId = ${accountId}
+            AND Reaction.creatorId = ${accountId}
             AND Reaction.type = 'rating'
             AND Reaction.state = 'active'
         )`),
@@ -279,7 +279,7 @@ function accountRepost(model, accountId) {
             FROM Reactions
             AS Reaction
             WHERE Reaction.postId = ${model}.id
-            AND Reaction.userId = ${accountId}
+            AND Reaction.creatorId = ${accountId}
             AND Reaction.type = 'repost'
             AND Reaction.state = 'active'
         )`),
@@ -852,6 +852,7 @@ function findPostInclude(accountId) {
                         },
                         {
                             model: Reaction,
+                            where: { item: 'poll-answer' },
                             attributes: [
                                 'value',
                                 'state',
@@ -859,13 +860,11 @@ function findPostInclude(accountId) {
                                 'createdAt',
                                 'updatedAt',
                             ],
-                            include: [
-                                {
-                                    model: User,
-                                    as: 'Creator',
-                                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                                },
-                            ],
+                            include: {
+                                model: User,
+                                as: 'Creator',
+                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            },
                         },
                     ],
                 },

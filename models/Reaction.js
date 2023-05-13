@@ -9,14 +9,16 @@ module.exports = (sequelize, DataTypes) => {
                 autoIncrement: true,
             },
             type: DataTypes.STRING,
-            value: DataTypes.STRING, // update to number
+            value: DataTypes.INTEGER,
             state: DataTypes.STRING,
             spaceId: DataTypes.INTEGER,
-            userId: DataTypes.INTEGER,
+            creatorId: DataTypes.INTEGER,
             postId: DataTypes.INTEGER,
             commentId: DataTypes.INTEGER,
             pollAnswerId: DataTypes.INTEGER,
             linkId: DataTypes.INTEGER,
+            item: DataTypes.STRING,
+            itemId: DataTypes.INTEGER,
         },
         {}
     )
@@ -25,7 +27,7 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'postId',
         })
         Reaction.belongsTo(models.User, {
-            foreignKey: 'userId',
+            foreignKey: 'creatorId',
             as: 'Creator',
         })
         Reaction.belongsTo(models.Space, {

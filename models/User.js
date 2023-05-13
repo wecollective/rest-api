@@ -36,7 +36,9 @@ module.exports = (sequelize, DataTypes) => {
             //as: 'createdComments'
         })
 
-        User.hasMany(models.Reaction)
+        User.hasMany(models.Reaction, {
+            foreignKey: 'creatorId',
+        })
 
         User.hasMany(models.Link, {
             foreignKey: 'creatorId',

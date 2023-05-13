@@ -78,7 +78,9 @@ module.exports = (sequelize, DataTypes) => {
             otherKey: 'itemBId',
         })
 
-        Post.hasMany(models.Reaction)
+        Post.hasMany(models.Reaction, {
+            foreignKey: 'itemId',
+        })
 
         Post.hasMany(models.Link, {
             as: 'OutgoingLinks',

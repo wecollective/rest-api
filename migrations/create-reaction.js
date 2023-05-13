@@ -12,7 +12,7 @@ module.exports = {
                 type: Sequelize.STRING,
             },
             value: {
-                type: Sequelize.STRING,
+                type: Sequelize.INTEGER,
             },
             state: {
                 type: Sequelize.STRING,
@@ -20,7 +20,7 @@ module.exports = {
             spaceId: {
                 type: Sequelize.INTEGER,
             },
-            userId: {
+            creatorId: {
                 type: Sequelize.INTEGER,
             },
             postId: {
@@ -33,6 +33,12 @@ module.exports = {
                 type: Sequelize.INTEGER,
             },
             linkId: {
+                type: Sequelize.INTEGER,
+            },
+            item: {
+                type: Sequelize.STRING,
+            },
+            itemId: {
                 type: Sequelize.INTEGER,
             },
             createdAt: {
