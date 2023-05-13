@@ -178,7 +178,14 @@ function findOrder(sortBy, sortOrder) {
 function totalPostLikes(model) {
     return [
         sequelize.literal(
-            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'like' AND Reaction.state = 'active')`
+            `(
+                SELECT COUNT(*)
+                FROM Reactions
+                WHERE Reactions.item = 'post'
+                AND Reactions.itemId = ${model}.id
+                AND Reactions.type = 'like'
+                AND Reactions.state = 'active'
+            )`
         ),
         'totalLikes',
     ]
@@ -196,7 +203,14 @@ function totalPostComments(model) {
 function totalPostRatings(model) {
     return [
         sequelize.literal(
-            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'rating' AND Reaction.state = 'active')`
+            `(
+                SELECT COUNT(*)
+                FROM Reactions
+                WHERE Reactions.item = 'post'
+                AND Reactions.itemId = ${model}.id
+                AND Reactions.type = 'rating'
+                AND Reactions.state = 'active'
+            )`
         ),
         'totalRatings',
     ]
@@ -205,7 +219,14 @@ function totalPostRatings(model) {
 function totalPostReposts(model) {
     return [
         sequelize.literal(
-            `(SELECT COUNT(*) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'repost' AND Reaction.state = 'active')`
+            `(
+                SELECT COUNT(*)
+                FROM Reactions
+                WHERE Reactions.item = 'post'
+                AND Reactions.itemId = ${model}.id
+                AND Reactions.type = 'repost'
+                AND Reactions.state = 'active'
+            )`
         ),
         'totalReposts',
     ]
@@ -214,7 +235,14 @@ function totalPostReposts(model) {
 function totalPostRatingPoints(model) {
     return [
         sequelize.literal(
-            `(SELECT SUM(value) FROM Reactions AS Reaction WHERE Reaction.postId = ${model}.id AND Reaction.type = 'rating' AND Reaction.state = 'active')`
+            `(
+                SELECT SUM(value)
+                FROM Reactions
+                WHERE Reactions.item = 'post'
+                AND Reactions.itemId = ${model}.id
+                AND Reactions.type = 'rating'
+                AND Reactions.state = 'active'
+            )`
         ),
         'totalRatingPoints',
     ]
@@ -247,11 +275,11 @@ function accountLike(model, accountId) {
         sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM Reactions
-            AS Reaction
-            WHERE Reaction.postId = ${model}.id
-            AND Reaction.creatorId = ${accountId}
-            AND Reaction.type = 'like'
-            AND Reaction.state = 'active'
+            WHERE Reactions.item = 'post'
+            AND Reactions.itemId = ${model}.id
+            AND Reactions.creatorId = ${accountId}
+            AND Reactions.type = 'like'
+            AND Reactions.state = 'active'
         )`),
         'accountLike',
     ]
@@ -262,11 +290,11 @@ function accountRating(model, accountId) {
         sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM Reactions
-            AS Reaction
-            WHERE Reaction.postId = ${model}.id
-            AND Reaction.creatorId = ${accountId}
-            AND Reaction.type = 'rating'
-            AND Reaction.state = 'active'
+            WHERE Reactions.item = 'post'
+            AND Reactions.itemId = ${model}.id
+            AND Reactions.creatorId = ${accountId}
+            AND Reactions.type = 'rating'
+            AND Reactions.state = 'active'
         )`),
         'accountRating',
     ]
@@ -277,11 +305,11 @@ function accountRepost(model, accountId) {
         sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM Reactions
-            AS Reaction
-            WHERE Reaction.postId = ${model}.id
-            AND Reaction.creatorId = ${accountId}
-            AND Reaction.type = 'repost'
-            AND Reaction.state = 'active'
+            WHERE Reactions.item = 'post'
+            AND Reactions.itemId = ${model}.id
+            AND Reactions.creatorId = ${accountId}
+            AND Reactions.type = 'repost'
+            AND Reactions.state = 'active'
         )`),
         'accountRepost',
     ]
@@ -437,8 +465,8 @@ const totalSpaceReactions = [
         SELECT COUNT(*)
         FROM Reactions
         WHERE Reactions.state = 'active'
-        AND Reactions.type != 'vote'
-        AND Reactions.postId IN (
+        AND Reactions.item = 'post'
+        AND Reactions.itemId IN (
             SELECT SpacePosts.postId
             FROM SpacePosts
             RIGHT JOIN Posts
@@ -455,7 +483,8 @@ const totalSpaceLikes = [
         FROM Reactions
         WHERE Reactions.state = 'active'
         AND Reactions.type = 'like'
-        AND Reactions.postId IN (
+        AND Reactions.item = 'post'
+        AND Reactions.itemId IN (
             SELECT SpacePosts.postId
             FROM SpacePosts
             RIGHT JOIN Posts
@@ -472,7 +501,8 @@ const totalSpaceRatings = [
         FROM Reactions
         WHERE Reactions.state = 'active'
         AND Reactions.type = 'rating'
-        AND Reactions.postId IN (
+        AND Reactions.item = 'post'
+        AND Reactions.itemId IN (
             SELECT SpacePosts.postId
             FROM SpacePosts
             RIGHT JOIN Posts
@@ -608,7 +638,8 @@ function totalLikesReceivedInSpace(spaceId) {
             FROM Reactions
             WHERE Reactions.state = 'active'
             AND Reactions.type = 'like'
-            AND Reactions.postId IN (
+            AND Reactions.item = 'post'
+            AND Reactions.itemId IN (
                 SELECT Posts.id
                 FROM Posts
                 WHERE Posts.state = 'visible'
@@ -853,13 +884,7 @@ function findPostInclude(accountId) {
                         {
                             model: Reaction,
                             where: { item: 'poll-answer' },
-                            attributes: [
-                                'value',
-                                'state',
-                                'pollAnswerId',
-                                'createdAt',
-                                'updatedAt',
-                            ],
+                            attributes: ['value', 'state', 'itemId', 'createdAt', 'updatedAt'],
                             include: {
                                 model: User,
                                 as: 'Creator',

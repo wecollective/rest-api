@@ -121,7 +121,7 @@ router.get('/post-likes', async (req, res) => {
     const { postId } = req.query
 
     Reaction.findAll({
-        where: { postId, type: 'like', state: 'active' },
+        where: { item: 'post', itemId: postId, type: 'like', state: 'active' },
         attributes: ['id'],
         include: [
             {
@@ -139,7 +139,7 @@ router.get('/post-reposts', async (req, res) => {
     const { postId } = req.query
 
     Reaction.findAll({
-        where: { postId, type: 'repost', state: 'active' },
+        where: { item: 'post', itemId: postId, type: 'repost', state: 'active' },
         attributes: ['id'],
         include: [
             {
@@ -178,7 +178,7 @@ router.get('/post-ratings', async (req, res) => {
     const { postId } = req.query
 
     Reaction.findAll({
-        where: { postId, type: 'rating', state: 'active' },
+        where: { item: 'post', itemId: postId, type: 'rating', state: 'active' },
         attributes: ['id', 'value'],
         include: [
             {
@@ -285,13 +285,11 @@ router.get('/post-comments', (req, res) => {
                     'createdAt',
                     'updatedAt',
                 ],
-                include: [
-                    {
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    },
-                ],
+                include: {
+                    model: User,
+                    as: 'Creator',
+                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                },
             },
         ],
     })
@@ -1560,11 +1558,12 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
         const createReactions = await Promise.all(
             spaceIds.map((id) =>
                 Reaction.create({
+                    item: 'post',
+                    itemId: postId,
                     type: 'repost',
                     state: 'active',
                     spaceId: id,
-                    userId: accountId,
-                    postId,
+                    creatorId: accountId,
                 })
             )
         )
@@ -1664,11 +1663,12 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         )
 
         const createReaction = await Reaction.create({
+            item: 'post',
+            itemId: postId,
             type: 'like',
             state: 'active',
             spaceId,
-            userId: accountId,
-            postId,
+            creatorId: accountId,
         })
 
         const isOwnPost = post.Creator.id === accountId
@@ -1773,12 +1773,13 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
         const isOwnPost = post.Creator.id === accountId
 
         const createReaction = await Reaction.create({
+            item: 'post',
+            itemId: postId,
             type: 'rating',
             value: newRating,
             state: 'active',
             spaceId,
-            userId: accountId,
-            postId,
+            creatorId: accountId,
         })
 
         const sendNotification = isOwnPost
@@ -2401,12 +2402,13 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
         const createNewReactions = await Promise.all(
             voteData.map((answer) =>
                 Reaction.create({
+                    item: 'poll-answer',
+                    itemId: answer.id,
                     type: 'poll-vote',
                     value: answer.value || null,
                     state: 'active',
                     spaceId,
-                    userId: accountId,
-                    pollAnswerId: answer.id,
+                    creatorId: accountId,
                 })
             )
         )
