@@ -13,18 +13,18 @@ module.exports = (sequelize, DataTypes) => {
             state: DataTypes.STRING,
             spaceId: DataTypes.INTEGER,
             creatorId: DataTypes.INTEGER,
-            postId: DataTypes.INTEGER,
-            commentId: DataTypes.INTEGER,
-            pollAnswerId: DataTypes.INTEGER,
-            linkId: DataTypes.INTEGER,
-            item: DataTypes.STRING,
+            // postId: DataTypes.INTEGER,
+            // commentId: DataTypes.INTEGER,
+            // pollAnswerId: DataTypes.INTEGER,
+            // linkId: DataTypes.INTEGER,
+            itemType: DataTypes.STRING,
             itemId: DataTypes.INTEGER,
         },
         {}
     )
     Reaction.associate = function (models) {
         Reaction.belongsTo(models.Post, {
-            foreignKey: 'postId',
+            foreignKey: 'itemId',
         })
         Reaction.belongsTo(models.User, {
             foreignKey: 'creatorId',
@@ -35,7 +35,7 @@ module.exports = (sequelize, DataTypes) => {
             as: 'Space',
         })
         Reaction.belongsTo(models.PollAnswer, {
-            foreignKey: 'pollAnswerId',
+            foreignKey: 'itemId',
         })
     }
     return Reaction

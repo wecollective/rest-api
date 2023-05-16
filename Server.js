@@ -121,7 +121,7 @@ io.on('connection', (socket) => {
         const { userSignaling, roomId, gameData } = data
         io.in(roomId).emit('incoming-start-game', data)
         const comment = {
-            gameId: gameData.gameId,
+            gameId: gameData.id,
             text: `${userSignaling.name} started the game`,
         }
         axios

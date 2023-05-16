@@ -14,6 +14,7 @@ const {
     defaultPostValues,
     findFullPostAttributes,
     findPostInclude,
+    findCommentAttributes,
     postAccess,
     multerParams,
     noMulterErrors,
@@ -93,6 +94,20 @@ router.get('/test', async (req, res) => {
         // )
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json({ error }))
+
+        // // Comment stat updates
+        // Comment.update(
+        //     {
+        //         totalLikes: 0,
+        //         totalReposts: 0,
+        //         totalRatings: 0,
+        //         totalLinks: 0,
+        //         totalGlassBeadGames: 0,
+        //     },
+        //     { where: { totalLikes: null }, silent: true }
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json({ error }))
     }
 })
 
@@ -117,19 +132,17 @@ router.get('/post-data', authenticateToken, async (req, res) => {
     else res.status(200).json(post)
 })
 
-router.get('/post-likes', async (req, res) => {
-    const { postId } = req.query
+router.get('/likes', async (req, res) => {
+    const { itemType, itemId } = req.query
 
     Reaction.findAll({
-        where: { item: 'post', itemId: postId, type: 'like', state: 'active' },
+        where: { itemType, itemId, type: 'like', state: 'active' },
         attributes: ['id'],
-        include: [
-            {
-                model: User,
-                as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-            },
-        ],
+        include: {
+            model: User,
+            as: 'Creator',
+            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        },
     })
         .then((reactions) => res.status(200).json(reactions))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
@@ -139,7 +152,7 @@ router.get('/post-reposts', async (req, res) => {
     const { postId } = req.query
 
     Reaction.findAll({
-        where: { item: 'post', itemId: postId, type: 'repost', state: 'active' },
+        where: { itemType: 'post', itemId: postId, type: 'repost', state: 'active' },
         attributes: ['id'],
         include: [
             {
@@ -158,27 +171,11 @@ router.get('/post-reposts', async (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
-router.get('/post-indirect-spaces', async (req, res) => {
-    const { postId } = req.query
-    const post = await Post.findOne({
-        where: { id: postId },
-        include: [
-            {
-                model: Space,
-                as: 'IndirectSpaces',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                through: { where: { relationship: 'indirect' }, attributes: [] },
-            },
-        ],
-    })
-    res.status(200).json(post.IndirectSpaces)
-})
-
 router.get('/post-ratings', async (req, res) => {
     const { postId } = req.query
 
     Reaction.findAll({
-        where: { item: 'post', itemId: postId, type: 'rating', state: 'active' },
+        where: { itemType: 'post', itemId: postId, type: 'rating', state: 'active' },
         attributes: ['id', 'value'],
         include: [
             {
@@ -257,13 +254,14 @@ router.get('/post-links', async (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
-router.get('/post-comments', (req, res) => {
+router.get('/post-comments', authenticateToken, (req, res) => {
+    const accountId = req.user ? req.user.id : null
     const { postId } = req.query
 
     Comment.findAll({
-        where: { type: 'post', itemId: postId, parentCommentId: null },
+        where: { itemType: 'post', itemId: postId, parentCommentId: null },
         order: [['createdAt', 'ASC']],
-        attributes: ['id', 'itemId', 'text', 'state', 'createdAt', 'updatedAt'],
+        attributes: findCommentAttributes('Comment', accountId),
         include: [
             {
                 model: User,
@@ -276,15 +274,7 @@ router.get('/post-comments', (req, res) => {
                 separate: true,
                 where: { state: 'visible' },
                 order: [['createdAt', 'ASC']],
-                attributes: [
-                    'id',
-                    'itemId',
-                    'parentCommentId',
-                    'text',
-                    'state',
-                    'createdAt',
-                    'updatedAt',
-                ],
+                attributes: findCommentAttributes('Comment', accountId),
                 include: {
                     model: User,
                     as: 'Creator',
@@ -295,6 +285,22 @@ router.get('/post-comments', (req, res) => {
     })
         .then((comments) => res.status(200).json(comments))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
+})
+
+router.get('/post-indirect-spaces', async (req, res) => {
+    const { postId } = req.query
+    const post = await Post.findOne({
+        where: { id: postId },
+        include: [
+            {
+                model: Space,
+                as: 'IndirectSpaces',
+                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                through: { where: { relationship: 'indirect' }, attributes: [] },
+            },
+        ],
+    })
+    res.status(200).json(post.IndirectSpaces)
 })
 
 router.get('/prism-data', (req, res) => {
@@ -390,7 +396,7 @@ router.get('/scrape-url', async (req, res) => {
 router.get('/glass-bead-game-comments', (req, res) => {
     const { gameId } = req.query
     Comment.findAll({
-        where: { type: 'glass-bead-game', itemId: gameId },
+        where: { itemType: 'glass-bead-game', itemId: gameId },
         order: [['createdAt', 'ASC']],
         attributes: ['id', 'itemId', 'text', 'state', 'createdAt', 'updatedAt'],
         include: {
@@ -1643,12 +1649,16 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
 
 router.post('/add-like', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { accountHandle, accountName, postId, spaceId } = req.body
+    const { itemType, itemId, parentItemId, accountHandle, accountName, spaceId } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const post = await Post.findOne({
-            where: { id: postId },
+        let model
+        if (itemType === 'post') model = Post
+        if (itemType === 'comment') model = Comment
+
+        const item = await model.findOne({
+            where: { id: itemId },
             attributes: ['totalLikes'],
             include: {
                 model: User,
@@ -1657,53 +1667,57 @@ router.post('/add-like', authenticateToken, async (req, res) => {
             },
         })
 
-        const updateTotalLikes = await Post.update(
-            { totalLikes: post.totalLikes + 1 },
-            { where: { id: postId }, silent: true }
+        const updateTotalLikes = await model.update(
+            { totalLikes: item.totalLikes + 1 },
+            { where: { id: itemId }, silent: true }
         )
 
         const createReaction = await Reaction.create({
-            item: 'post',
-            itemId: postId,
             type: 'like',
+            itemType,
+            itemId,
             state: 'active',
             spaceId,
             creatorId: accountId,
         })
 
-        const isOwnPost = post.Creator.id === accountId
+        const isOwnItem = item.Creator.id === accountId
 
-        const createNotification = isOwnPost
+        const createNotification = isOwnItem
             ? null
             : await Notification.create({
-                  ownerId: post.Creator.id,
-                  type: 'post-like',
+                  ownerId: item.Creator.id,
+                  type: `${itemType}-like`,
                   seen: false,
                   spaceAId: spaceId,
                   userId: accountId,
-                  postId,
+                  // todo: change to itemAId when Notifications table updated
+                  postId: itemType === 'post' ? itemId : null,
+                  commentId: itemType === 'comment' ? itemId : null,
               })
 
-        const sendEmail = isOwnPost
+        let itemUrl
+        if (itemType === 'post') itemUrl = `${config.appURL}/p/${itemId}`
+        if (itemType === 'comment')
+            itemUrl = `${config.appURL}/p/${parentItemId}?commentId=${itemId}`
+
+        const sendEmail = isOwnItem
             ? null
             : await sgMail.send({
-                  to: post.Creator.email,
-                  from: {
-                      email: 'admin@weco.io',
-                      name: 'we { collective }',
-                  },
+                  to: item.Creator.email,
+                  from: { email: 'admin@weco.io', name: 'we { collective }' },
                   subject: 'New notification',
                   text: `
-                        Hi ${post.Creator.name}, ${accountName} just liked your post on weco:
-                        http://${config.appURL}/p/${postId}
+                        Hi ${item.Creator.name}, ${accountName} just liked your ${itemType} on weco:
+                        http://${itemUrl}
                     `,
                   html: `
                         <p>
-                            Hi ${post.Creator.name},
+                            Hi ${item.Creator.name},
                             <br/>
                             <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
                             just liked your
-                            <a href='${config.appURL}/p/${postId}'>post</a>
+                            <a href='${itemUrl}'>${itemType}</a>
                             on weco
                         </p>
                     `,
@@ -1717,18 +1731,22 @@ router.post('/add-like', authenticateToken, async (req, res) => {
 
 router.post('/remove-like', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { postId } = req.body
+    const { itemType, itemId } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const post = await Post.findOne({
-            where: { id: postId },
+        let model
+        if (itemType === 'post') model = Post
+        if (itemType === 'comment') model = Comment
+
+        const item = await model.findOne({
+            where: { id: itemId },
             attributes: ['totalLikes'],
         })
 
-        const updateTotalLikes = await Post.update(
-            { totalLikes: post.totalLikes - 1 },
-            { where: { id: postId }, silent: true }
+        const updateTotalLikes = await model.update(
+            { totalLikes: item.totalLikes - 1 },
+            { where: { id: itemId }, silent: true }
         )
 
         const removeReaction = await Reaction.update(
@@ -1736,9 +1754,10 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
             {
                 where: {
                     type: 'like',
+                    itemType,
+                    itemId,
                     state: 'active',
-                    postId,
-                    userId: accountId,
+                    creatorId: accountId,
                 },
             }
         )

@@ -11,16 +11,16 @@ module.exports = {
             state: {
                 type: Sequelize.STRING,
             },
-            type: {
+            itemType: {
                 type: Sequelize.STRING,
+            },
+            itemId: {
+                type: Sequelize.INTEGER,
             },
             creatorId: {
                 type: Sequelize.INTEGER,
             },
             spaceId: {
-                type: Sequelize.INTEGER,
-            },
-            itemId: {
                 type: Sequelize.INTEGER,
             },
             parentCommentId: {
@@ -29,6 +29,27 @@ module.exports = {
             text: {
                 type: Sequelize.TEXT,
             },
+            totalLikes: {
+                type: Sequelize.INTEGER,
+            },
+            totalLinks: {
+                type: Sequelize.INTEGER,
+            },
+            totalReposts: {
+                type: Sequelize.INTEGER,
+            },
+            totalRatings: {
+                type: Sequelize.INTEGER,
+            },
+            totalGlassBeadGames: {
+                type: Sequelize.INTEGER,
+            },
+            mmId: {
+                type: Sequelize.INTEGER,
+            },
+            mmCommentNumber: {
+                type: Sequelize.INTEGER,
+            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE,
@@ -36,12 +57,6 @@ module.exports = {
             updatedAt: {
                 allowNull: false,
                 type: Sequelize.DATE,
-            },
-            mmId: {
-                type: Sequelize.INTEGER,
-            },
-            mmCommentNumber: {
-                type: Sequelize.INTEGER,
             },
         })
     },

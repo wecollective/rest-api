@@ -23,19 +23,19 @@ module.exports = {
             creatorId: {
                 type: Sequelize.INTEGER,
             },
-            postId: {
-                type: Sequelize.INTEGER,
-            },
-            commentId: {
-                type: Sequelize.INTEGER,
-            },
-            pollAnswerId: {
-                type: Sequelize.INTEGER,
-            },
-            linkId: {
-                type: Sequelize.INTEGER,
-            },
-            item: {
+            // postId: {
+            //     type: Sequelize.INTEGER,
+            // },
+            // commentId: {
+            //     type: Sequelize.INTEGER,
+            // },
+            // pollAnswerId: {
+            //     type: Sequelize.INTEGER,
+            // },
+            // linkId: {
+            //     type: Sequelize.INTEGER,
+            // },
+            itemType: {
                 type: Sequelize.STRING,
             },
             itemId: {

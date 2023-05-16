@@ -174,71 +174,14 @@ function findOrder(sortBy, sortOrder) {
     ]
 }
 
-// post literals (model prop used to distinguish between Post and Beads)
-function totalPostLikes(model) {
-    return [
-        sequelize.literal(
-            `(
-                SELECT COUNT(*)
-                FROM Reactions
-                WHERE Reactions.item = 'post'
-                AND Reactions.itemId = ${model}.id
-                AND Reactions.type = 'like'
-                AND Reactions.state = 'active'
-            )`
-        ),
-        'totalLikes',
-    ]
-}
-
-function totalPostComments(model) {
-    return [
-        sequelize.literal(
-            `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.type = 'post' AND Comment.itemId = ${model}.id)`
-        ),
-        'totalComments',
-    ]
-}
-
-function totalPostRatings(model) {
-    return [
-        sequelize.literal(
-            `(
-                SELECT COUNT(*)
-                FROM Reactions
-                WHERE Reactions.item = 'post'
-                AND Reactions.itemId = ${model}.id
-                AND Reactions.type = 'rating'
-                AND Reactions.state = 'active'
-            )`
-        ),
-        'totalRatings',
-    ]
-}
-
-function totalPostReposts(model) {
-    return [
-        sequelize.literal(
-            `(
-                SELECT COUNT(*)
-                FROM Reactions
-                WHERE Reactions.item = 'post'
-                AND Reactions.itemId = ${model}.id
-                AND Reactions.type = 'repost'
-                AND Reactions.state = 'active'
-            )`
-        ),
-        'totalReposts',
-    ]
-}
-
+// model prop used to distinguish between Post and Beads
 function totalPostRatingPoints(model) {
     return [
         sequelize.literal(
             `(
                 SELECT SUM(value)
                 FROM Reactions
-                WHERE Reactions.item = 'post'
+                WHERE Reactions.itemType = 'post'
                 AND Reactions.itemId = ${model}.id
                 AND Reactions.type = 'rating'
                 AND Reactions.state = 'active'
@@ -261,21 +204,12 @@ function sourcePostId() {
     ]
 }
 
-function totalPostLinks(model) {
-    return [
-        sequelize.literal(
-            `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND Link.type != 'gbg-post' AND (Link.itemAId = ${model}.id OR Link.itemBId = ${model}.id))`
-        ),
-        'totalLinks',
-    ]
-}
-
-function accountLike(model, accountId) {
+function accountLike(itemType, model, accountId) {
     return [
         sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM Reactions
-            WHERE Reactions.item = 'post'
+            WHERE Reactions.itemType = '${itemType}'
             AND Reactions.itemId = ${model}.id
             AND Reactions.creatorId = ${accountId}
             AND Reactions.type = 'like'
@@ -290,7 +224,7 @@ function accountRating(model, accountId) {
         sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM Reactions
-            WHERE Reactions.item = 'post'
+            WHERE Reactions.itemType = 'post'
             AND Reactions.itemId = ${model}.id
             AND Reactions.creatorId = ${accountId}
             AND Reactions.type = 'rating'
@@ -305,7 +239,7 @@ function accountRepost(model, accountId) {
         sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM Reactions
-            WHERE Reactions.item = 'post'
+            WHERE Reactions.itemType = 'post'
             AND Reactions.itemId = ${model}.id
             AND Reactions.creatorId = ${accountId}
             AND Reactions.type = 'repost'
@@ -465,7 +399,7 @@ const totalSpaceReactions = [
         SELECT COUNT(*)
         FROM Reactions
         WHERE Reactions.state = 'active'
-        AND Reactions.item = 'post'
+        AND Reactions.itemType = 'post'
         AND Reactions.itemId IN (
             SELECT SpacePosts.postId
             FROM SpacePosts
@@ -483,7 +417,7 @@ const totalSpaceLikes = [
         FROM Reactions
         WHERE Reactions.state = 'active'
         AND Reactions.type = 'like'
-        AND Reactions.item = 'post'
+        AND Reactions.itemType = 'post'
         AND Reactions.itemId IN (
             SELECT SpacePosts.postId
             FROM SpacePosts
@@ -501,7 +435,7 @@ const totalSpaceRatings = [
         FROM Reactions
         WHERE Reactions.state = 'active'
         AND Reactions.type = 'rating'
-        AND Reactions.item = 'post'
+        AND Reactions.itemType = 'post'
         AND Reactions.itemId IN (
             SELECT SpacePosts.postId
             FROM SpacePosts
@@ -638,7 +572,7 @@ function totalLikesReceivedInSpace(spaceId) {
             FROM Reactions
             WHERE Reactions.state = 'active'
             AND Reactions.type = 'like'
-            AND Reactions.item = 'post'
+            AND Reactions.itemType = 'post'
             AND Reactions.itemId IN (
                 SELECT Posts.id
                 FROM Posts
@@ -783,7 +717,7 @@ function findFullPostAttributes(model, accountId) {
         'totalRatings',
         'totalLinks',
         totalPostRatingPoints(model),
-        accountLike(model, accountId),
+        accountLike('post', model, accountId),
         accountRating(model, accountId),
         accountRepost(model, accountId),
         accountLink(model, accountId),
@@ -883,7 +817,7 @@ function findPostInclude(accountId) {
                         },
                         {
                             model: Reaction,
-                            where: { item: 'poll-answer' },
+                            where: { itemType: 'poll-answer' },
                             attributes: ['value', 'state', 'itemId', 'createdAt', 'updatedAt'],
                             include: {
                                 model: User,
@@ -950,6 +884,26 @@ function findPostInclude(accountId) {
                 attributes: ['id', 'url'],
             },
         },
+    ]
+}
+
+function findCommentAttributes(model, accountId) {
+    return [
+        'id',
+        'itemId',
+        'parentCommentId',
+        'text',
+        'state',
+        'totalLikes',
+        'totalReposts',
+        'totalRatings',
+        'totalLinks',
+        'totalGlassBeadGames',
+        'createdAt',
+        'updatedAt',
+        accountLike('comment', model, accountId),
+        // accountRating(model, accountId),
+        // accountLink(model, accountId),
     ]
 }
 
@@ -1026,6 +980,7 @@ module.exports = {
     findPostThrough,
     findPostWhere,
     findPostInclude,
+    findCommentAttributes,
     findSpaceSpaceAttributes,
     totalSpaceResults,
     findSpaceSpacesWhere,
@@ -1042,3 +997,69 @@ module.exports = {
     sourcePostId,
     restrictedAncestors,
 }
+
+// function totalPostLinks(model) {
+//     return [
+//         sequelize.literal(
+//             `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND Link.type != 'gbg-post' AND (Link.itemAId = ${model}.id OR Link.itemBId = ${model}.id))`
+//         ),
+//         'totalLinks',
+//     ]
+// }
+
+// function totalPostLikes(model) {
+//     return [
+//         sequelize.literal(
+//             `(
+//                 SELECT COUNT(*)
+//                 FROM Reactions
+//                 WHERE Reactions.itemType = 'post'
+//                 AND Reactions.itemId = ${model}.id
+//                 AND Reactions.type = 'like'
+//                 AND Reactions.state = 'active'
+//             )`
+//         ),
+//         'totalLikes',
+//     ]
+// }
+
+// function totalPostComments(model) {
+//     return [
+//         sequelize.literal(
+//             `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.type = 'post' AND Comment.itemId = ${model}.id)`
+//         ),
+//         'totalComments',
+//     ]
+// }
+
+// function totalPostRatings(model) {
+//     return [
+//         sequelize.literal(
+//             `(
+//                 SELECT COUNT(*)
+//                 FROM Reactions
+//                 WHERE Reactions.itemType = 'post'
+//                 AND Reactions.itemId = ${model}.id
+//                 AND Reactions.type = 'rating'
+//                 AND Reactions.state = 'active'
+//             )`
+//         ),
+//         'totalRatings',
+//     ]
+// }
+
+// function totalPostReposts(model) {
+//     return [
+//         sequelize.literal(
+//             `(
+//                 SELECT COUNT(*)
+//                 FROM Reactions
+//                 WHERE Reactions.itemType = 'post'
+//                 AND Reactions.itemId = ${model}.id
+//                 AND Reactions.type = 'repost'
+//                 AND Reactions.state = 'active'
+//             )`
+//         ),
+//         'totalReposts',
+//     ]
+// }
