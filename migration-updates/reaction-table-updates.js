@@ -18,6 +18,14 @@ module.exports = {
                     },
                     { transaction: t }
                 ),
+                queryInterface.addColumn(
+                    'Reactions',
+                    'parentItemId',
+                    {
+                        type: Sequelize.DataTypes.INTEGER,
+                    },
+                    { transaction: t }
+                ),
                 queryInterface.renameColumn('Reactions', 'userId', 'creatorId'),
                 queryInterface.changeColumn(
                     'Reactions',

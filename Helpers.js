@@ -175,13 +175,13 @@ function findOrder(sortBy, sortOrder) {
 }
 
 // model prop used to distinguish between Post and Beads
-function totalPostRatingPoints(model) {
+function totalRatingPoints(itemType, model) {
     return [
         sequelize.literal(
             `(
                 SELECT SUM(value)
                 FROM Reactions
-                WHERE Reactions.itemType = 'post'
+                WHERE Reactions.itemType = '${itemType}'
                 AND Reactions.itemId = ${model}.id
                 AND Reactions.type = 'rating'
                 AND Reactions.state = 'active'
@@ -219,12 +219,12 @@ function accountLike(itemType, model, accountId) {
     ]
 }
 
-function accountRating(model, accountId) {
+function accountRating(itemType, model, accountId) {
     return [
         sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM Reactions
-            WHERE Reactions.itemType = 'post'
+            WHERE Reactions.itemType = '${itemType}'
             AND Reactions.itemId = ${model}.id
             AND Reactions.creatorId = ${accountId}
             AND Reactions.type = 'rating'
@@ -716,9 +716,9 @@ function findFullPostAttributes(model, accountId) {
         'totalReposts',
         'totalRatings',
         'totalLinks',
-        totalPostRatingPoints(model),
+        totalRatingPoints('post', model),
         accountLike('post', model, accountId),
-        accountRating(model, accountId),
+        accountRating('post', model, accountId),
         accountRepost(model, accountId),
         accountLink(model, accountId),
     ]
@@ -818,6 +818,7 @@ function findPostInclude(accountId) {
                         {
                             model: Reaction,
                             where: { itemType: 'poll-answer' },
+                            required: false,
                             attributes: ['value', 'state', 'itemId', 'createdAt', 'updatedAt'],
                             include: {
                                 model: User,
@@ -902,7 +903,8 @@ function findCommentAttributes(model, accountId) {
         'createdAt',
         'updatedAt',
         accountLike('comment', model, accountId),
-        // accountRating(model, accountId),
+        accountRating('comment', model, accountId),
+        totalRatingPoints('comment', model),
         // accountLink(model, accountId),
     ]
 }

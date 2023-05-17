@@ -19,6 +19,7 @@ module.exports = (sequelize, DataTypes) => {
             // linkId: DataTypes.INTEGER,
             itemType: DataTypes.STRING,
             itemId: DataTypes.INTEGER,
+            parentItemId: DataTypes.INTEGER,
         },
         {}
     )

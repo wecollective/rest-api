@@ -68,7 +68,7 @@ router.get('/test', async (req, res) => {
         testIndex += 1
 
         // // rename old vote reaction types
-        // Reaction.update({ type: 'poll-vote' }, { where: { type: 'inquiry-vote' }, silent: true })
+        // Reaction.update({ type: 'vote' }, { where: { type: 'inquiry-vote' }, silent: true })
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json({ error }))
 
@@ -78,14 +78,15 @@ router.get('/test', async (req, res) => {
         //     reactions.map(
         //         async (reaction) =>
         //             await new Promise((resolve) => {
-        //                 if (reaction.type === 'poll-vote') {
+        //                 if (reaction.type === 'vote') {
+        //// is item type required?
         //                     Reaction.update(
-        //                         { item: 'poll-answer', itemId: reaction.pollAnswerId },
+        //                         { itemType: 'poll-answer', itemId: reaction.pollAnswerId, parentItemId: reaction.postId },
         //                         { where: { id: reaction.id }, silent: true }
         //                     ).then(() => resolve())
         //                 } else {
         //                     Reaction.update(
-        //                         { item: 'post', itemId: reaction.postId },
+        //                         { itemType: 'post', itemId: reaction.postId },
         //                         { where: { id: reaction.id }, silent: true }
         //                     ).then(() => resolve())
         //                 }
@@ -171,19 +172,17 @@ router.get('/post-reposts', async (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
-router.get('/post-ratings', async (req, res) => {
-    const { postId } = req.query
+router.get('/ratings', async (req, res) => {
+    const { itemType, itemId } = req.query
 
     Reaction.findAll({
-        where: { itemType: 'post', itemId: postId, type: 'rating', state: 'active' },
+        where: { itemType, itemId, type: 'rating', state: 'active' },
         attributes: ['id', 'value'],
-        include: [
-            {
-                model: User,
-                as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-            },
-        ],
+        include: {
+            model: User,
+            as: 'Creator',
+            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        },
     })
         .then((reactions) => res.status(200).json(reactions))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
@@ -1663,7 +1662,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
             include: {
                 model: User,
                 as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+                attributes: ['id', 'handle', 'name', 'email'],
             },
         })
 
@@ -1683,6 +1682,10 @@ router.post('/add-like', authenticateToken, async (req, res) => {
 
         const isOwnItem = item.Creator.id === accountId
 
+        let notificationPostId = null
+        if (itemType === 'post') notificationPostId = itemId
+        if (itemType === 'comment') notificationPostId = parentItemId
+
         const createNotification = isOwnItem
             ? null
             : await Notification.create({
@@ -1692,7 +1695,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                   spaceAId: spaceId,
                   userId: accountId,
                   // todo: change to itemAId when Notifications table updated
-                  postId: itemType === 'post' ? itemId : null,
+                  postId: notificationPostId,
                   commentId: itemType === 'comment' ? itemId : null,
               })
 
@@ -1770,71 +1773,84 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
 
 router.post('/add-rating', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { accountHandle, accountName, postId, spaceId, newRating } = req.body
+    const { itemType, itemId, parentItemId, newRating, accountHandle, accountName, spaceId } =
+        req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const post = await Post.findOne({
-            where: { id: postId },
+        let model
+        if (itemType === 'post') model = Post
+        if (itemType === 'comment') model = Comment
+
+        const item = await model.findOne({
+            where: { id: itemId },
             attributes: ['totalRatings'],
             include: {
                 model: User,
                 as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
+                attributes: ['id', 'handle', 'name', 'email'],
             },
         })
 
-        const updateTotalRatings = await Post.update(
-            { totalRatings: post.totalRatings + 1 },
-            { where: { id: postId }, silent: true }
+        const updateTotalRatings = await model.update(
+            { totalRatings: item.totalRatings + 1 },
+            { where: { id: itemId }, silent: true }
         )
 
-        const isOwnPost = post.Creator.id === accountId
+        const isOwnPost = item.Creator.id === accountId
 
         const createReaction = await Reaction.create({
-            item: 'post',
-            itemId: postId,
             type: 'rating',
+            itemType,
+            itemId,
             value: newRating,
             state: 'active',
             spaceId,
             creatorId: accountId,
         })
 
+        let notificationPostId = null
+        if (itemType === 'post') notificationPostId = itemId
+        if (itemType === 'comment') notificationPostId = parentItemId
+
         const sendNotification = isOwnPost
             ? null
             : await Notification.create({
-                  ownerId: post.Creator.id,
-                  type: 'post-rating',
+                  ownerId: item.Creator.id,
+                  type: `${itemType}-rating`,
                   seen: false,
                   spaceAId: spaceId,
                   userId: accountId,
-                  postId,
+                  // todo: change to itemAId when Notifications table updated
+                  postId: notificationPostId,
+                  commentId: itemType === 'comment' ? itemId : null,
               })
+
+        let itemUrl
+        if (itemType === 'post') itemUrl = `${config.appURL}/p/${itemId}`
+        if (itemType === 'comment')
+            itemUrl = `${config.appURL}/p/${parentItemId}?commentId=${itemId}`
 
         const sendEmail = isOwnPost
             ? null
             : await sgMail.send({
-                  to: post.Creator.email,
-                  from: {
-                      email: 'admin@weco.io',
-                      name: 'we { collective }',
-                  },
+                  to: item.Creator.email,
+                  from: { email: 'admin@weco.io', name: 'we { collective }' },
                   subject: 'New notification',
                   text: `
-                Hi ${post.Creator.name}, ${accountName} just rated your post on weco:
-                http://${config.appURL}/p/${postId}
-            `,
+                        Hi ${item.Creator.name}, ${accountName} just rated your ${itemType} on weco:
+                        http://${itemUrl}
+                    `,
                   html: `
-                <p>
-                    Hi ${post.Creator.name},
-                    <br/>
-                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                    just rated your
-                    <a href='${config.appURL}/p/${postId}'>post</a>
-                    on weco
-                </p>
-            `,
+                        <p>
+                            Hi ${item.Creator.name},
+                            <br/>
+                            <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                            just rated your
+                            <a href='${itemUrl}'>${itemType}</a>
+                            on weco
+                        </p>
+                    `,
               })
 
         Promise.all([updateTotalRatings, createReaction, sendNotification, sendEmail])
@@ -1845,18 +1861,22 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
 
 router.post('/remove-rating', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { postId } = req.body
+    const { itemType, itemId } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const post = await Post.findOne({
-            where: { id: postId },
+        let model
+        if (itemType === 'post') model = Post
+        if (itemType === 'comment') model = Comment
+
+        const item = await model.findOne({
+            where: { id: itemId },
             attributes: ['totalRatings'],
         })
 
-        const updateTotalRatings = await Post.update(
-            { totalRatings: post.totalRatings - 1 },
-            { where: { id: postId }, silent: true }
+        const updateTotalRatings = await model.update(
+            { totalRatings: item.totalRatings - 1 },
+            { where: { id: itemId }, silent: true }
         )
 
         const removeReaction = await Reaction.update(
@@ -1864,9 +1884,10 @@ router.post('/remove-rating', authenticateToken, async (req, res) => {
             {
                 where: {
                     type: 'rating',
+                    itemType,
+                    itemId,
                     state: 'active',
-                    userId: accountId,
-                    postId,
+                    creatorId: accountId,
                 },
             }
         )
@@ -2066,10 +2087,15 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             state: 'visible',
             creatorId: accountId,
             text,
-            type: 'post',
+            itemType: 'post',
             itemId: postId,
             parentCommentId: commentId,
             spaceId,
+            totalLikes: 0,
+            totalRatings: 0,
+            totalLinks: 0,
+            totalReposts: 0,
+            totalGlassBeadGames: 0,
         })
 
         // the following logic ensures only one notification/email is sent to each user and own account is always skipped
@@ -2415,15 +2441,16 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
 
         const removeOldReactions = await Reaction.update(
             { state: 'removed' },
-            { where: { state: 'active', userId: accountId, postId } }
+            { where: { state: 'active', creatorId: accountId, type: 'vote', parentItemId: postId } }
         )
 
         const createNewReactions = await Promise.all(
             voteData.map((answer) =>
                 Reaction.create({
-                    item: 'poll-answer',
+                    itemType: 'poll-answer',
                     itemId: answer.id,
-                    type: 'poll-vote',
+                    parentItemId: postId,
+                    type: 'vote',
                     value: answer.value || null,
                     state: 'active',
                     spaceId,
@@ -2533,10 +2560,15 @@ router.post('/glass-bead-game-comment', (req, res) => {
     const { gameId, userId, text } = req.body
     Comment.create({
         state: 'visible',
-        type: 'glass-bead-game',
+        itemType: 'glass-bead-game',
         itemId: gameId,
         creatorId: userId,
         text,
+        totalLikes: 0,
+        totalRatings: 0,
+        totalLinks: 0,
+        totalReposts: 0,
+        totalGlassBeadGames: 0,
     })
         .then(() => res.status(200).send({ message: 'Success' }))
         .catch((error) => res.status(500).json({ error }))
