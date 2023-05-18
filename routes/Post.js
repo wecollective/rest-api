@@ -188,67 +188,151 @@ router.get('/ratings', async (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
-router.get('/post-links', async (req, res) => {
-    const { postId } = req.query
+router.get('/links', async (req, res) => {
+    const { itemType, itemId } = req.query
+    let model
+    if (itemType === 'post') model = Post
+    if (itemType === 'comment') model = Comment
 
-    Post.findOne({
-        where: { id: postId },
-        attributes: [],
-        include: [
-            {
-                model: Link,
-                as: 'OutgoingLinks',
-                where: { state: 'visible', type: 'post-post' },
-                required: false,
-                attributes: ['id'],
-                include: [
-                    {
+    // todo: grab linked items directly using links as through table (allows limiting through by type)
+
+    // model
+    //     .findOne({
+    //         where: { id: itemId },
+    //         attributes: [],
+    //         include: [
+    //             {
+    //                 model: Link,
+    //                 as: 'OutgoingLinks',
+    //                 where: { state: 'visible', type: [`${itemType}-post`, `${itemType}-comment`] },
+    //                 required: false,
+    //                 attributes: ['id'],
+    //                 include: [
+    //                     {
+    //                         model: User,
+    //                         as: 'Creator',
+    //                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
+    //                     },
+    //                     {
+    //                         model: Post,
+    //                         as: 'PostB',
+    //                         required: false,
+    //                         attributes: ['id'],
+    //                         include: {
+    //                             model: User,
+    //                             as: 'Creator',
+    //                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
+    //                         },
+    //                     },
+    //                     {
+    //                         model: Comment,
+    //                         as: 'CommentB',
+    //                         required: false,
+    //                         attributes: ['id'],
+    //                         include: {
+    //                             model: User,
+    //                             as: 'Creator',
+    //                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
+    //                         },
+    //                     },
+    //                 ],
+    //             },
+    //             {
+    //                 model: Link,
+    //                 as: 'IncomingLinks',
+    //                 where: { state: 'visible', type: [`${itemType}-post`, `${itemType}-comment`] },
+    //                 required: false,
+    //                 attributes: ['id'],
+    //                 include: [
+    //                     {
+    //                         model: User,
+    //                         as: 'Creator',
+    //                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
+    //                     },
+    //                     {
+    //                         model: Post,
+    //                         as: 'PostA',
+    //                         required: false,
+    //                         attributes: ['id'],
+    //                         include: {
+    //                             model: User,
+    //                             as: 'Creator',
+    //                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
+    //                         },
+    //                     },
+    //                     {
+    //                         model: Comment,
+    //                         as: 'CommentA',
+    //                         required: false,
+    //                         attributes: ['id'],
+    //                         include: {
+    //                             model: User,
+    //                             as: 'Creator',
+    //                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
+    //                         },
+    //                     },
+    //                 ],
+    //             },
+    //         ],
+    //     })
+    //     .then((post) => res.status(200).json(post))
+    //     .catch((error) => res.status(500).json({ message: 'Error', error }))
+
+    model
+        .findOne({
+            where: { id: itemId },
+            attributes: [],
+            include: [
+                {
+                    model: Post,
+                    as: 'PostA',
+                    required: false,
+                    attributes: ['id'],
+                    through: {
+                        // where: { type: 'gbg-post', state: ['visible', 'account-deleted'] },
+                        attributes: [],
+                    },
+                    include: {
                         model: User,
                         as: 'Creator',
                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     },
-                    {
-                        model: Post,
-                        as: 'PostB',
-                        attributes: ['id'],
-                        include: [
-                            {
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                            },
-                        ],
-                    },
-                ],
-            },
-            {
-                model: Link,
-                as: 'IncomingLinks',
-                where: { state: 'visible', type: 'post-post' },
-                required: false,
-                attributes: ['id'],
-                include: [
-                    {
+                },
+                {
+                    model: Post,
+                    as: 'PostB',
+                    required: false,
+                    attributes: ['id'],
+                    include: {
                         model: User,
                         as: 'Creator',
                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     },
-                    {
-                        model: Post,
-                        as: 'PostA',
-                        attributes: ['id'],
-                        include: [
-                            {
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                            },
-                        ],
+                },
+                {
+                    model: Comment,
+                    as: 'CommentA',
+                    required: false,
+                    attributes: ['id'],
+                    include: {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     },
-                ],
-            },
-        ],
-    })
+                },
+                {
+                    model: Comment,
+                    as: 'CommentB',
+                    required: false,
+                    attributes: ['id'],
+                    include: {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                    },
+                },
+            ],
+        })
         .then((post) => res.status(200).json(post))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
@@ -2306,6 +2390,8 @@ router.post('/update-comment', authenticateToken, async (req, res) => {
                 .map(
                     (user) =>
                         new Promise(async (resolve) => {
+                            // todo: check notification not already present for mentions
+
                             const sendNotification = await Notification.create({
                                 ownerId: user.id,
                                 type: 'comment-mention',

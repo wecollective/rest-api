@@ -32,6 +32,14 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'itemBId',
             as: 'PostB',
         })
+        // Link.belongsTo(models.Comment, {
+        //     foreignKey: 'itemAId',
+        //     as: 'CommentA',
+        // })
+        // Link.belongsTo(models.Comment, {
+        //     foreignKey: 'itemBId',
+        //     as: 'CommentB',
+        // })
         // Link.belongsTo(models.Post, {
         //   //as: 'postComment',
         //   foreignKey: 'itemAId',

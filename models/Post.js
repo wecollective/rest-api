@@ -58,17 +58,17 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'postId',
         })
 
+        Post.belongsToMany(models.User, {
+            through: models.UserPost,
+            as: 'Players',
+            foreignKey: 'postId',
+        })
+
         Post.belongsToMany(models.Post, {
             through: models.Link,
             as: 'Beads',
             foreignKey: 'itemAId',
             otherKey: 'itemBId',
-        })
-
-        Post.belongsToMany(models.User, {
-            through: models.UserPost,
-            as: 'Players',
-            foreignKey: 'postId',
         })
 
         Post.belongsToMany(models.Post, {
@@ -78,18 +78,33 @@ module.exports = (sequelize, DataTypes) => {
             otherKey: 'itemBId',
         })
 
+        // linked posts
+        Post.belongsToMany(models.Post, {
+            through: models.Link,
+            as: 'PostA',
+            foreignKey: 'itemAId',
+            otherKey: 'itemBId',
+        })
+
+        Post.belongsToMany(models.Post, {
+            through: models.Link,
+            as: 'PostB',
+            foreignKey: 'itemBId',
+            otherKey: 'itemAId',
+        })
+
+        // Post.hasMany(models.Link, {
+        //     as: 'OutgoingLinks',
+        //     foreignKey: 'itemAId',
+        // })
+
+        // Post.hasMany(models.Link, {
+        //     as: 'IncomingLinks',
+        //     foreignKey: 'itemBId',
+        // })
+
         Post.hasMany(models.Reaction, {
             foreignKey: 'itemId',
-        })
-
-        Post.hasMany(models.Link, {
-            as: 'OutgoingLinks',
-            foreignKey: 'itemAId',
-        })
-
-        Post.hasMany(models.Link, {
-            as: 'IncomingLinks',
-            foreignKey: 'itemBId',
         })
 
         Post.hasMany(models.Comment, {

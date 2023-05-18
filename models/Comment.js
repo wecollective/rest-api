@@ -39,6 +39,15 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'parentCommentId',
             as: 'Replies',
         })
+        // Comment.hasMany(models.Link, {
+        //     as: 'OutgoingLinks',
+        //     foreignKey: 'itemAId',
+        // })
+
+        // Comment.hasMany(models.Link, {
+        //     as: 'IncomingLinks',
+        //     foreignKey: 'itemBId',
+        // })
     }
     return Comment
 }
