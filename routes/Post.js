@@ -194,142 +194,108 @@ router.get('/links', async (req, res) => {
     if (itemType === 'post') model = Post
     if (itemType === 'comment') model = Comment
 
-    // todo: grab linked items directly using links as through table (allows limiting through by type)
-
-    // model
-    //     .findOne({
-    //         where: { id: itemId },
-    //         attributes: [],
-    //         include: [
-    //             {
-    //                 model: Link,
-    //                 as: 'OutgoingLinks',
-    //                 where: { state: 'visible', type: [`${itemType}-post`, `${itemType}-comment`] },
-    //                 required: false,
-    //                 attributes: ['id'],
-    //                 include: [
-    //                     {
-    //                         model: User,
-    //                         as: 'Creator',
-    //                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                     },
-    //                     {
-    //                         model: Post,
-    //                         as: 'PostB',
-    //                         required: false,
-    //                         attributes: ['id'],
-    //                         include: {
-    //                             model: User,
-    //                             as: 'Creator',
-    //                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                         },
-    //                     },
-    //                     {
-    //                         model: Comment,
-    //                         as: 'CommentB',
-    //                         required: false,
-    //                         attributes: ['id'],
-    //                         include: {
-    //                             model: User,
-    //                             as: 'Creator',
-    //                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                         },
-    //                     },
-    //                 ],
-    //             },
-    //             {
-    //                 model: Link,
-    //                 as: 'IncomingLinks',
-    //                 where: { state: 'visible', type: [`${itemType}-post`, `${itemType}-comment`] },
-    //                 required: false,
-    //                 attributes: ['id'],
-    //                 include: [
-    //                     {
-    //                         model: User,
-    //                         as: 'Creator',
-    //                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                     },
-    //                     {
-    //                         model: Post,
-    //                         as: 'PostA',
-    //                         required: false,
-    //                         attributes: ['id'],
-    //                         include: {
-    //                             model: User,
-    //                             as: 'Creator',
-    //                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                         },
-    //                     },
-    //                     {
-    //                         model: Comment,
-    //                         as: 'CommentA',
-    //                         required: false,
-    //                         attributes: ['id'],
-    //                         include: {
-    //                             model: User,
-    //                             as: 'Creator',
-    //                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                         },
-    //                     },
-    //                 ],
-    //             },
-    //         ],
-    //     })
-    //     .then((post) => res.status(200).json(post))
-    //     .catch((error) => res.status(500).json({ message: 'Error', error }))
-
     model
         .findOne({
             where: { id: itemId },
-            attributes: [],
+            attributes: ['id'],
             include: [
                 {
-                    model: Post,
-                    as: 'PostA',
+                    model: Link,
+                    as: 'OutgoingPostLinks',
+                    where: { state: 'visible', type: `${itemType}-post` },
                     required: false,
-                    attributes: ['id'],
-                    through: {
-                        // where: { type: 'gbg-post', state: ['visible', 'account-deleted'] },
-                        attributes: [],
-                    },
-                    include: {
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    },
+                    attributes: ['id', 'description'],
+                    include: [
+                        {
+                            model: User,
+                            as: 'Creator',
+                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                        },
+                        {
+                            model: Post,
+                            as: 'OutgoingPost',
+                            attributes: ['id'],
+                            include: {
+                                model: User,
+                                as: 'Creator',
+                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            },
+                        },
+                    ],
                 },
                 {
-                    model: Post,
-                    as: 'PostB',
+                    model: Link,
+                    as: 'OutgoingCommentLinks',
+                    where: { state: 'visible', type: `${itemType}-comment` },
                     required: false,
-                    attributes: ['id'],
-                    include: {
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    },
+                    attributes: ['id', 'description'],
+                    include: [
+                        {
+                            model: User,
+                            as: 'Creator',
+                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                        },
+                        {
+                            model: Comment,
+                            as: 'OutgoingComment',
+                            attributes: ['id', 'itemId'],
+                            include: {
+                                model: User,
+                                as: 'Creator',
+                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            },
+                        },
+                    ],
                 },
                 {
-                    model: Comment,
-                    as: 'CommentA',
+                    model: Link,
+                    as: 'IncomingPostLinks',
+                    where: { state: 'visible', type: `post-${itemType}` },
                     required: false,
-                    attributes: ['id'],
-                    include: {
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    },
+                    attributes: ['id', 'description'],
+                    include: [
+                        {
+                            model: User,
+                            as: 'Creator',
+                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                        },
+                        {
+                            model: Post,
+                            as: 'IncomingPost',
+                            attributes: ['id'],
+                            include: {
+                                model: User,
+                                as: 'Creator',
+                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                            },
+                        },
+                    ],
                 },
                 {
-                    model: Comment,
-                    as: 'CommentB',
+                    model: Link,
+                    as: 'IncomingCommentLinks',
+                    where: { state: 'visible', type: `comment-${itemType}` },
                     required: false,
-                    attributes: ['id'],
-                    include: {
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    },
+                    attributes: ['id', 'description'],
+                    include: [
+                        {
+                            model: User,
+                            as: 'Creator',
+                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                        },
+                        {
+                            model: Comment,
+                            as: 'IncomingComment',
+                            attributes: ['id', 'itemId'],
+                            include: [
+                                {
+                                    model: User,
+                                    as: 'Creator',
+                                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                                },
+                            ],
+                        },
+                    ],
                 },
             ],
         })
@@ -1984,9 +1950,25 @@ router.post('/remove-rating', authenticateToken, async (req, res) => {
 
 router.post('/add-link', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { accountHandle, accountName, spaceId, description, itemAId, itemBId } = req.body
-    const itemB = await Post.findOne({
-        where: { id: itemBId },
+    const {
+        sourceType,
+        sourceId,
+        sourceParentId,
+        targetType,
+        targetId,
+        targetParentId,
+        description,
+        spaceId,
+        accountHandle,
+        accountName,
+    } = req.body
+
+    let targetModel
+    if (targetType === 'post') targetModel = Post
+    if (targetType === 'comment') targetModel = Comment
+
+    const target = await targetModel.findOne({
+        where: { id: targetId },
         attributes: ['id', 'totalLinks'],
         include: {
             model: User,
@@ -1996,19 +1978,23 @@ router.post('/add-link', authenticateToken, async (req, res) => {
     })
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
-    else if (!itemB) res.status(404).send({ message: 'Item B not found' })
+    else if (!target) res.status(404).send({ message: 'Target not found' })
     else {
         const createLink = await Link.create({
-            state: 'visible',
-            type: 'post-post',
             creatorId: accountId,
+            state: 'visible',
+            type: `${sourceType}-${targetType}`,
             description,
-            itemAId,
-            itemBId,
+            itemAId: sourceId,
+            itemBId: targetId,
         })
 
-        const itemA = await Post.findOne({
-            where: { id: itemAId },
+        let sourceModel
+        if (sourceType === 'post') sourceModel = Post
+        if (sourceType === 'comment') sourceModel = Comment
+
+        const source = await sourceModel.findOne({
+            where: { id: sourceId },
             attributes: ['totalLinks'],
             include: {
                 model: User,
@@ -2017,63 +2003,122 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             },
         })
 
-        const updatePostATotalLinks = await Post.update(
-            { totalLinks: itemA.totalLinks + 1 },
-            { where: { id: itemAId }, silent: true }
+        const updateSourceTotalLinks = await sourceModel.update(
+            { totalLinks: source.totalLinks + 1 },
+            { where: { id: sourceId }, silent: true }
         )
 
-        const updatePostBTotalLinks = await Post.update(
-            { totalLinks: itemB.totalLinks + 1 },
-            { where: { id: itemBId }, silent: true }
+        const updateTargetTotalLinks = await targetModel.update(
+            { totalLinks: target.totalLinks + 1 },
+            { where: { id: targetId }, silent: true }
         )
 
-        const isOwnPost = itemA.Creator.id === accountId
+        const isOwnSource = source.Creator.id === accountId
+        const isOwnTarget = target.Creator.id === accountId
 
-        // todo: also send notification to itemB owner, and include itemB info in email
-        const sendNotification = isOwnPost
+        // todo: include other item info in notification and email
+        const notifySourceOwner = isOwnSource
             ? null
-            : await Notification.create({
-                  ownerId: itemA.Creator.id,
-                  type: 'post-link',
-                  seen: false,
-                  spaceAId: spaceId,
-                  userId: accountId,
-                  postId: itemAId,
+            : await new Promise(async (resolve) => {
+                  let notificationPostId = null
+                  if (sourceType === 'post') notificationPostId = sourceId
+                  if (sourceType === 'comment') notificationPostId = sourceParentId
+
+                  const createNotification = await Notification.create({
+                      ownerId: source.Creator.id,
+                      type: `${sourceType}-link-source`,
+                      seen: false,
+                      spaceAId: spaceId,
+                      userId: accountId,
+                      postId: notificationPostId,
+                      commentId: sourceType === 'comment' ? sourceParentId : null,
+                  })
+
+                  let sourceUrl
+                  if (sourceType === 'post') sourceUrl = `${config.appURL}/p/${sourceId}`
+                  if (sourceType === 'comment')
+                      sourceUrl = `${config.appURL}/p/${sourceParentId}?commentId=${sourceId}`
+
+                  const sendEmail = await sgMail.send({
+                      to: source.Creator.email,
+                      from: { email: 'admin@weco.io', name: 'we { collective }' },
+                      subject: 'New notification',
+                      text: `
+                            Hi ${source.Creator.name}, ${accountName} just linked your ${sourceType} to another ${targetType} on weco:
+                            http://${sourceUrl}
+                        `,
+                      html: `
+                            <p>
+                                Hi ${source.Creator.name},
+                                <br/>
+                                <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                just linked your
+                                <a href='${sourceUrl}'>${sourceType}</a>
+                                to another ${targetType} on weco
+                            </p>
+                        `,
+                  })
+
+                  Promise.all([createNotification, sendEmail])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
               })
 
-        const sendEmail = isOwnPost
+        const notifyTargetOwner = isOwnTarget
             ? null
-            : await sgMail.send({
-                  to: itemA.Creator.email,
-                  from: {
-                      email: 'admin@weco.io',
-                      name: 'we { collective }',
-                  },
-                  subject: 'New notification',
-                  text: `
-                Hi ${itemA.Creator.name}, ${accountName} just linked your post to another post on weco:
-                http://${config.appURL}/p/${itemAId}
-            `,
-                  html: `
-                <p>
-                    Hi ${itemA.Creator.name},
-                    <br/>
-                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                    just linked your
-                    <a href='${config.appURL}/p/${itemAId}'>post</a>
-                    to another post on weco
-                </p>
-            `,
+            : await new Promise(async (resolve) => {
+                  let notificationPostId = null
+                  if (targetType === 'post') notificationPostId = targetId
+                  if (targetType === 'comment') notificationPostId = targetParentId
+
+                  const createNotification = await Notification.create({
+                      ownerId: target.Creator.id,
+                      type: `${targetType}-link-target`,
+                      seen: false,
+                      spaceAId: spaceId,
+                      userId: accountId,
+                      postId: notificationPostId,
+                      commentId: targetType === 'comment' ? targetParentId : null,
+                  })
+
+                  let targetUrl
+                  if (targetType === 'post') targetUrl = `${config.appURL}/p/${targetId}`
+                  if (targetType === 'comment')
+                      targetUrl = `${config.appURL}/p/${targetParentId}?commentId=${targetId}`
+
+                  const sendEmail = await sgMail.send({
+                      to: target.Creator.email,
+                      from: { email: 'admin@weco.io', name: 'we { collective }' },
+                      subject: 'New notification',
+                      text: `
+                          Hi ${target.Creator.name}, ${accountName} just linked your ${targetType} to another ${sourceType} on weco:
+                          http://${targetUrl}
+                      `,
+                      html: `
+                          <p>
+                              Hi ${target.Creator.name},
+                              <br/>
+                              <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                              just linked your
+                              <a href='${targetUrl}'>${targetType}</a>
+                              to another ${sourceType} on weco
+                          </p>
+                      `,
+                  })
+
+                  Promise.all([createNotification, sendEmail])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
               })
 
         Promise.all([
             createLink,
-            updatePostATotalLinks,
-            updatePostBTotalLinks,
-            sendNotification,
-            sendEmail,
+            updateSourceTotalLinks,
+            updateTargetTotalLinks,
+            notifySourceOwner,
+            notifyTargetOwner,
         ])
-            .then((data) => res.status(200).json({ itemB, link: data[0], message: 'Success' }))
+            .then((data) => res.status(200).json({ target, link: data[0], message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })

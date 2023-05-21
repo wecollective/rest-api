@@ -26,33 +26,20 @@ module.exports = (sequelize, DataTypes) => {
         })
         Link.belongsTo(models.Post, {
             foreignKey: 'itemAId',
-            as: 'PostA',
+            as: 'IncomingPost',
         })
         Link.belongsTo(models.Post, {
             foreignKey: 'itemBId',
-            as: 'PostB',
+            as: 'OutgoingPost',
         })
-        // Link.belongsTo(models.Comment, {
-        //     foreignKey: 'itemAId',
-        //     as: 'CommentA',
-        // })
-        // Link.belongsTo(models.Comment, {
-        //     foreignKey: 'itemBId',
-        //     as: 'CommentB',
-        // })
-        // Link.belongsTo(models.Post, {
-        //   //as: 'postComment',
-        //   foreignKey: 'itemAId',
-        //   //sourceKey: 'postId'
-        // })
-        // Link.belongsTo(models.User, {
-        //   //foreignKey: 'creatorId',
-        //   //as: 'creator'
-        // })
-        // Link.belongsTo(models.Space, {
-        //   //foreignKey: 'creatorId',
-        //   //as: 'creator'
-        // })
+        Link.belongsTo(models.Comment, {
+            foreignKey: 'itemAId',
+            as: 'IncomingComment',
+        })
+        Link.belongsTo(models.Comment, {
+            foreignKey: 'itemBId',
+            as: 'OutgoingComment',
+        })
     }
     return Link
 }

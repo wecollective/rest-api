@@ -78,30 +78,25 @@ module.exports = (sequelize, DataTypes) => {
             otherKey: 'itemBId',
         })
 
-        // linked posts
-        Post.belongsToMany(models.Post, {
-            through: models.Link,
-            as: 'PostA',
+        Post.hasMany(models.Link, {
+            as: 'OutgoingPostLinks',
             foreignKey: 'itemAId',
-            otherKey: 'itemBId',
         })
 
-        Post.belongsToMany(models.Post, {
-            through: models.Link,
-            as: 'PostB',
+        Post.hasMany(models.Link, {
+            as: 'OutgoingCommentLinks',
+            foreignKey: 'itemAId',
+        })
+
+        Post.hasMany(models.Link, {
+            as: 'IncomingPostLinks',
             foreignKey: 'itemBId',
-            otherKey: 'itemAId',
         })
 
-        // Post.hasMany(models.Link, {
-        //     as: 'OutgoingLinks',
-        //     foreignKey: 'itemAId',
-        // })
-
-        // Post.hasMany(models.Link, {
-        //     as: 'IncomingLinks',
-        //     foreignKey: 'itemBId',
-        // })
+        Post.hasMany(models.Link, {
+            as: 'IncomingCommentLinks',
+            foreignKey: 'itemBId',
+        })
 
         Post.hasMany(models.Reaction, {
             foreignKey: 'itemId',
