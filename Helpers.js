@@ -258,7 +258,8 @@ function accountLinks(itemType, model, accountId) {
             AND Links.creatorId = ${accountId}
             AND (
                 (Links.itemAId = ${model}.id AND (Links.type = '${itemType}-post' OR Links.type = '${itemType}-comment'))
-                OR (Links.itemBId = ${model}.id AND (Links.type = 'post-${itemType}' OR Links.type = 'comment-${itemType}'))
+                OR
+                (Links.itemBId = ${model}.id AND (Links.type = 'post-${itemType}' OR Links.type = 'comment-${itemType}'))
             )
         )`),
         'accountLinks',
@@ -383,7 +384,7 @@ const totalSpaceComments = [
         SELECT COUNT(*)
         FROM Comments
         WHERE Comments.state = 'visible'
-        AND Comments.type = 'post'
+        AND Comments.itemType = 'post'
         AND Comments.itemId IN (
             SELECT SpacePosts.postId
             FROM SpacePosts

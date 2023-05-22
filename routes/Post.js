@@ -69,21 +69,27 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
-        // // rename old vote reaction types
-        // Reaction.update({ type: 'vote' }, { where: { type: 'inquiry-vote' }, silent: true })
+        // // // // rename old vote reaction types
+        // Reaction.update(
+        //     { type: 'vote' },
+        //     { where: { type: ['inquiry-vote', 'poll-vote'] }, silent: true }
+        // )
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json({ error }))
 
-        // // update reaction values
+        // // // update reaction values
         // const reactions = await Reaction.findAll()
         // Promise.all(
         //     reactions.map(
         //         async (reaction) =>
         //             await new Promise((resolve) => {
         //                 if (reaction.type === 'vote') {
-        //// is item type required?
         //                     Reaction.update(
-        //                         { itemType: 'poll-answer', itemId: reaction.pollAnswerId, parentItemId: reaction.postId },
+        //                         {
+        //                             itemType: 'poll-answer',
+        //                             itemId: reaction.pollAnswerId,
+        //                             parentItemId: reaction.postId,
+        //                         },
         //                         { where: { id: reaction.id }, silent: true }
         //                     ).then(() => resolve())
         //                 } else {
@@ -98,7 +104,7 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json({ error }))
 
-        // // Comment stat updates
+        // // // Comment stat updates
         // Comment.update(
         //     {
         //         totalLikes: 0,
@@ -108,6 +114,13 @@ router.get('/test', async (req, res) => {
         //         totalGlassBeadGames: 0,
         //     },
         //     { where: { totalLikes: null }, silent: true }
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json({ error }))
+
+        // Notification.update(
+        //     { type: 'post-link-source' },
+        //     { where: { type: 'post-link' }, silent: true }
         // )
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json({ error }))
@@ -2070,7 +2083,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                   let sourceUrl
                   if (sourceType === 'post') sourceUrl = `${config.appURL}/p/${sourceId}`
                   if (sourceType === 'comment')
-                      sourceUrl = `${config.appURL}/p/${sourceParentId}?commentId=${sourceId}`
+                      sourceUrl = `${config.appURL}/p/${source.itemId}?commentId=${sourceId}`
 
                   const sendEmail = await sgMail.send({
                       to: source.Creator.email,

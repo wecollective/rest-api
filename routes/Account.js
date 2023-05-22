@@ -130,7 +130,10 @@ router.post('/mark-notifications-seen', authenticateToken, (req, res) => {
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        Notification.update({ seen: true }, { where: { id: ids, ownerId: accountId } })
+        Notification.update(
+            { seen: true },
+            { where: { id: ids, ownerId: accountId }, silent: true }
+        )
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
@@ -287,7 +290,7 @@ router.post('/respond-to-mod-invite', authenticateToken, async (req, res) => {
 
         const updateNotification = await Notification.update(
             { state: response, seen: true },
-            { where: { id: notificationId } }
+            { where: { id: notificationId }, silent: true }
         )
 
         const notifyUser = await Notification.create({
