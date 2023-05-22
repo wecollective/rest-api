@@ -234,12 +234,12 @@ function accountRating(itemType, model, accountId) {
     ]
 }
 
-function accountRepost(model, accountId) {
+function accountRepost(itemType, model, accountId) {
     return [
         sequelize.literal(`(
             SELECT COUNT(*) > 0
             FROM Reactions
-            WHERE Reactions.itemType = 'post'
+            WHERE Reactions.itemType = '${itemType}'
             AND Reactions.itemId = ${model}.id
             AND Reactions.creatorId = ${accountId}
             AND Reactions.type = 'repost'
@@ -249,18 +249,19 @@ function accountRepost(model, accountId) {
     ]
 }
 
-function accountLink(model, accountId) {
+function accountLinks(itemType, model, accountId) {
     return [
         sequelize.literal(`(
-            SELECT COUNT(*) > 0
+            SELECT COUNT(*)
             FROM Links
-            AS Link
-            WHERE Link.state = 'visible'
-            AND Link.type = 'post-post'
-            AND Link.creatorId = ${accountId}
-            AND (Link.itemAId = ${model}.id OR Link.itemBId = ${model}.id)
+            WHERE Links.state = 'visible'
+            AND Links.creatorId = ${accountId}
+            AND (
+                (Links.itemAId = ${model}.id AND (Links.type = '${itemType}-post' OR Links.type = '${itemType}-comment'))
+                OR (Links.itemBId = ${model}.id AND (Links.type = 'post-${itemType}' OR Links.type = 'comment-${itemType}'))
+            )
         )`),
-        'accountLink',
+        'accountLinks',
     ]
 }
 
@@ -719,8 +720,8 @@ function findFullPostAttributes(model, accountId) {
         totalRatingPoints('post', model),
         accountLike('post', model, accountId),
         accountRating('post', model, accountId),
-        accountRepost(model, accountId),
-        accountLink(model, accountId),
+        accountRepost('post', model, accountId),
+        accountLinks('post', model, accountId),
     ]
 }
 
@@ -905,7 +906,7 @@ function findCommentAttributes(model, accountId) {
         accountLike('comment', model, accountId),
         accountRating('comment', model, accountId),
         totalRatingPoints('comment', model),
-        // accountLink(model, accountId),
+        accountLinks('comment', model, accountId),
     ]
 }
 

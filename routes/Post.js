@@ -10,6 +10,8 @@ const multer = require('multer')
 const ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 const authenticateToken = require('../middleware/authenticateToken')
+const sequelize = require('sequelize')
+const Op = sequelize.Op
 const {
     defaultPostValues,
     findFullPostAttributes,
@@ -193,6 +195,31 @@ router.get('/links', async (req, res) => {
     let model
     if (itemType === 'post') model = Post
     if (itemType === 'comment') model = Comment
+
+    // // todo:
+    // // + get links first, so limit can be applied and type can be determined before includes
+    // // + use recursion to fetch children
+
+    // const links = await Link.findAll({
+    //     limit: 10,
+    //     where: {
+    //         state: 'visible',
+    //         [Op.or]: [
+    //             {
+    //                 // incoming
+    //                 itemBId: itemId,
+    //                 type: [`post-${itemType}`, `comment-${itemType}`],
+    //             },
+    //             {
+    //                 // outgoing
+    //                 itemAId: itemId,
+    //                 type: [`${itemType}-post`, `${itemType}-comment`],
+    //             },
+    //         ],
+    //     },
+    // })
+
+    // res.status(200).json(links)
 
     model
         .findOne({
@@ -1953,10 +1980,8 @@ router.post('/add-link', authenticateToken, async (req, res) => {
     const {
         sourceType,
         sourceId,
-        sourceParentId,
         targetType,
         targetId,
-        targetParentId,
         description,
         spaceId,
         accountHandle,
@@ -1964,12 +1989,16 @@ router.post('/add-link', authenticateToken, async (req, res) => {
     } = req.body
 
     let targetModel
+    let targetAttributes = ['id', 'totalLinks']
     if (targetType === 'post') targetModel = Post
-    if (targetType === 'comment') targetModel = Comment
+    if (targetType === 'comment') {
+        targetModel = Comment
+        targetAttributes.push('itemId')
+    }
 
     const target = await targetModel.findOne({
         where: { id: targetId },
-        attributes: ['id', 'totalLinks'],
+        attributes: targetAttributes,
         include: {
             model: User,
             as: 'Creator',
@@ -1990,12 +2019,16 @@ router.post('/add-link', authenticateToken, async (req, res) => {
         })
 
         let sourceModel
+        let sourceAttributes = ['totalLinks']
         if (sourceType === 'post') sourceModel = Post
-        if (sourceType === 'comment') sourceModel = Comment
+        if (sourceType === 'comment') {
+            sourceModel = Comment
+            sourceAttributes.push('itemId')
+        }
 
         const source = await sourceModel.findOne({
             where: { id: sourceId },
-            attributes: ['totalLinks'],
+            attributes: sourceAttributes,
             include: {
                 model: User,
                 as: 'Creator',
@@ -2022,7 +2055,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             : await new Promise(async (resolve) => {
                   let notificationPostId = null
                   if (sourceType === 'post') notificationPostId = sourceId
-                  if (sourceType === 'comment') notificationPostId = sourceParentId
+                  if (sourceType === 'comment') notificationPostId = source.itemId
 
                   const createNotification = await Notification.create({
                       ownerId: source.Creator.id,
@@ -2031,7 +2064,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                       spaceAId: spaceId,
                       userId: accountId,
                       postId: notificationPostId,
-                      commentId: sourceType === 'comment' ? sourceParentId : null,
+                      commentId: sourceType === 'comment' ? source.itemId : null,
                   })
 
                   let sourceUrl
@@ -2069,7 +2102,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             : await new Promise(async (resolve) => {
                   let notificationPostId = null
                   if (targetType === 'post') notificationPostId = targetId
-                  if (targetType === 'comment') notificationPostId = targetParentId
+                  if (targetType === 'comment') notificationPostId = target.itemId
 
                   const createNotification = await Notification.create({
                       ownerId: target.Creator.id,
@@ -2078,13 +2111,13 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                       spaceAId: spaceId,
                       userId: accountId,
                       postId: notificationPostId,
-                      commentId: targetType === 'comment' ? targetParentId : null,
+                      commentId: targetType === 'comment' ? target.itemId : null,
                   })
 
                   let targetUrl
                   if (targetType === 'post') targetUrl = `${config.appURL}/p/${targetId}`
                   if (targetType === 'comment')
-                      targetUrl = `${config.appURL}/p/${targetParentId}?commentId=${targetId}`
+                      targetUrl = `${config.appURL}/p/${target.itemId}?commentId=${targetId}`
 
                   const sendEmail = await sgMail.send({
                       to: target.Creator.email,
@@ -2125,33 +2158,50 @@ router.post('/add-link', authenticateToken, async (req, res) => {
 
 router.post('/remove-link', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    let { linkId, itemAId, itemBId } = req.body
+    let { linkId } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const itemA = await Post.findOne({
-            where: { id: itemAId },
+        const link = await Link.findOne({
+            where: { id: linkId, creatorId: accountId },
+            attributes: ['type', 'itemAId', 'itemBId'],
+        })
+
+        const linkTypes = link.type.split('-')
+        const sourceType = linkTypes[0]
+        const targetType = linkTypes[1]
+
+        let sourceModel
+        if (sourceType === 'post') sourceModel = Post
+        if (sourceType === 'comment') sourceModel = Comment
+
+        let targetModel
+        if (targetType === 'post') targetModel = Post
+        if (targetType === 'comment') targetModel = Comment
+
+        const source = await sourceModel.findOne({
+            where: { id: link.itemAId },
             attributes: ['totalLinks'],
         })
 
-        const itemB = await Post.findOne({
-            where: { id: itemBId },
+        const target = await targetModel.findOne({
+            where: { id: link.itemBId },
             attributes: ['totalLinks'],
         })
 
-        const updatePostATotalLinks = await Post.update(
-            { totalLinks: itemA.totalLinks - 1 },
-            { where: { id: itemAId }, silent: true }
+        const updateSourceTotalLinks = await sourceModel.update(
+            { totalLinks: source.totalLinks - 1 },
+            { where: { id: link.itemAId }, silent: true }
         )
 
-        const updatePostBTotalLinks = await Post.update(
-            { totalLinks: itemB.totalLinks - 1 },
-            { where: { id: itemBId }, silent: true }
+        const updateTargetTotalLinks = await targetModel.update(
+            { totalLinks: target.totalLinks - 1 },
+            { where: { id: link.itemBId }, silent: true }
         )
 
         const removeLink = await Link.update({ state: 'deleted' }, { where: { id: linkId } })
 
-        Promise.all([updatePostATotalLinks, updatePostBTotalLinks, removeLink])
+        Promise.all([updateSourceTotalLinks, updateTargetTotalLinks, removeLink])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }

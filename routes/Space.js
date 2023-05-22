@@ -679,11 +679,6 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
                 attributes: [],
                 through,
             },
-            // {
-            //     model: Url,
-            //     required: false,
-            //     attributes: ['title', 'description'],
-            // },
             {
                 model: GlassBeadGame,
                 required: false,
@@ -710,11 +705,6 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
                 attributes: [],
                 through,
             },
-            // {
-            //     model: Url,
-            //     required: false,
-            //     attributes: ['title', 'description'],
-            // },
             {
                 model: GlassBeadGame,
                 required: false,
@@ -730,28 +720,14 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
         include: [
             {
                 model: Link,
-                as: 'OutgoingLinks',
+                as: 'OutgoingPostLinks',
                 attributes: ['id', 'description'],
-                where: { state: 'visible' },
+                where: { state: 'visible', type: 'post-post' },
                 required: false,
                 include: [
                     {
                         model: Post,
-                        as: 'PostB',
-                        attributes: ['id'],
-                    },
-                ],
-            },
-            {
-                model: Link,
-                as: 'IncomingLinks',
-                attributes: ['id'],
-                where: { state: 'visible' },
-                required: false,
-                include: [
-                    {
-                        model: Post,
-                        as: 'PostA',
+                        as: 'OutgoingPost',
                         attributes: ['id'],
                     },
                 ],
