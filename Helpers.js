@@ -718,7 +718,6 @@ function findFullPostAttributes(model, accountId) {
         'totalReposts',
         'totalRatings',
         'totalLinks',
-        totalRatingPoints('post', model),
         accountLike('post', model, accountId),
         accountRating('post', model, accountId),
         accountRepost('post', model, accountId),
@@ -906,7 +905,6 @@ function findCommentAttributes(model, accountId) {
         'updatedAt',
         accountLike('comment', model, accountId),
         accountRating('comment', model, accountId),
-        totalRatingPoints('comment', model),
         accountLinks('comment', model, accountId),
     ]
 }
