@@ -570,22 +570,15 @@ function totalLikesReceivedInSpace(spaceId) {
     // calculates the total likes recieved by the user in a space
     return [
         sequelize.literal(`(
-            SELECT COUNT(*)
-            FROM Reactions
-            WHERE Reactions.state = 'active'
-            AND Reactions.type = 'like'
-            AND Reactions.itemType = 'post'
-            AND Reactions.itemId IN (
-                SELECT Posts.id
-                FROM Posts
-                WHERE Posts.state = 'visible'
-                AND Posts.creatorId = User.id
-                AND Posts.id IN (
-                    SELECT SpacePosts.postId
-                    FROM SpacePosts
-                    WHERE SpacePosts.spaceId = ${spaceId}
-                    AND (SpacePosts.relationship = 'indirect' OR SpacePosts.relationship = 'direct')
-                )
+            SELECT SUM(totalLikes)
+            FROM Posts
+            WHERE Posts.state = 'visible'
+            AND Posts.creatorId = User.id
+            AND Posts.id IN (
+                SELECT SpacePosts.postId
+                FROM SpacePosts
+                WHERE SpacePosts.spaceId = ${spaceId}
+                AND (SpacePosts.relationship = 'indirect' OR SpacePosts.relationship = 'direct')
             )
         )`),
         'likesReceived',
