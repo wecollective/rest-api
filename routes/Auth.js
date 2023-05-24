@@ -21,33 +21,28 @@ async function verifyRecaptch(reCaptchaToken) {
 
 // POST
 router.post('/log-in', async (req, res) => {
-    const { reCaptchaToken, emailOrHandle, password } = req.body
-    // verify recaptcha
-    const validRecaptcha = await verifyRecaptch(reCaptchaToken)
-    if (!validRecaptcha) res.status(403).json({ message: 'Recaptcha failed' })
+    const { emailOrHandle, password } = req.body
+    const user = await User.findOne({
+        where: { [Op.or]: [{ email: emailOrHandle }, { handle: emailOrHandle }] },
+        attributes: ['id', 'password', 'emailVerified', 'state'],
+    })
+    if (!user) res.status(404).json({ message: 'User not found' })
+    else if (user.state === 'spam') res.status(403).json({ message: 'Spam account' })
+    else if (!user.emailVerified) res.status(403).json({ message: 'Email not yet verified' })
     else {
-        const user = await User.findOne({
-            where: { [Op.or]: [{ email: emailOrHandle }, { handle: emailOrHandle }] },
-            attributes: ['id', 'password', 'emailVerified', 'state'],
+        // check password is correct
+        bcrypt.compare(password, user.password, function (error, success) {
+            if (!success) res.status(403).json({ message: 'Incorrect password' })
+            else {
+                // create access token
+                const payload = { id: user.id }
+                const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
+                    expiresIn: '7d',
+                })
+                // const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' })
+                res.status(200).send(accessToken)
+            }
         })
-        if (!user) res.status(404).json({ message: 'User not found' })
-        else if (user.state === 'spam') res.status(403).json({ message: 'Spam account' })
-        else if (!user.emailVerified) res.status(403).json({ message: 'Email not yet verified' })
-        else {
-            // check password is correct
-            bcrypt.compare(password, user.password, function (error, success) {
-                if (!success) res.status(403).json({ message: 'Incorrect password' })
-                else {
-                    // create access token
-                    const payload = { id: user.id }
-                    const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
-                        expiresIn: '7d',
-                    })
-                    // const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' })
-                    res.status(200).send(accessToken)
-                }
-            })
-        }
     }
 })
 
