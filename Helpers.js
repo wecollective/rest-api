@@ -97,6 +97,7 @@ function convertAndUploadAudio(file, accountId, type) {
                             Key: fileName,
                             Body: data,
                             Metadata: { mimetype: 'audio/mp3' },
+                            ContentType: 'audio/mpeg',
                         }
                         s3.putObject(s3Object, (err) => {
                             // delete old files

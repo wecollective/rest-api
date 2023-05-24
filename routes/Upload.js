@@ -178,7 +178,8 @@ router.post('/gbg-audio-upload', authenticateToken, (req, res) => {
                                     ACL: 'public-read',
                                     Key: fileName,
                                     Body: data,
-                                    Metadata: { type: 'mp3', postId: postId },
+                                    Metadata: { mimetype: 'audio/mp3', postId: postId },
+                                    ContentType: 'audio/mpeg',
                                 },
                                 async (err) => {
                                     if (err) console.log(err)
