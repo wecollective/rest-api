@@ -1653,9 +1653,9 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
         const createReactions = await Promise.all(
             spaceIds.map((id) =>
                 Reaction.create({
-                    item: 'post',
-                    itemId: postId,
                     type: 'repost',
+                    itemType: 'post',
+                    itemId: postId,
                     state: 'active',
                     spaceId: id,
                     creatorId: accountId,
@@ -2641,10 +2641,10 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
         const createNewReactions = await Promise.all(
             voteData.map((answer) =>
                 Reaction.create({
+                    type: 'vote',
                     itemType: 'poll-answer',
                     itemId: answer.id,
                     parentItemId: postId,
-                    type: 'vote',
                     value: answer.value || null,
                     state: 'active',
                     spaceId,
