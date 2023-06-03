@@ -215,6 +215,7 @@ router.get('/links', async (req, res) => {
 
     // const links = await Link.findAll({
     //     limit: 10,
+    //     attributes: ['itemAId', 'itemBId', 'type', 'description'],
     //     where: {
     //         state: 'visible',
     //         [Op.or]: [
@@ -232,7 +233,43 @@ router.get('/links', async (req, res) => {
     //     },
     // })
 
-    // res.status(200).json(links)
+    // const linkedItems = []
+
+    // Promise.all(
+    //     links.map(async (link) => {
+    //         const types = link.type.split('-')
+    //         const itemAType = types[0]
+    //         const itemBType = types[1]
+    //         // console.log(999, itemAType, itemBType, link.itemAId, itemId)
+    //         if (link.itemAId === +itemId) {
+    //             // itemAType === itemType &&
+    //             let model
+    //             if (itemBType === 'post') model = Post
+    //             if (itemBType === 'comment') model = Comment
+    //             const item = await model.findOne({ where: { id: link.itemBId, state: 'visible' } })
+    //             if (item) {
+    //                 item.setDataValue('direction', 'outgoing')
+    //                 item.setDataValue('modelType', itemBType)
+    //                 linkedItems.push(item)
+    //             }
+    //         }
+    //         if (link.itemBId === +itemId) {
+    //             let model
+    //             if (itemAType === 'post') model = Post
+    //             if (itemAType === 'comment') model = Comment
+    //             const item = await model.findOne({ where: { id: link.itemAId, state: 'visible' } })
+    //             if (item) {
+    //                 item.setDataValue('direction', 'incoming')
+    //                 item.setDataValue('modelType', itemAType)
+    //                 linkedItems.push(item)
+    //             }
+    //         }
+    //     })
+    // )
+    //     .then(() => res.status(200).json({ links, linkedItems }))
+    //     .catch((error) => res.status(500).json({ message: 'Error', error }))
+
+    // res.status(200).json({ links, linkedItems })
 
     model
         .findOne({
