@@ -203,18 +203,32 @@ router.get('/ratings', async (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
-router.get('/links', async (req, res) => {
+router.get('/links', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
     const { itemType, itemId } = req.query
     let model
-    if (itemType === 'post') model = Post
-    if (itemType === 'comment') model = Comment
+    let attributes = []
+    let include = null
+    if (itemType === 'post') {
+        model = Post
+        attributes = [
+            // postAccess(accountId),
+            sourcePostId(),
+            ...findFullPostAttributes('Post', accountId),
+        ]
+        include = findPostInclude(accountId)
+    }
+    if (itemType === 'comment') {
+        model = Comment
+        attributes = [...findCommentAttributes('Comment', accountId)]
+    }
 
     // // todo:
     // // + get links first, so limit can be applied and type can be determined before includes
     // // + use recursion to fetch children
     // return
 
-    const sourceItem = await model.findOne({ where: { id: itemId } })
+    const sourceItem = await model.findOne({ where: { id: itemId }, attributes, include })
     sourceItem.setDataValue('modelType', itemType)
     sourceItem.setDataValue('parentItemId', null)
 
