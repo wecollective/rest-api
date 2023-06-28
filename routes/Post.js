@@ -23,6 +23,8 @@ const {
     convertAndUploadAudio,
     uploadBeadFile,
     sourcePostId,
+    // temporary solution until GBG posts title field used instead of topic
+    GBGTopic,
 } = require('../Helpers')
 const {
     Space,
@@ -214,6 +216,7 @@ router.get('/links', authenticateToken, async (req, res) => {
         attributes = [
             // postAccess(accountId),
             sourcePostId(),
+            GBGTopic(),
             ...findFullPostAttributes('Post', accountId),
         ]
         include = findPostInclude(accountId)
@@ -246,7 +249,7 @@ router.get('/links', authenticateToken, async (req, res) => {
             console.log(666, 'parentItemId', parentItemId)
             const links = await Link.findAll({
                 limit: 10,
-                attributes: ['itemAId', 'itemBId', 'type', 'description'],
+                attributes: ['id', 'itemAId', 'itemBId', 'type', 'description'],
                 where: {
                     state: 'visible',
                     [Op.or]: [
@@ -276,10 +279,17 @@ router.get('/links', authenticateToken, async (req, res) => {
                     if (link.itemAId === id) {
                         // itemAType === itemType &&
                         let model
-                        if (itemBType === 'post') model = Post
-                        if (itemBType === 'comment') model = Comment
+                        if (itemBType === 'post') {
+                            model = Post
+                            attributes = [GBGTopic(), ...findFullPostAttributes('Post', accountId)]
+                        }
+                        if (itemBType === 'comment') {
+                            model = Comment
+                            attributes = ['id', 'text', 'totalLikes']
+                        }
                         const item = await model.findOne({
                             where: { id: link.itemBId, state: 'visible' },
+                            attributes,
                         })
                         if (item) {
                             item.setDataValue('direction', 'outgoing')
@@ -291,10 +301,17 @@ router.get('/links', authenticateToken, async (req, res) => {
                     // outgoing links
                     if (link.itemBId === id) {
                         let model
-                        if (itemAType === 'post') model = Post
-                        if (itemAType === 'comment') model = Comment
+                        if (itemAType === 'post') {
+                            model = Post
+                            attributes = [GBGTopic(), ...findFullPostAttributes('Post', accountId)]
+                        }
+                        if (itemAType === 'comment') {
+                            model = Comment
+                            attributes = ['id', 'text', 'totalLikes']
+                        }
                         const item = await model.findOne({
                             where: { id: link.itemAId, state: 'visible' },
+                            attributes,
                         })
                         if (item) {
                             item.setDataValue('direction', 'incoming')
