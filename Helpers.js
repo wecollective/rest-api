@@ -205,6 +205,18 @@ function sourcePostId() {
     ]
 }
 
+// temporary solution until GBG posts title field used instead of topic
+function GBGTopic() {
+    return [
+        sequelize.literal(`(
+            SELECT GlassBeadGames.topic
+            FROM GlassBeadGames
+            WHERE GlassBeadGames.postId = Post.id
+        )`),
+        'topic',
+    ]
+}
+
 function accountLike(itemType, model, accountId) {
     return [
         sequelize.literal(`(
@@ -991,6 +1003,7 @@ module.exports = {
     convertAndUploadAudio,
     uploadBeadFile,
     sourcePostId,
+    GBGTopic,
     restrictedAncestors,
 }
 
