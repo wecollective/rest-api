@@ -4,6 +4,7 @@ const express = require('express')
 const router = express.Router()
 const sgMail = require('@sendgrid/mail')
 const ScheduledTasks = require('../ScheduledTasks')
+const { v4: uuidv4 } = require('uuid')
 const puppeteer = require('puppeteer')
 const aws = require('aws-sdk')
 const multer = require('multer')
@@ -232,6 +233,7 @@ router.get('/links', authenticateToken, async (req, res) => {
     // return
 
     const sourceItem = await model.findOne({ where: { id: itemId }, attributes, include })
+    sourceItem.setDataValue('uuid', uuidv4())
     sourceItem.setDataValue('modelType', itemType)
     sourceItem.setDataValue('parentItemId', null)
 
@@ -271,6 +273,7 @@ router.get('/links', authenticateToken, async (req, res) => {
             const linkedItems = []
             Promise.all(
                 links.map(async (link) => {
+                    link.setDataValue('uuid', uuidv4())
                     const types = link.type.split('-')
                     const itemAType = types[0]
                     const itemBType = types[1]
@@ -292,6 +295,7 @@ router.get('/links', authenticateToken, async (req, res) => {
                             attributes,
                         })
                         if (item) {
+                            item.setDataValue('uuid', uuidv4())
                             item.setDataValue('direction', 'outgoing')
                             item.setDataValue('modelType', itemBType)
                             item.setDataValue('parentItemId', id)
@@ -314,6 +318,7 @@ router.get('/links', authenticateToken, async (req, res) => {
                             attributes,
                         })
                         if (item) {
+                            item.setDataValue('uuid', uuidv4())
                             item.setDataValue('direction', 'incoming')
                             item.setDataValue('modelType', itemAType)
                             item.setDataValue('parentItemId', id)
