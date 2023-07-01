@@ -214,38 +214,28 @@ router.get('/links', authenticateToken, async (req, res) => {
     let include = null
     if (itemType === 'post') {
         model = Post
-        attributes = [
-            // postAccess(accountId),
-            sourcePostId(),
-            GBGTopic(),
-            ...findFullPostAttributes('Post', accountId),
-        ]
+        attributes = [sourcePostId(), GBGTopic(), ...findFullPostAttributes('Post', accountId)]
         include = findPostInclude(accountId)
     }
     if (itemType === 'comment') {
         model = Comment
-        attributes = [...findCommentAttributes('Comment', accountId)]
+        attributes = findCommentAttributes('Comment', accountId)
+        include = {
+            model: User,
+            as: 'Creator',
+            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        }
     }
 
-    // // todo:
     // // + get links first, so limit can be applied and type can be determined before includes
     // // + use recursion to fetch children
-    // return
 
     const sourceItem = await model.findOne({ where: { id: itemId }, attributes, include })
     sourceItem.setDataValue('uuid', uuidv4())
     sourceItem.setDataValue('modelType', itemType)
     sourceItem.setDataValue('parentItemId', null)
 
-    // get links
-    // get linked items
-    // get links for linked items
-    // etc
-
     async function getLinkedItems(source, depth) {
-        // const { id, modelType } = source.dataValues
-        // console.log(666, 'depth', depth)
-        // console.log(999, 'source', source)
         return new Promise(async (resolve) => {
             const { id, modelType, parentItemId } = source.dataValues
             console.log(666, 'parentItemId', parentItemId)
@@ -288,7 +278,7 @@ router.get('/links', authenticateToken, async (req, res) => {
                         }
                         if (itemBType === 'comment') {
                             model = Comment
-                            attributes = ['id', 'text', 'totalLikes']
+                            attributes = findCommentAttributes('Comment', accountId)
                         }
                         const item = await model.findOne({
                             where: { id: link.itemBId, state: 'visible' },
@@ -311,7 +301,7 @@ router.get('/links', authenticateToken, async (req, res) => {
                         }
                         if (itemAType === 'comment') {
                             model = Comment
-                            attributes = ['id', 'text', 'totalLikes']
+                            attributes = findCommentAttributes('Comment', accountId)
                         }
                         const item = await model.findOne({
                             where: { id: link.itemAId, state: 'visible' },
