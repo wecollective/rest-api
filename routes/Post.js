@@ -151,6 +151,24 @@ router.get('/post-data', authenticateToken, async (req, res) => {
     else res.status(200).json(post)
 })
 
+router.get('/comment-data', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { commentId } = req.query
+    const comment = await Comment.findOne({
+        where: { id: commentId, state: 'visible' },
+        attributes: ['id', 'text', 'itemId', 'parentCommentId', 'createdAt', 'updatedAt'],
+        include: {
+            model: User,
+            as: 'Creator',
+            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        },
+    })
+    if (!comment) res.status(404).json({ message: 'Comment not found' })
+    // else if (!post.dataValues.access) res.status(401).json({ message: 'Access denied' })
+    // else if (post.state === 'deleted') res.status(401).json({ message: 'Post deleted' })
+    else res.status(200).json(comment)
+})
+
 router.get('/likes', async (req, res) => {
     const { itemType, itemId } = req.query
 
