@@ -156,7 +156,16 @@ router.get('/comment-data', authenticateToken, async (req, res) => {
     const { commentId } = req.query
     const comment = await Comment.findOne({
         where: { id: commentId, state: 'visible' },
-        attributes: ['id', 'text', 'itemId', 'parentCommentId', 'createdAt', 'updatedAt'],
+        attributes: [
+            'id',
+            'text',
+            'itemId',
+            'parentCommentId',
+            'createdAt',
+            'updatedAt',
+            'totalLikes',
+            'totalLinks',
+        ],
         include: {
             model: User,
             as: 'Creator',
@@ -227,6 +236,7 @@ router.get('/ratings', async (req, res) => {
 router.get('/links', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { itemType, itemId } = req.query
+
     let model
     let attributes = []
     let include = null
@@ -244,6 +254,14 @@ router.get('/links', authenticateToken, async (req, res) => {
             attributes: ['id', 'handle', 'name', 'flagImagePath'],
         }
     }
+    if (itemType === 'user') {
+        model = User
+        attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
+    }
+    if (itemType === 'space') {
+        model = Space
+        attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
+    }
 
     // // + get links first, so limit can be applied and type can be determined before includes
     // // + use recursion to fetch children
@@ -252,11 +270,15 @@ router.get('/links', authenticateToken, async (req, res) => {
     sourceItem.setDataValue('uuid', uuidv4())
     sourceItem.setDataValue('modelType', itemType)
     sourceItem.setDataValue('parentItemId', null)
+    if (['user', 'space'].includes(itemType)) {
+        sourceItem.setDataValue('totalLikes', 0)
+        sourceItem.setDataValue('totalLinks', 0)
+    }
 
     async function getLinkedItems(source, depth) {
         return new Promise(async (resolve) => {
             const { id, modelType, parentItemId } = source.dataValues
-            console.log(666, 'parentItemId', parentItemId)
+            // console.log(666, 'parentItemId', parentItemId)
             const links = await Link.findAll({
                 limit: 10,
                 attributes: ['id', 'itemAId', 'itemBId', 'type', 'description'],
@@ -267,13 +289,24 @@ router.get('/links', authenticateToken, async (req, res) => {
                             // incoming
                             itemBId: id,
                             itemAId: { [Op.not]: parentItemId },
-                            type: [`post-${modelType}`, `comment-${modelType}`],
+                            // todo: seperate out 'type' field into 'itemAType' and 'itemBType' or 'sourceType' and 'targetType'
+                            type: [
+                                `post-${modelType}`,
+                                `comment-${modelType}`,
+                                `user-${modelType}`,
+                                `space-${modelType}`,
+                            ],
                         },
                         {
                             // outgoing
                             itemAId: id,
                             itemBId: { [Op.not]: parentItemId },
-                            type: [`${modelType}-post`, `${modelType}-comment`],
+                            type: [
+                                `${modelType}-post`,
+                                `${modelType}-comment`,
+                                `${modelType}-user`,
+                                `${modelType}-space`,
+                            ],
                         },
                     ],
                 },
@@ -285,10 +318,9 @@ router.get('/links', authenticateToken, async (req, res) => {
                     const types = link.type.split('-')
                     const itemAType = types[0]
                     const itemBType = types[1]
-                    // console.log(999, itemAType, itemBType, link.itemAId, itemId)
                     // incoming links
                     if (link.itemAId === id) {
-                        // itemAType === itemType &&
+                        // todo: set link direction here instead of on items
                         let model
                         if (itemBType === 'post') {
                             model = Post
@@ -298,8 +330,30 @@ router.get('/links', authenticateToken, async (req, res) => {
                             model = Comment
                             attributes = findCommentAttributes('Comment', accountId)
                         }
+                        if (itemBType === 'user') {
+                            model = User
+                            attributes = [
+                                'id',
+                                'name',
+                                'handle',
+                                'flagImagePath',
+                                'coverImagePath',
+                                'createdAt',
+                            ]
+                        }
+                        if (itemBType === 'space') {
+                            model = Space
+                            attributes = [
+                                'id',
+                                'name',
+                                'handle',
+                                'flagImagePath',
+                                'coverImagePath',
+                                'createdAt',
+                            ]
+                        }
                         const item = await model.findOne({
-                            where: { id: link.itemBId, state: 'visible' },
+                            where: { id: link.itemBId, state: { [Op.or]: ['visible', 'active'] } },
                             attributes,
                         })
                         if (item) {
@@ -307,11 +361,16 @@ router.get('/links', authenticateToken, async (req, res) => {
                             item.setDataValue('direction', 'outgoing')
                             item.setDataValue('modelType', itemBType)
                             item.setDataValue('parentItemId', id)
+                            if (['user', 'space'].includes(itemBType)) {
+                                item.setDataValue('totalLikes', 0)
+                                item.setDataValue('totalLinks', 0)
+                            }
                             linkedItems.push({ item, Link: link })
                         }
                     }
                     // outgoing links
                     if (link.itemBId === id) {
+                        // todo: set link direction here instead of on items
                         let model
                         if (itemAType === 'post') {
                             model = Post
@@ -321,8 +380,30 @@ router.get('/links', authenticateToken, async (req, res) => {
                             model = Comment
                             attributes = findCommentAttributes('Comment', accountId)
                         }
+                        if (itemAType === 'user') {
+                            model = User
+                            attributes = [
+                                'id',
+                                'handle',
+                                'flagImagePath',
+                                'coverImagePath',
+                                'coverImagePath',
+                                'createdAt',
+                            ]
+                        }
+                        if (itemAType === 'space') {
+                            model = Space
+                            attributes = [
+                                'id',
+                                'handle',
+                                'flagImagePath',
+                                'coverImagePath',
+                                'coverImagePath',
+                                'createdAt',
+                            ]
+                        }
                         const item = await model.findOne({
-                            where: { id: link.itemAId, state: 'visible' },
+                            where: { id: link.itemAId, state: { [Op.or]: ['visible', 'active'] } },
                             attributes,
                         })
                         if (item) {
@@ -330,6 +411,10 @@ router.get('/links', authenticateToken, async (req, res) => {
                             item.setDataValue('direction', 'incoming')
                             item.setDataValue('modelType', itemAType)
                             item.setDataValue('parentItemId', id)
+                            if (['user', 'space'].includes(itemBType)) {
+                                item.setDataValue('totalLikes', 0)
+                                item.setDataValue('totalLinks', 0)
+                            }
                             linkedItems.push({ item, Link: link })
                         }
                     }
@@ -2162,33 +2247,36 @@ router.post('/remove-rating', authenticateToken, async (req, res) => {
 
 router.post('/add-link', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const {
-        sourceType,
-        sourceId,
-        targetType,
-        targetId,
-        description,
-        spaceId,
-        accountHandle,
-        accountName,
-    } = req.body
+    const { sourceType, sourceId, targetType, targetId, description, accountHandle, accountName } =
+        req.body
 
     let targetModel
-    let targetAttributes = ['id', 'totalLinks']
-    if (targetType === 'post') targetModel = Post
-    if (targetType === 'comment') {
+    let targetAttributes = []
+    let targetInclude = null
+    const creator = { model: User, as: 'Creator', attributes: ['id', 'handle', 'name', 'email'] }
+    const mods = { model: User, as: 'Moderators', attributes: ['id', 'handle', 'name', 'email'] }
+
+    if (targetType === 'post') {
+        targetModel = Post
+        targetAttributes = ['id', 'totalLinks']
+        targetInclude = creator
+    } else if (targetType === 'comment') {
         targetModel = Comment
-        targetAttributes.push('itemId')
+        targetAttributes = ['id', 'totalLinks', 'itemId']
+        targetInclude = creator
+    } else if (targetType === 'user') {
+        targetModel = User
+        targetAttributes = ['id']
+    } else if (targetType === 'space') {
+        targetModel = Space
+        targetAttributes = ['id']
+        targetInclude = mods
     }
 
     const target = await targetModel.findOne({
         where: { id: targetId },
         attributes: targetAttributes,
-        include: {
-            model: User,
-            as: 'Creator',
-            attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
-        },
+        include: targetInclude,
     })
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
@@ -2204,11 +2292,13 @@ router.post('/add-link', authenticateToken, async (req, res) => {
         })
 
         let sourceModel
-        let sourceAttributes = ['totalLinks']
-        if (sourceType === 'post') sourceModel = Post
-        if (sourceType === 'comment') {
+        let sourceAttributes = []
+        if (sourceType === 'post') {
+            sourceModel = Post
+            sourceAttributes = ['totalLinks']
+        } else if (sourceType === 'comment') {
             sourceModel = Comment
-            sourceAttributes.push('itemId')
+            sourceAttributes = ['totalLinks', 'itemId']
         }
 
         const source = await sourceModel.findOne({
@@ -2221,18 +2311,28 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             },
         })
 
-        const updateSourceTotalLinks = await sourceModel.update(
-            { totalLinks: source.totalLinks + 1 },
-            { where: { id: sourceId }, silent: true }
-        )
+        // removed for users and spaces for now
+        const updateSourceTotalLinks = (await ['user', 'space'].includes(sourceType))
+            ? null
+            : sourceModel.update(
+                  { totalLinks: source.totalLinks + 1 },
+                  { where: { id: sourceId }, silent: true }
+              )
 
-        const updateTargetTotalLinks = await targetModel.update(
-            { totalLinks: target.totalLinks + 1 },
-            { where: { id: targetId }, silent: true }
-        )
+        const updateTargetTotalLinks = (await ['user', 'space'].includes(sourceType))
+            ? null
+            : targetModel.update(
+                  { totalLinks: target.totalLinks + 1 },
+                  { where: { id: targetId }, silent: true }
+              )
 
-        const isOwnSource = source.Creator.id === accountId
-        const isOwnTarget = target.Creator.id === accountId
+        // set to true to remove for users and spaces for now
+        const isOwnSource = ['user', 'space'].includes(sourceType)
+            ? true
+            : source.Creator.id === accountId
+        const isOwnTarget = ['user', 'space'].includes(targetType)
+            ? true
+            : target.Creator.id === accountId
 
         // todo: include other item info in notification and email
         const notifySourceOwner = isOwnSource
@@ -2246,8 +2346,10 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                       ownerId: source.Creator.id,
                       type: `${sourceType}-link-source`,
                       seen: false,
-                      spaceAId: spaceId,
+                      spaceAId: sourceType === 'space' ? sourceId : null,
+                      spaceBId: targetType === 'space' ? targetId : null,
                       userId: accountId,
+                      // todo: need userAId, userBId, postAId, postBId, commentAId, commentBId
                       postId: notificationPostId,
                       commentId: sourceType === 'comment' ? source.itemId : null,
                   })
@@ -2290,11 +2392,14 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                   if (targetType === 'comment') notificationPostId = target.itemId
 
                   const createNotification = await Notification.create({
+                      // todo: target.Creator.id doesn't exist on user
                       ownerId: target.Creator.id,
                       type: `${targetType}-link-target`,
                       seen: false,
-                      spaceAId: spaceId,
+                      spaceAId: sourceType === 'space' ? sourceId : null,
+                      spaceBId: targetType === 'space' ? targetId : null,
                       userId: accountId,
+                      // todo: need userAId, userBId, postAId, postBId, commentAId, commentBId
                       postId: notificationPostId,
                       commentId: targetType === 'comment' ? target.itemId : null,
                   })
@@ -2336,7 +2441,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             notifySourceOwner,
             notifyTargetOwner,
         ])
-            .then((data) => res.status(200).json({ target, link: data[0], message: 'Success' }))
+            .then((data) => res.status(200).json(data[0]))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
