@@ -280,7 +280,7 @@ router.get('/links', authenticateToken, async (req, res) => {
             const { id, modelType, parentItemId } = source.dataValues
             // console.log(666, 'parentItemId', parentItemId)
             const links = await Link.findAll({
-                limit: 10,
+                limit: depth === 0 ? 10 : 5,
                 attributes: ['id', 'itemAId', 'itemBId', 'type', 'description'],
                 where: {
                     state: 'visible',

@@ -204,7 +204,7 @@ router.post('/find-people', (req, res) => {
             ['createdAt', 'ASC'],
             ['id', 'ASC'],
         ],
-        attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        attributes: ['id', 'handle', 'name', 'flagImagePath', 'coverImagePath'],
         subQuery: false,
     }).then((users) => res.send(users))
 })
