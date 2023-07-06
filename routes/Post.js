@@ -319,7 +319,7 @@ router.get('/links', authenticateToken, async (req, res) => {
                     const itemAType = types[0]
                     const itemBType = types[1]
                     // incoming links
-                    if (link.itemAId === id) {
+                    if (link.itemAId === id && itemAType === modelType) {
                         // todo: set link direction here instead of on items
                         let model
                         if (itemBType === 'post') {
@@ -369,7 +369,7 @@ router.get('/links', authenticateToken, async (req, res) => {
                         }
                     }
                     // outgoing links
-                    if (link.itemBId === id) {
+                    if (link.itemBId === id && itemBType === modelType) {
                         // todo: set link direction here instead of on items
                         let model
                         if (itemAType === 'post') {
