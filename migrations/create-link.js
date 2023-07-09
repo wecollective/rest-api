@@ -32,6 +32,15 @@ module.exports = {
             itemBId: {
                 type: Sequelize.INTEGER,
             },
+            totalLikes: {
+                type: Sequelize.INTEGER,
+            },
+            totalComments: {
+                type: Sequelize.INTEGER,
+            },
+            totalRatings: {
+                type: Sequelize.INTEGER,
+            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE,

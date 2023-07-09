@@ -1084,6 +1084,7 @@ module.exports = {
     restrictedAncestors,
     getLinkedItem,
     getFullLinkedItem,
+    accountLike,
 }
 
 // function totalPostLinks(model) {

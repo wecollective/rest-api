@@ -26,6 +26,7 @@ const {
     sourcePostId,
     getLinkedItem,
     getFullLinkedItem,
+    accountLike,
     // temporary solution until GBG posts title field used instead of topic
     GBGTopic,
 } = require('../Helpers')
@@ -74,15 +75,14 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
-        // // // // rename old vote reaction types
-        // Reaction.update(
-        //     { type: 'vote' },
-        //     { where: { type: ['inquiry-vote', 'poll-vote'] }, silent: true }
+        // Link.update(
+        //     { totalLikes: 0, totalComments: 0, totalRatings: 0 },
+        //     { where: { totalLikes: null }, silent: true }
         // )
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json({ error }))
 
-        // // // update reaction values
+        // // update reaction values
         // const reactions = await Reaction.findAll()
         // Promise.all(
         //     reactions.map(
@@ -105,27 +105,6 @@ router.get('/test', async (req, res) => {
         //                 }
         //             })
         //     )
-        // )
-        //     .then(() => res.status(200).json({ message: 'success' }))
-        //     .catch((error) => res.status(500).json({ error }))
-
-        // // // Comment stat updates
-        // Comment.update(
-        //     {
-        //         totalLikes: 0,
-        //         totalReposts: 0,
-        //         totalRatings: 0,
-        //         totalLinks: 0,
-        //         totalGlassBeadGames: 0,
-        //     },
-        //     { where: { totalLikes: null }, silent: true }
-        // )
-        //     .then(() => res.status(200).json({ message: 'success' }))
-        //     .catch((error) => res.status(500).json({ error }))
-
-        // Notification.update(
-        //     { type: 'post-link-source' },
-        //     { where: { type: 'post-link' }, silent: true }
         // )
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json({ error }))
@@ -253,7 +232,8 @@ router.get('/links', authenticateToken, async (req, res) => {
             // console.log(666, 'parentItemId', parentItemId)
             const links = await Link.findAll({
                 limit: depth === 0 ? 10 : 5,
-                attributes: ['id', 'itemAId', 'itemBId', 'type', 'description'],
+                order: [['createdAt', 'ASC']],
+                attributes: ['id', 'itemAId', 'itemBId', 'type', 'description', 'createdAt'],
                 where: {
                     state: 'visible',
                     [Op.or]: [
@@ -321,7 +301,14 @@ router.get('/links', authenticateToken, async (req, res) => {
                 })
             )
                 .then(() => {
-                    source.setDataValue('children', linkedItems)
+                    source.setDataValue(
+                        'children',
+                        linkedItems.sort(
+                            (a, b) =>
+                                new Date(a.Link.createdAt).getTime() -
+                                new Date(b.Link.createdAt).getTime()
+                        )
+                    )
                     source.setDataValue('depth', depth)
                     if (linkedItems.length && depth < 2)
                         Promise.all(
@@ -341,7 +328,23 @@ router.get('/links', authenticateToken, async (req, res) => {
 router.get('/link-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { linkId } = req.query
-    const link = await Link.findOne({ where: { id: linkId } })
+    const link = await Link.findOne({
+        where: { id: linkId },
+        attributes: [
+            'id',
+            'type',
+            'description',
+            'itemAId',
+            'itemBId',
+            'totalLikes',
+            accountLike('link', 'Link', accountId),
+        ],
+        include: {
+            model: User,
+            as: 'Creator',
+            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        },
+    })
     const types = link.type.split('-')
     const source = await getFullLinkedItem(types[0], link.itemAId, accountId)
     const target = await getFullLinkedItem(types[1], link.itemBId, accountId)
@@ -1750,6 +1753,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         let model
         if (itemType === 'post') model = Post
         if (itemType === 'comment') model = Comment
+        if (itemType === 'link') model = Link
 
         const item = await model.findOne({
             where: { id: itemId },
@@ -1761,7 +1765,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
             },
         })
 
-        const updateTotalLikes = await model.update(
+        const updateTotalLikes = model.update(
             { totalLikes: item.totalLikes + 1 },
             { where: { id: itemId }, silent: true }
         )
@@ -1777,8 +1781,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
 
         const isOwnItem = item.Creator.id === accountId
 
-        let notificationPostId = null
-        if (itemType === 'post') notificationPostId = itemId
+        let notificationPostId = itemId
         if (itemType === 'comment') notificationPostId = parentItemId
 
         const createNotification = isOwnItem
@@ -1790,6 +1793,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                   spaceAId: spaceId,
                   userId: accountId,
                   // todo: change to itemAId when Notifications table updated
+                  // todo: inlcude linkId when set up
                   postId: notificationPostId,
                   commentId: itemType === 'comment' ? itemId : null,
               })
@@ -1798,6 +1802,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         if (itemType === 'post') itemUrl = `${config.appURL}/p/${itemId}`
         if (itemType === 'comment')
             itemUrl = `${config.appURL}/p/${parentItemId}?commentId=${itemId}`
+        if (itemType === 'link') itemUrl = `${config.appURL}/linkmap?item=link&id=${itemId}`
 
         const sendEmail = isOwnItem
             ? null
@@ -1836,6 +1841,7 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
         let model
         if (itemType === 'post') model = Post
         if (itemType === 'comment') model = Comment
+        if (itemType === 'link') model = Link
 
         const item = await model.findOne({
             where: { id: itemId },

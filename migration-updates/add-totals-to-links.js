@@ -6,9 +6,8 @@ module.exports = {
     up: (queryInterface, Sequelize) => {
         return queryInterface.sequelize.transaction((t) => {
             return Promise.all([
-                queryInterface.renameColumn('Comments', 'type', 'itemType'),
                 queryInterface.addColumn(
-                    'Comments',
+                    'Links',
                     'totalLikes',
                     {
                         type: Sequelize.DataTypes.INTEGER,
@@ -16,32 +15,16 @@ module.exports = {
                     { transaction: t }
                 ),
                 queryInterface.addColumn(
-                    'Comments',
-                    'totalLinks',
+                    'Links',
+                    'totalComments',
                     {
                         type: Sequelize.DataTypes.INTEGER,
                     },
                     { transaction: t }
                 ),
                 queryInterface.addColumn(
-                    'Comments',
-                    'totalReposts',
-                    {
-                        type: Sequelize.DataTypes.INTEGER,
-                    },
-                    { transaction: t }
-                ),
-                queryInterface.addColumn(
-                    'Comments',
+                    'Links',
                     'totalRatings',
-                    {
-                        type: Sequelize.DataTypes.INTEGER,
-                    },
-                    { transaction: t }
-                ),
-                queryInterface.addColumn(
-                    'Comments',
-                    'totalGlassBeadGames',
                     {
                         type: Sequelize.DataTypes.INTEGER,
                     },
@@ -54,7 +37,9 @@ module.exports = {
     down: (queryInterface, Sequelize) => {
         return queryInterface.sequelize.transaction((t) => {
             return Promise.all([
-                // include reverse transations here to enable undo: `npx sequelize-cli db:migrate:undo:all`
+                queryInterface.removeColumn('Links', 'totalLikes', { transaction: t }),
+                queryInterface.removeColumn('Links', 'totalComments', { transaction: t }),
+                queryInterface.removeColumn('Links', 'totalRatings', { transaction: t }),
             ])
         })
     },
