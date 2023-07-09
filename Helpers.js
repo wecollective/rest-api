@@ -4,6 +4,7 @@ const {
     Space,
     User,
     Post,
+    Comment,
     Reaction,
     GlassBeadGame,
     Event,
@@ -961,6 +962,82 @@ function findSpaceSpacesInclude(depth) {
     ]
 }
 
+async function getLinkedItem(type, id) {
+    let model
+    let attributes = []
+    if (type === 'post') {
+        model = Post
+        attributes = [
+            'id',
+            'title',
+            'text',
+            'totalLikes',
+            'totalLinks',
+            'createdAt',
+            'updatedAt',
+            'lastActivity',
+            GBGTopic(),
+        ]
+    }
+    if (type === 'comment') {
+        model = Comment
+        attributes = ['id', 'text', 'totalLikes', 'totalLinks', 'createdAt', 'updatedAt']
+    }
+    if (type === 'user') {
+        model = User
+        attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
+    }
+    if (type === 'space') {
+        model = Space
+        attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
+    }
+    const item = await model.findOne({
+        where: { id, state: { [Op.or]: ['visible', 'active'] } },
+        attributes,
+    })
+    // add values
+    item.setDataValue('modelType', type)
+
+    return item
+}
+
+async function getFullLinkedItem(type, id, accountId) {
+    let model
+    let attributes = []
+    let include = null
+    if (type === 'post') {
+        model = Post
+        attributes = [sourcePostId(), GBGTopic(), ...findFullPostAttributes('Post', accountId)]
+        include = findPostInclude(accountId)
+    }
+    if (type === 'comment') {
+        model = Comment
+        attributes = findCommentAttributes('Comment', accountId)
+        include = {
+            model: User,
+            as: 'Creator',
+            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        }
+    }
+    if (type === 'user') {
+        model = User
+        attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
+    }
+    if (type === 'space') {
+        model = Space
+        attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
+    }
+    const item = await model.findOne({
+        where: { id, state: { [Op.or]: ['visible', 'active'] } },
+        attributes,
+        include,
+    })
+    // add values
+    item.setDataValue('modelType', type)
+
+    return item
+}
+
 module.exports = {
     imageMBLimit,
     audioMBLimit,
@@ -1005,6 +1082,8 @@ module.exports = {
     sourcePostId,
     GBGTopic,
     restrictedAncestors,
+    getLinkedItem,
+    getFullLinkedItem,
 }
 
 // function totalPostLinks(model) {
