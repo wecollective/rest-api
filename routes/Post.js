@@ -24,6 +24,8 @@ const {
     convertAndUploadAudio,
     uploadBeadFile,
     sourcePostId,
+    getLinkedItem,
+    getFullLinkedItem,
     // temporary solution until GBG posts title field used instead of topic
     GBGTopic,
 } = require('../Helpers')
@@ -237,38 +239,8 @@ router.get('/links', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { itemType, itemId } = req.query
 
-    let model
-    let attributes = []
-    let include = null
-    if (itemType === 'post') {
-        model = Post
-        attributes = [sourcePostId(), GBGTopic(), ...findFullPostAttributes('Post', accountId)]
-        include = findPostInclude(accountId)
-    }
-    if (itemType === 'comment') {
-        model = Comment
-        attributes = findCommentAttributes('Comment', accountId)
-        include = {
-            model: User,
-            as: 'Creator',
-            attributes: ['id', 'handle', 'name', 'flagImagePath'],
-        }
-    }
-    if (itemType === 'user') {
-        model = User
-        attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
-    }
-    if (itemType === 'space') {
-        model = Space
-        attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
-    }
-
-    // // + get links first, so limit can be applied and type can be determined before includes
-    // // + use recursion to fetch children
-
-    const sourceItem = await model.findOne({ where: { id: itemId }, attributes, include })
+    const sourceItem = await getFullLinkedItem(itemType, itemId, accountId)
     sourceItem.setDataValue('uuid', uuidv4())
-    sourceItem.setDataValue('modelType', itemType)
     sourceItem.setDataValue('parentItemId', null)
     if (['user', 'space'].includes(itemType)) {
         sourceItem.setDataValue('totalLikes', 0)
@@ -320,46 +292,10 @@ router.get('/links', authenticateToken, async (req, res) => {
                     const itemBType = types[1]
                     // incoming links
                     if (link.itemAId === id && itemAType === modelType) {
-                        // todo: set link direction here instead of on items
-                        let model
-                        if (itemBType === 'post') {
-                            model = Post
-                            attributes = [GBGTopic(), ...findFullPostAttributes('Post', accountId)]
-                        }
-                        if (itemBType === 'comment') {
-                            model = Comment
-                            attributes = findCommentAttributes('Comment', accountId)
-                        }
-                        if (itemBType === 'user') {
-                            model = User
-                            attributes = [
-                                'id',
-                                'name',
-                                'handle',
-                                'flagImagePath',
-                                'coverImagePath',
-                                'createdAt',
-                            ]
-                        }
-                        if (itemBType === 'space') {
-                            model = Space
-                            attributes = [
-                                'id',
-                                'name',
-                                'handle',
-                                'flagImagePath',
-                                'coverImagePath',
-                                'createdAt',
-                            ]
-                        }
-                        const item = await model.findOne({
-                            where: { id: link.itemBId, state: { [Op.or]: ['visible', 'active'] } },
-                            attributes,
-                        })
+                        link.setDataValue('direction', 'outgoing')
+                        const item = await getLinkedItem(itemBType, link.itemBId)
                         if (item) {
                             item.setDataValue('uuid', uuidv4())
-                            item.setDataValue('direction', 'outgoing')
-                            item.setDataValue('modelType', itemBType)
                             item.setDataValue('parentItemId', id)
                             if (['user', 'space'].includes(itemBType)) {
                                 item.setDataValue('totalLikes', 0)
@@ -370,46 +306,10 @@ router.get('/links', authenticateToken, async (req, res) => {
                     }
                     // outgoing links
                     if (link.itemBId === id && itemBType === modelType) {
-                        // todo: set link direction here instead of on items
-                        let model
-                        if (itemAType === 'post') {
-                            model = Post
-                            attributes = [GBGTopic(), ...findFullPostAttributes('Post', accountId)]
-                        }
-                        if (itemAType === 'comment') {
-                            model = Comment
-                            attributes = findCommentAttributes('Comment', accountId)
-                        }
-                        if (itemAType === 'user') {
-                            model = User
-                            attributes = [
-                                'id',
-                                'handle',
-                                'flagImagePath',
-                                'coverImagePath',
-                                'coverImagePath',
-                                'createdAt',
-                            ]
-                        }
-                        if (itemAType === 'space') {
-                            model = Space
-                            attributes = [
-                                'id',
-                                'handle',
-                                'flagImagePath',
-                                'coverImagePath',
-                                'coverImagePath',
-                                'createdAt',
-                            ]
-                        }
-                        const item = await model.findOne({
-                            where: { id: link.itemAId, state: { [Op.or]: ['visible', 'active'] } },
-                            attributes,
-                        })
+                        link.setDataValue('direction', 'incoming')
+                        const item = await getLinkedItem(itemAType, link.itemAId)
                         if (item) {
                             item.setDataValue('uuid', uuidv4())
-                            item.setDataValue('direction', 'incoming')
-                            item.setDataValue('modelType', itemAType)
                             item.setDataValue('parentItemId', id)
                             if (['user', 'space'].includes(itemBType)) {
                                 item.setDataValue('totalLikes', 0)
@@ -433,171 +333,19 @@ router.get('/links', authenticateToken, async (req, res) => {
                 })
                 .catch((error) => resolve(error))
         })
-        // .then(() => {
-        //     source.setDataValue('totalChildren', linkedItems.length)
-        //     source.setDataValue('children', linkedItems)
-        //     if (depth < 3) {
-        //         console.log(333, 'get next children', linkedItems)
-        //         Promise.all(
-        //             linkedItems.map(async (child) => await getLinkedItems(child.item, depth + 1))
-        //         )
-        //     }
-        // })
-        // .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 
-    // const firstGen = await getLinkedItems(sourceItem, 0)
-    // const secondGen = await Promise.all(getLinkedItems(sourceItem, 0)
+    getLinkedItems(sourceItem, 0).then(() => res.json({ item: sourceItem }))
+})
 
-    getLinkedItems(sourceItem, 0).then(() => {
-        res.json({ item: sourceItem })
-    })
-
-    // Promise.all(
-    //     links.map(async (link) => {
-    //         const types = link.type.split('-')
-    //         const itemAType = types[0]
-    //         const itemBType = types[1]
-    //         // console.log(999, itemAType, itemBType, link.itemAId, itemId)
-    //         // incoming links
-    //         if (link.itemAId === +itemId) {
-    //             // itemAType === itemType &&
-    //             let model
-    //             if (itemBType === 'post') model = Post
-    //             if (itemBType === 'comment') model = Comment
-    //             const item = await model.findOne({ where: { id: link.itemBId, state: 'visible' } })
-    //             if (item) {
-    //                 item.setDataValue('direction', 'outgoing')
-    //                 item.setDataValue('modelType', itemBType)
-    //                 linkedItems.push(item)
-    //             }
-    //         }
-    //         // outgoing links
-    //         if (link.itemBId === +itemId) {
-    //             let model
-    //             if (itemAType === 'post') model = Post
-    //             if (itemAType === 'comment') model = Comment
-    //             const item = await model.findOne({ where: { id: link.itemAId, state: 'visible' } })
-    //             if (item) {
-    //                 item.setDataValue('direction', 'incoming')
-    //                 item.setDataValue('modelType', itemAType)
-    //                 linkedItems.push(item)
-    //             }
-    //         }
-    //     })
-    // )
-    //     .then(() => res.status(200).json({ links, linkedItems }))
-    //     .catch((error) => res.status(500).json({ message: 'Error', error }))
-
-    // res.status(200).json({ links, linkedItems })
-
-    // model
-    //     .findOne({
-    //         where: { id: itemId },
-    //         attributes: ['id'],
-    //         include: [
-    //             {
-    //                 model: Link,
-    //                 as: 'OutgoingPostLinks',
-    //                 where: { state: 'visible', type: `${itemType}-post` },
-    //                 required: false,
-    //                 attributes: ['id', 'description'],
-    //                 include: [
-    //                     {
-    //                         model: User,
-    //                         as: 'Creator',
-    //                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                     },
-    //                     {
-    //                         model: Post,
-    //                         as: 'OutgoingPost',
-    //                         attributes: ['id'],
-    //                         include: {
-    //                             model: User,
-    //                             as: 'Creator',
-    //                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                         },
-    //                     },
-    //                 ],
-    //             },
-    //             {
-    //                 model: Link,
-    //                 as: 'OutgoingCommentLinks',
-    //                 where: { state: 'visible', type: `${itemType}-comment` },
-    //                 required: false,
-    //                 attributes: ['id', 'description'],
-    //                 include: [
-    //                     {
-    //                         model: User,
-    //                         as: 'Creator',
-    //                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                     },
-    //                     {
-    //                         model: Comment,
-    //                         as: 'OutgoingComment',
-    //                         attributes: ['id', 'itemId'],
-    //                         include: {
-    //                             model: User,
-    //                             as: 'Creator',
-    //                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                         },
-    //                     },
-    //                 ],
-    //             },
-    //             {
-    //                 model: Link,
-    //                 as: 'IncomingPostLinks',
-    //                 where: { state: 'visible', type: `post-${itemType}` },
-    //                 required: false,
-    //                 attributes: ['id', 'description'],
-    //                 include: [
-    //                     {
-    //                         model: User,
-    //                         as: 'Creator',
-    //                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                     },
-    //                     {
-    //                         model: Post,
-    //                         as: 'IncomingPost',
-    //                         attributes: ['id'],
-    //                         include: {
-    //                             model: User,
-    //                             as: 'Creator',
-    //                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                         },
-    //                     },
-    //                 ],
-    //             },
-    //             {
-    //                 model: Link,
-    //                 as: 'IncomingCommentLinks',
-    //                 where: { state: 'visible', type: `comment-${itemType}` },
-    //                 required: false,
-    //                 attributes: ['id', 'description'],
-    //                 include: [
-    //                     {
-    //                         model: User,
-    //                         as: 'Creator',
-    //                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                     },
-    //                     {
-    //                         model: Comment,
-    //                         as: 'IncomingComment',
-    //                         attributes: ['id', 'itemId'],
-    //                         include: [
-    //                             {
-    //                                 model: User,
-    //                                 as: 'Creator',
-    //                                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
-    //                             },
-    //                         ],
-    //                     },
-    //                 ],
-    //             },
-    //         ],
-    //     })
-    //     .then((post) => res.status(200).json(post))
-    //     .catch((error) => res.status(500).json({ message: 'Error', error }))
+router.get('/link-data', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { linkId } = req.query
+    const link = await Link.findOne({ where: { id: linkId } })
+    const types = link.type.split('-')
+    const source = await getFullLinkedItem(types[0], link.itemAId, accountId)
+    const target = await getFullLinkedItem(types[1], link.itemBId, accountId)
+    res.status(200).json({ source, link, target })
 })
 
 router.get('/post-comments', authenticateToken, (req, res) => {
