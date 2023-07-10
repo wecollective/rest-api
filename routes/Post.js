@@ -216,7 +216,7 @@ router.get('/ratings', async (req, res) => {
 
 router.get('/links', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { itemType, itemId } = req.query
+    const { itemType, itemId, linkTypes } = req.query
 
     const sourceItem = await getFullLinkedItem(itemType, itemId, accountId)
     sourceItem.setDataValue('uuid', uuidv4())
@@ -224,6 +224,19 @@ router.get('/links', authenticateToken, async (req, res) => {
     if (['user', 'space'].includes(itemType)) {
         sourceItem.setDataValue('totalLikes', 0)
         sourceItem.setDataValue('totalLinks', 0)
+    }
+
+    // todo: seperate out Link table 'type' field into 'itemAType' and 'itemBType' or 'sourceType' and 'targetType'
+    function findTypes(modelType, direction) {
+        const post = direction === 'incoming' ? `post-${modelType}` : `${modelType}-post`
+        const comment = direction === 'incoming' ? `comment-${modelType}` : `${modelType}-comment`
+        const user = direction === 'incoming' ? `user-${modelType}` : `${modelType}-user`
+        const space = direction === 'incoming' ? `space-${modelType}` : `${modelType}-space`
+        if (linkTypes === 'All Types') return [post, comment, user, space]
+        if (linkTypes === 'Posts') return [post]
+        if (linkTypes === 'Comments') return [comment]
+        if (linkTypes === 'Spaces') return [user]
+        if (linkTypes === 'Users') return [space]
     }
 
     async function getLinkedItems(source, depth) {
@@ -249,24 +262,13 @@ router.get('/links', authenticateToken, async (req, res) => {
                             // incoming
                             itemBId: id,
                             itemAId: { [Op.not]: parentItemId },
-                            // todo: seperate out 'type' field into 'itemAType' and 'itemBType' or 'sourceType' and 'targetType'
-                            type: [
-                                `post-${modelType}`,
-                                `comment-${modelType}`,
-                                `user-${modelType}`,
-                                `space-${modelType}`,
-                            ],
+                            type: findTypes(modelType, 'incoming'),
                         },
                         {
                             // outgoing
                             itemAId: id,
                             itemBId: { [Op.not]: parentItemId },
-                            type: [
-                                `${modelType}-post`,
-                                `${modelType}-comment`,
-                                `${modelType}-user`,
-                                `${modelType}-space`,
-                            ],
+                            type: findTypes(modelType, 'outgoing'),
                         },
                     ],
                 },
