@@ -226,6 +226,9 @@ router.post('/gbg-audio-upload', authenticateToken, (req, res) => {
                                             creatorId: accountId,
                                             itemAId: postId,
                                             itemBId: bead.id,
+                                            totalLikes: 0,
+                                            totalComments: 0,
+                                            totalRatings: 0,
                                         })
 
                                         Promise.all([createAudio, createLink])

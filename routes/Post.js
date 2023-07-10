@@ -232,8 +232,16 @@ router.get('/links', authenticateToken, async (req, res) => {
             // console.log(666, 'parentItemId', parentItemId)
             const links = await Link.findAll({
                 limit: depth === 0 ? 10 : 5,
-                order: [['createdAt', 'ASC']],
-                attributes: ['id', 'itemAId', 'itemBId', 'type', 'description', 'createdAt'],
+                order: [['totalLikes', 'DESC']],
+                attributes: [
+                    'id',
+                    'itemAId',
+                    'itemBId',
+                    'type',
+                    'description',
+                    'totalLikes',
+                    'createdAt',
+                ],
                 where: {
                     state: 'visible',
                     [Op.or]: [
@@ -303,12 +311,16 @@ router.get('/links', authenticateToken, async (req, res) => {
                 .then(() => {
                     source.setDataValue(
                         'children',
-                        linkedItems.sort(
-                            (a, b) =>
-                                new Date(a.Link.createdAt).getTime() -
-                                new Date(b.Link.createdAt).getTime()
-                        )
+                        linkedItems.sort((a, b) => b.Link.totalLikes - a.Link.totalLikes)
                     )
+                    // source.setDataValue(
+                    //     'children',
+                    //     linkedItems.sort(
+                    //         (a, b) =>
+                    //             new Date(a.Link.createdAt).getTime() -
+                    //             new Date(b.Link.createdAt).getTime()
+                    //     )
+                    // )
                     source.setDataValue('depth', depth)
                     if (linkedItems.length && depth < 2)
                         Promise.all(
@@ -771,6 +783,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                     creatorId: accountId,
                                     itemAId: post.id,
                                     itemBId: sourcePostId,
+                                    totalLikes: 0,
+                                    totalComments: 0,
+                                    totalRatings: 0,
                                 })
                               : null
 
@@ -876,6 +891,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                               creatorId: accountId,
                                               itemAId: post.id,
                                               itemBId: newBead.id,
+                                              totalLikes: 0,
+                                              totalComments: 0,
+                                              totalRatings: 0,
                                           })
 
                                           Promise.all([
@@ -1054,6 +1072,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               creatorId: accountId,
                               itemAId: post.id,
                               itemBId: createCardFront.id,
+                              totalLikes: 0,
+                              totalComments: 0,
+                              totalRatings: 0,
                           })
                           const linkCardBack = await Link.create({
                               state: 'visible',
@@ -1062,6 +1083,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               creatorId: accountId,
                               itemAId: post.id,
                               itemBId: createCardBack.id,
+                              totalLikes: 0,
+                              totalComments: 0,
+                              totalRatings: 0,
                           })
                           const createCardFrontImage = cardFrontImage
                               ? await Image.create({
@@ -1414,6 +1438,9 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                 creatorId: accountId,
                 itemAId: postId,
                 itemBId: bead.id,
+                totalLikes: 0,
+                totalComments: 0,
+                totalRatings: 0,
             })
 
             const notifyPlayers = await new Promise(async (resolve) => {
@@ -2043,6 +2070,9 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             description,
             itemAId: sourceId,
             itemBId: targetId,
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
         })
 
         let sourceModel

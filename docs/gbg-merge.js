@@ -138,6 +138,9 @@
 //                     itemAId: gamePost.postId,
 //                     itemBId: createPost.id,
 //                     index: bead.index,
+//                     totalLikes: 0,
+//                     totalComments: 0,
+//                     totalRatings: 0,
 //                 })
 
 //                 Promise.all([createAudio, createLink])
