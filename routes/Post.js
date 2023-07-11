@@ -2033,36 +2033,44 @@ router.post('/add-link', authenticateToken, async (req, res) => {
     const { sourceType, sourceId, targetType, targetId, description, accountHandle, accountName } =
         req.body
 
-    let targetModel
-    let targetAttributes = []
-    let targetInclude = null
-    const creator = { model: User, as: 'Creator', attributes: ['id', 'handle', 'name', 'email'] }
-    const mods = { model: User, as: 'Moderators', attributes: ['id', 'handle', 'name', 'email'] }
-
-    if (targetType === 'post') {
-        targetModel = Post
-        targetAttributes = ['id', 'totalLinks']
-        targetInclude = creator
-    } else if (targetType === 'comment') {
-        targetModel = Comment
-        targetAttributes = ['id', 'totalLinks', 'itemId']
-        targetInclude = creator
-    } else if (targetType === 'user') {
-        targetModel = User
-        targetAttributes = ['id']
-    } else if (targetType === 'space') {
-        targetModel = Space
-        targetAttributes = ['id']
-        targetInclude = mods
+    async function getItem(type, id) {
+        let model
+        let attributes = []
+        let include = null
+        const creator = {
+            model: User,
+            as: 'Creator',
+            attributes: ['id', 'handle', 'name', 'email'],
+        }
+        const mods = {
+            model: User,
+            as: 'Moderators',
+            attributes: ['id', 'handle', 'name', 'email'],
+        }
+        if (type === 'post') {
+            model = Post
+            attributes = ['id', 'totalLinks']
+            include = creator
+        } else if (type === 'comment') {
+            model = Comment
+            attributes = ['id', 'totalLinks', 'itemId']
+            include = creator
+        } else if (type === 'user') {
+            model = User
+            attributes = ['id', 'name', 'handle', 'email']
+        } else if (type === 'space') {
+            model = Space
+            attributes = ['id']
+            include = mods
+        }
+        return model.findOne({ where: { id: id }, attributes, include })
     }
 
-    const target = await targetModel.findOne({
-        where: { id: targetId },
-        attributes: targetAttributes,
-        include: targetInclude,
-    })
+    const source = await getItem(sourceType, sourceId)
+    const target = await getItem(targetType, targetId)
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else if (!source) res.status(404).send({ message: 'Source not found' })
     else if (!target) res.status(404).send({ message: 'Target not found' })
     else {
         const createLink = await Link.create({
@@ -2077,148 +2085,95 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             totalRatings: 0,
         })
 
-        let sourceModel
-        let sourceAttributes = []
-        if (sourceType === 'post') {
-            sourceModel = Post
-            sourceAttributes = ['totalLinks']
-        } else if (sourceType === 'comment') {
-            sourceModel = Comment
-            sourceAttributes = ['totalLinks', 'itemId']
-        }
-
-        const source = await sourceModel.findOne({
-            where: { id: sourceId },
-            attributes: sourceAttributes,
-            include: {
-                model: User,
-                as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email'],
-            },
-        })
-
         // removed for users and spaces for now
-        const updateSourceTotalLinks = (await ['user', 'space'].includes(sourceType))
+        const updateSourceTotalLinks = ['user', 'space'].includes(sourceType)
             ? null
-            : sourceModel.update(
+            : await sourceModel.update(
                   { totalLinks: source.totalLinks + 1 },
                   { where: { id: sourceId }, silent: true }
               )
 
-        const updateTargetTotalLinks = (await ['user', 'space'].includes(sourceType))
+        const updateTargetTotalLinks = ['user', 'space'].includes(targetType)
             ? null
-            : targetModel.update(
+            : await targetModel.update(
                   { totalLinks: target.totalLinks + 1 },
                   { where: { id: targetId }, silent: true }
               )
 
-        // set to true to remove for users and spaces for now
-        const isOwnSource = ['user', 'space'].includes(sourceType)
-            ? true
-            : source.Creator.id === accountId
-        const isOwnTarget = ['user', 'space'].includes(targetType)
-            ? true
-            : target.Creator.id === accountId
+        async function notifyOwners(item, type, location) {
+            // skip notification if linked item is link creators
+            let isOwn = false
+            if (['post', 'comment'].includes(type)) isOwn = item.Creator.id === accountId
+            if (type === 'user') isOwn = item.id === accountId
+            if (type === 'space') isOwn = item.Moderators.find((u) => u.id === accountId)
+            if (isOwn) return null
+            // send out notifications and emails to recipients
+            let recipitents = []
+            if (['post', 'comment'].includes(type)) recipitents = [item.Creator]
+            if (type === 'user') recipitents = [item]
+            if (type === 'space') recipitents = [...item.Moderators]
+            return Promise.all(
+                recipitents.map(
+                    async (recipitent) =>
+                        await new Promise(async (resolve) => {
+                            const { id, name, email } = recipitent.Creator
+                            let notificationPostId = null
+                            if (type === 'post') notificationPostId = item.id
+                            if (type === 'comment') notificationPostId = item.itemId
 
-        // todo: include other item info in notification and email
-        const notifySourceOwner = isOwnSource
-            ? null
-            : await new Promise(async (resolve) => {
-                  let notificationPostId = null
-                  if (sourceType === 'post') notificationPostId = sourceId
-                  if (sourceType === 'comment') notificationPostId = source.itemId
+                            // todo: need 3 slots for each model type (until then only include link to source)
+                            const createNotification = await Notification.create({
+                                ownerId: id,
+                                type: `${type}-link-${location}`,
+                                seen: false,
+                                userId: accountId,
+                                spaceAId: type === 'space' ? item.id : null,
+                                postId: notificationPostId,
+                                commentId: type === 'comment' ? item.itemId : null,
+                            })
 
-                  const createNotification = await Notification.create({
-                      ownerId: source.Creator.id,
-                      type: `${sourceType}-link-source`,
-                      seen: false,
-                      spaceAId: sourceType === 'space' ? sourceId : null,
-                      spaceBId: targetType === 'space' ? targetId : null,
-                      userId: accountId,
-                      // todo: need userAId, userBId, postAId, postBId, commentAId, commentBId
-                      postId: notificationPostId,
-                      commentId: sourceType === 'comment' ? source.itemId : null,
-                  })
+                            const url = `${config.appURL}/linkmap?item=${type}&id=${item.id}`
+                            const sendEmail = await sgMail.send({
+                                to: email,
+                                from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                subject: 'New notification',
+                                text: `
+                                    Hi ${name}, ${accountName} just linked ${
+                                    type === 'user' ? 'you' : `your ${type}`
+                                } to another ${
+                                    location === 'source' ? sourceType : targetType
+                                } on weco:
+                                        http://${url}
+                                `,
+                                html: `
+                                    <p>
+                                        Hi ${name},
+                                        <br/>
+                                        <a href='${
+                                            config.appURL
+                                        }/u/${accountHandle}'>${accountName}</a>
+                                        just linked ${
+                                            type === 'user'
+                                                ? `<a href='${url}'>you</a>`
+                                                : `your <a href='${url}'>${type}</a>`
+                                        }
+                                        to another ${
+                                            location === 'source' ? sourceType : targetType
+                                        } on weco
+                                    </p>
+                                `,
+                            })
 
-                  let sourceUrl
-                  if (sourceType === 'post') sourceUrl = `${config.appURL}/p/${sourceId}`
-                  if (sourceType === 'comment')
-                      sourceUrl = `${config.appURL}/p/${source.itemId}?commentId=${sourceId}`
+                            Promise.all([createNotification, sendEmail])
+                                .then(() => resolve())
+                                .catch((error) => resolve(error))
+                        })
+                )
+            )
+        }
 
-                  const sendEmail = await sgMail.send({
-                      to: source.Creator.email,
-                      from: { email: 'admin@weco.io', name: 'we { collective }' },
-                      subject: 'New notification',
-                      text: `
-                            Hi ${source.Creator.name}, ${accountName} just linked your ${sourceType} to another ${targetType} on weco:
-                            http://${sourceUrl}
-                        `,
-                      html: `
-                            <p>
-                                Hi ${source.Creator.name},
-                                <br/>
-                                <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                                just linked your
-                                <a href='${sourceUrl}'>${sourceType}</a>
-                                to another ${targetType} on weco
-                            </p>
-                        `,
-                  })
-
-                  Promise.all([createNotification, sendEmail])
-                      .then(() => resolve())
-                      .catch((error) => resolve(error))
-              })
-
-        const notifyTargetOwner = isOwnTarget
-            ? null
-            : await new Promise(async (resolve) => {
-                  let notificationPostId = null
-                  if (targetType === 'post') notificationPostId = targetId
-                  if (targetType === 'comment') notificationPostId = target.itemId
-
-                  const createNotification = await Notification.create({
-                      // todo: target.Creator.id doesn't exist on user
-                      ownerId: target.Creator.id,
-                      type: `${targetType}-link-target`,
-                      seen: false,
-                      spaceAId: sourceType === 'space' ? sourceId : null,
-                      spaceBId: targetType === 'space' ? targetId : null,
-                      userId: accountId,
-                      // todo: need userAId, userBId, postAId, postBId, commentAId, commentBId
-                      postId: notificationPostId,
-                      commentId: targetType === 'comment' ? target.itemId : null,
-                  })
-
-                  let targetUrl
-                  if (targetType === 'post') targetUrl = `${config.appURL}/p/${targetId}`
-                  if (targetType === 'comment')
-                      targetUrl = `${config.appURL}/p/${target.itemId}?commentId=${targetId}`
-
-                  const sendEmail = await sgMail.send({
-                      to: target.Creator.email,
-                      from: { email: 'admin@weco.io', name: 'we { collective }' },
-                      subject: 'New notification',
-                      text: `
-                          Hi ${target.Creator.name}, ${accountName} just linked your ${targetType} to another ${sourceType} on weco:
-                          http://${targetUrl}
-                      `,
-                      html: `
-                          <p>
-                              Hi ${target.Creator.name},
-                              <br/>
-                              <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                              just linked your
-                              <a href='${targetUrl}'>${targetType}</a>
-                              to another ${sourceType} on weco
-                          </p>
-                      `,
-                  })
-
-                  Promise.all([createNotification, sendEmail])
-                      .then(() => resolve())
-                      .catch((error) => resolve(error))
-              })
+        const notifySourceOwner = await notifyOwners(source, sourceType, 'source')
+        const notifyTargetOwner = await notifyOwners(target, targetType, 'target')
 
         Promise.all([
             createLink,
