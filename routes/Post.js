@@ -1779,7 +1779,16 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
 
 router.post('/add-like', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { itemType, itemId, parentItemId, accountHandle, accountName, spaceId } = req.body
+    const {
+        itemType,
+        itemId,
+        parentItemId,
+        sourceType,
+        sourceId,
+        accountHandle,
+        accountName,
+        spaceId,
+    } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -1814,8 +1823,19 @@ router.post('/add-like', authenticateToken, async (req, res) => {
 
         const isOwnItem = item.Creator.id === accountId
 
-        let notificationPostId = itemId
-        if (itemType === 'comment') notificationPostId = parentItemId
+        let postId = null
+        let commentId = null
+        let spaceAId = spaceId
+        if (itemType === 'post') postId = itemId
+        if (itemType === 'comment') {
+            postId = parentItemId
+            commentId = itemId
+        }
+        if (itemType === 'link') {
+            if (sourceType === 'post') postId = sourceId
+            if (sourceType === 'comment') commentId = sourceId
+            if (sourceType === 'space') spaceAId = sourceId
+        }
 
         const createNotification = isOwnItem
             ? null
@@ -1823,19 +1843,18 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                   ownerId: item.Creator.id,
                   type: `${itemType}-like`,
                   seen: false,
-                  spaceAId: spaceId,
                   userId: accountId,
-                  // todo: change to itemAId when Notifications table updated
-                  // todo: inlcude linkId when set up
-                  postId: notificationPostId,
-                  commentId: itemType === 'comment' ? itemId : null,
+                  spaceAId,
+                  postId,
+                  commentId,
               })
 
         let itemUrl
         if (itemType === 'post') itemUrl = `${config.appURL}/p/${itemId}`
         if (itemType === 'comment')
             itemUrl = `${config.appURL}/p/${parentItemId}?commentId=${itemId}`
-        if (itemType === 'link') itemUrl = `${config.appURL}/linkmap?item=link&id=${itemId}`
+        if (itemType === 'link')
+            itemUrl = `${config.appURL}/linkmap?item=${sourceType}&id=${sourceId}`
 
         const sendEmail = isOwnItem
             ? null
@@ -2092,14 +2111,14 @@ router.post('/add-link', authenticateToken, async (req, res) => {
         // removed for users and spaces for now
         const updateSourceTotalLinks = ['user', 'space'].includes(sourceType)
             ? null
-            : await sourceModel.update(
+            : await source.update(
                   { totalLinks: source.totalLinks + 1 },
                   { where: { id: sourceId }, silent: true }
               )
 
         const updateTargetTotalLinks = ['user', 'space'].includes(targetType)
             ? null
-            : await targetModel.update(
+            : await target.update(
                   { totalLinks: target.totalLinks + 1 },
                   { where: { id: targetId }, silent: true }
               )
@@ -2120,10 +2139,16 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                 recipitents.map(
                     async (recipitent) =>
                         await new Promise(async (resolve) => {
-                            const { id, name, email } = recipitent.Creator
-                            let notificationPostId = null
-                            if (type === 'post') notificationPostId = item.id
-                            if (type === 'comment') notificationPostId = item.itemId
+                            const { id, name, email } = recipitent
+                            let postId = null
+                            let commentId = null
+                            let spaceAId = null
+                            if (type === 'post')
+                                postId = location === 'source' ? sourceId : targetId
+                            if (type === 'comment')
+                                commentId = location === 'source' ? sourceId : targetId
+                            if (type === 'space')
+                                spaceAId = location === 'source' ? sourceId : targetId
 
                             // todo: need 3 slots for each model type (until then only include link to source)
                             const createNotification = await Notification.create({
@@ -2131,9 +2156,9 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                                 type: `${type}-link-${location}`,
                                 seen: false,
                                 userId: accountId,
-                                spaceAId: type === 'space' ? item.id : null,
-                                postId: notificationPostId,
-                                commentId: type === 'comment' ? item.itemId : null,
+                                spaceAId,
+                                postId,
+                                commentId,
                             })
 
                             const url = `${config.appURL}/linkmap?item=${type}&id=${item.id}`
