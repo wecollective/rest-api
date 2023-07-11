@@ -995,10 +995,11 @@ async function getLinkedItem(type, id) {
         where: { id, state: { [Op.or]: ['visible', 'active'] } },
         attributes,
     })
-    // add values
-    item.setDataValue('modelType', type)
-
-    return item
+    if (item) {
+        item.setDataValue('modelType', type)
+        return item
+    }
+    return null
 }
 
 async function getFullLinkedItem(type, id, accountId) {
@@ -1032,10 +1033,11 @@ async function getFullLinkedItem(type, id, accountId) {
         attributes,
         include,
     })
-    // add values
-    item.setDataValue('modelType', type)
-
-    return item
+    if (item) {
+        item.setDataValue('modelType', type)
+        return item
+    }
+    return null
 }
 
 module.exports = {

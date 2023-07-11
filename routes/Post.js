@@ -219,124 +219,128 @@ router.get('/links', authenticateToken, async (req, res) => {
     const { itemType, itemId, linkTypes } = req.query
 
     const sourceItem = await getFullLinkedItem(itemType, itemId, accountId)
-    sourceItem.setDataValue('uuid', uuidv4())
-    sourceItem.setDataValue('parentItemId', null)
-    if (['user', 'space'].includes(itemType)) {
-        sourceItem.setDataValue('totalLikes', 0)
-        sourceItem.setDataValue('totalLinks', 0)
-    }
+    if (!sourceItem) res.status(404).send({ message: 'Source not found' })
+    else {
+        sourceItem.setDataValue('uuid', uuidv4())
+        sourceItem.setDataValue('parentItemId', null)
+        if (['user', 'space'].includes(itemType)) {
+            sourceItem.setDataValue('totalLikes', 0)
+            sourceItem.setDataValue('totalLinks', 0)
+        }
 
-    // todo: seperate out Link table 'type' field into 'itemAType' and 'itemBType' or 'sourceType' and 'targetType'
-    function findTypes(modelType, direction) {
-        const post = direction === 'incoming' ? `post-${modelType}` : `${modelType}-post`
-        const comment = direction === 'incoming' ? `comment-${modelType}` : `${modelType}-comment`
-        const user = direction === 'incoming' ? `user-${modelType}` : `${modelType}-user`
-        const space = direction === 'incoming' ? `space-${modelType}` : `${modelType}-space`
-        if (linkTypes === 'All Types') return [post, comment, user, space]
-        if (linkTypes === 'Posts') return [post]
-        if (linkTypes === 'Comments') return [comment]
-        if (linkTypes === 'Spaces') return [user]
-        if (linkTypes === 'Users') return [space]
-    }
+        // todo: seperate out Link table 'type' field into 'itemAType' and 'itemBType' or 'sourceType' and 'targetType'
+        function findTypes(modelType, direction) {
+            const post = direction === 'incoming' ? `post-${modelType}` : `${modelType}-post`
+            const comment =
+                direction === 'incoming' ? `comment-${modelType}` : `${modelType}-comment`
+            const user = direction === 'incoming' ? `user-${modelType}` : `${modelType}-user`
+            const space = direction === 'incoming' ? `space-${modelType}` : `${modelType}-space`
+            if (linkTypes === 'All Types') return [post, comment, user, space]
+            if (linkTypes === 'Posts') return [post]
+            if (linkTypes === 'Comments') return [comment]
+            if (linkTypes === 'Spaces') return [user]
+            if (linkTypes === 'Users') return [space]
+        }
 
-    async function getLinkedItems(source, depth) {
-        return new Promise(async (resolve) => {
-            const { id, modelType, parentItemId } = source.dataValues
-            // console.log(666, 'parentItemId', parentItemId)
-            const links = await Link.findAll({
-                limit: depth === 0 ? 10 : 5,
-                order: [['totalLikes', 'DESC']],
-                attributes: [
-                    'id',
-                    'itemAId',
-                    'itemBId',
-                    'type',
-                    'description',
-                    'totalLikes',
-                    'createdAt',
-                ],
-                where: {
-                    state: 'visible',
-                    [Op.or]: [
-                        {
-                            // incoming
-                            itemBId: id,
-                            itemAId: { [Op.not]: parentItemId },
-                            type: findTypes(modelType, 'incoming'),
-                        },
-                        {
-                            // outgoing
-                            itemAId: id,
-                            itemBId: { [Op.not]: parentItemId },
-                            type: findTypes(modelType, 'outgoing'),
-                        },
+        async function getLinkedItems(source, depth) {
+            return new Promise(async (resolve) => {
+                const { id, modelType, parentItemId } = source.dataValues
+                // console.log(666, 'parentItemId', parentItemId)
+                const links = await Link.findAll({
+                    limit: depth === 0 ? 10 : 5,
+                    order: [['totalLikes', 'DESC']],
+                    attributes: [
+                        'id',
+                        'itemAId',
+                        'itemBId',
+                        'type',
+                        'description',
+                        'totalLikes',
+                        'createdAt',
                     ],
-                },
+                    where: {
+                        state: 'visible',
+                        [Op.or]: [
+                            {
+                                // incoming
+                                itemBId: id,
+                                itemAId: { [Op.not]: parentItemId },
+                                type: findTypes(modelType, 'incoming'),
+                            },
+                            {
+                                // outgoing
+                                itemAId: id,
+                                itemBId: { [Op.not]: parentItemId },
+                                type: findTypes(modelType, 'outgoing'),
+                            },
+                        ],
+                    },
+                })
+                const linkedItems = []
+                Promise.all(
+                    links.map(async (link) => {
+                        link.setDataValue('uuid', uuidv4())
+                        const types = link.type.split('-')
+                        const itemAType = types[0]
+                        const itemBType = types[1]
+                        // incoming links
+                        if (link.itemAId === id && itemAType === modelType) {
+                            link.setDataValue('direction', 'outgoing')
+                            const item = await getLinkedItem(itemBType, link.itemBId)
+                            if (item) {
+                                item.setDataValue('uuid', uuidv4())
+                                item.setDataValue('parentItemId', id)
+                                if (['user', 'space'].includes(itemBType)) {
+                                    item.setDataValue('totalLikes', 0)
+                                    item.setDataValue('totalLinks', 0)
+                                }
+                                linkedItems.push({ item, Link: link })
+                            }
+                        }
+                        // outgoing links
+                        if (link.itemBId === id && itemBType === modelType) {
+                            link.setDataValue('direction', 'incoming')
+                            const item = await getLinkedItem(itemAType, link.itemAId)
+                            if (item) {
+                                item.setDataValue('uuid', uuidv4())
+                                item.setDataValue('parentItemId', id)
+                                if (['user', 'space'].includes(itemBType)) {
+                                    item.setDataValue('totalLikes', 0)
+                                    item.setDataValue('totalLinks', 0)
+                                }
+                                linkedItems.push({ item, Link: link })
+                            }
+                        }
+                    })
+                )
+                    .then(() => {
+                        source.setDataValue(
+                            'children',
+                            linkedItems.sort((a, b) => b.Link.totalLikes - a.Link.totalLikes)
+                        )
+                        // source.setDataValue(
+                        //     'children',
+                        //     linkedItems.sort(
+                        //         (a, b) =>
+                        //             new Date(a.Link.createdAt).getTime() -
+                        //             new Date(b.Link.createdAt).getTime()
+                        //     )
+                        // )
+                        source.setDataValue('depth', depth)
+                        if (linkedItems.length && depth < 2)
+                            Promise.all(
+                                linkedItems.map(
+                                    async (child) => await getLinkedItems(child.item, depth + 1)
+                                )
+                            ).then(() => resolve())
+                        else resolve()
+                    })
+                    .catch((error) => resolve(error))
             })
-            const linkedItems = []
-            Promise.all(
-                links.map(async (link) => {
-                    link.setDataValue('uuid', uuidv4())
-                    const types = link.type.split('-')
-                    const itemAType = types[0]
-                    const itemBType = types[1]
-                    // incoming links
-                    if (link.itemAId === id && itemAType === modelType) {
-                        link.setDataValue('direction', 'outgoing')
-                        const item = await getLinkedItem(itemBType, link.itemBId)
-                        if (item) {
-                            item.setDataValue('uuid', uuidv4())
-                            item.setDataValue('parentItemId', id)
-                            if (['user', 'space'].includes(itemBType)) {
-                                item.setDataValue('totalLikes', 0)
-                                item.setDataValue('totalLinks', 0)
-                            }
-                            linkedItems.push({ item, Link: link })
-                        }
-                    }
-                    // outgoing links
-                    if (link.itemBId === id && itemBType === modelType) {
-                        link.setDataValue('direction', 'incoming')
-                        const item = await getLinkedItem(itemAType, link.itemAId)
-                        if (item) {
-                            item.setDataValue('uuid', uuidv4())
-                            item.setDataValue('parentItemId', id)
-                            if (['user', 'space'].includes(itemBType)) {
-                                item.setDataValue('totalLikes', 0)
-                                item.setDataValue('totalLinks', 0)
-                            }
-                            linkedItems.push({ item, Link: link })
-                        }
-                    }
-                })
-            )
-                .then(() => {
-                    source.setDataValue(
-                        'children',
-                        linkedItems.sort((a, b) => b.Link.totalLikes - a.Link.totalLikes)
-                    )
-                    // source.setDataValue(
-                    //     'children',
-                    //     linkedItems.sort(
-                    //         (a, b) =>
-                    //             new Date(a.Link.createdAt).getTime() -
-                    //             new Date(b.Link.createdAt).getTime()
-                    //     )
-                    // )
-                    source.setDataValue('depth', depth)
-                    if (linkedItems.length && depth < 2)
-                        Promise.all(
-                            linkedItems.map(
-                                async (child) => await getLinkedItems(child.item, depth + 1)
-                            )
-                        ).then(() => resolve())
-                    else resolve()
-                })
-                .catch((error) => resolve(error))
-        })
-    }
+        }
 
-    getLinkedItems(sourceItem, 0).then(() => res.json({ item: sourceItem }))
+        getLinkedItems(sourceItem, 0).then(() => res.json({ item: sourceItem }))
+    }
 })
 
 router.get('/link-data', authenticateToken, async (req, res) => {
