@@ -472,40 +472,40 @@ router.get('/space-data', authenticateToken, async (req, res) => {
     }
 })
 
-router.get('/nav-list-parent-spaces', authenticateToken, async (req, res) => {
-    // const accountId = req.user ? req.user.id : null
-    const { spaceId } = req.query
-    const spaces = await Space.findAll({
-        where: {
-            '$DirectChildSpaces.id$': spaceId,
-            state: 'active',
-        },
-        attributes: ['id', 'handle', 'name', 'flagImagePath', totalSpaceLikes, totalSpaceChildren],
-        order: [
-            [sequelize.literal(`totalLikes`), 'DESC'],
-            ['createdAt', 'DESC'],
-        ],
-        subQuery: false,
-        include: {
-            model: Space,
-            as: 'DirectChildSpaces',
-            attributes: ['id'],
-            through: { attributes: [], where: { state: 'open' } },
-        },
-    })
-    if (spaces) res.status(200).json(spaces)
-    else res.status(500).json({ message: 'Error' })
-})
-
-router.get('/nav-list-child-spaces', authenticateToken, async (req, res) => {
+router.get('/nav-list-spaces', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { spaceId, offset } = req.query
+    const { spaceId, offset, includeParents } = req.query
+    const order = [
+        [sequelize.literal(`totalLikes`), 'DESC'],
+        ['createdAt', 'DESC'],
+    ]
 
-    const spaces = await Space.findAll({
-        where: {
-            '$DirectParentSpaces.id$': spaceId,
-            state: 'active',
-        },
+    const parents =
+        includeParents === 'true'
+            ? await Space.findAll({
+                  where: { '$DirectChildSpaces.id$': spaceId, state: 'active' },
+                  attributes: [
+                      'id',
+                      'handle',
+                      'name',
+                      'flagImagePath',
+                      totalSpaceLikes,
+                      totalSpaceChildren,
+                  ],
+                  order,
+                  limit: 10,
+                  subQuery: false,
+                  include: {
+                      model: Space,
+                      as: 'DirectChildSpaces',
+                      attributes: ['id'],
+                      through: { attributes: [], where: { state: 'open' } },
+                  },
+              })
+            : null
+
+    const children = await Space.findAll({
+        where: { '$DirectParentSpaces.id$': spaceId, state: 'active' },
         attributes: [
             'id',
             'handle',
@@ -517,11 +517,22 @@ router.get('/nav-list-child-spaces', authenticateToken, async (req, res) => {
             ancestorAccess(accountId),
             spaceAccess(accountId),
         ],
-        order: [
-            [sequelize.literal(`totalLikes`), 'DESC'],
-            ['createdAt', 'DESC'],
-        ],
-        limit: 20,
+        order,
+        offset: +offset,
+        having: { ['ancestorAccess']: 1 },
+        limit: 10,
+        subQuery: false,
+        include: {
+            model: Space,
+            as: 'DirectParentSpaces',
+            attributes: ['id'],
+            through: { attributes: [], where: { state: 'open' } },
+        },
+    })
+
+    const totalChildren = await Space.count({
+        where: { '$DirectParentSpaces.id$': spaceId, state: 'active' },
+        attributes: [ancestorAccess(accountId)],
         having: { ['ancestorAccess']: 1 },
         subQuery: false,
         include: {
@@ -531,8 +542,8 @@ router.get('/nav-list-child-spaces', authenticateToken, async (req, res) => {
             through: { attributes: [], where: { state: 'open' } },
         },
     })
-    if (spaces) res.status(200).json(spaces)
-    else res.status(500).json({ message: 'Error' })
+
+    res.status(200).json({ parents, children, totalChildren })
 })
 
 router.get('/find-child-spaces', authenticateToken, async (req, res) => {
