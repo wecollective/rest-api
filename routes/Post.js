@@ -616,57 +616,51 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     .catch((error) => resolve(error))
             })
 
-            const notifyMentions = await new Promise((resolve) => {
-                User.findAll({
+            const notifyMentions = await new Promise(async (resolve) => {
+                const users = await User.findAll({
                     where: { handle: mentions, state: 'active' },
                     attributes: ['id', 'name', 'email'],
                 })
-                    .then((users) => {
-                        Promise.all(
-                            users.map(
-                                (user) =>
-                                    new Promise(async (reso) => {
-                                        const sendNotification = await Notification.create({
-                                            ownerId: user.id,
-                                            type: 'post-mention',
-                                            seen: false,
-                                            userId: accountId,
-                                            postId: post.id,
-                                        })
+                Promise.all(
+                    users.map(
+                        (user) =>
+                            new Promise(async (reso) => {
+                                const sendNotification = await Notification.create({
+                                    ownerId: user.id,
+                                    type: 'post-mention',
+                                    seen: false,
+                                    userId: accountId,
+                                    postId: post.id,
+                                })
 
-                                        const sendEmail = await sgMail.send({
-                                            to: user.email,
-                                            from: {
-                                                email: 'admin@weco.io',
-                                                name: 'we { collective }',
-                                            },
-                                            subject: 'New notification',
-                                            text: `
-                                                    Hi ${user.name}, ${creatorName} just mentioned you in a post on weco:
-                                                    http://${config.appURL}/p/${post.id}
-                                                `,
-                                            html: `
-                                                    <p>
-                                                        Hi ${user.name},
-                                                        <br/>
-                                                        <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
-                                                        just mentioned you in a 
-                                                        <a href='${config.appURL}/p/${post.id}'>post</a>
-                                                        on weco
-                                                    </p>
-                                                `,
-                                        })
+                                const sendEmail = await sgMail.send({
+                                    to: user.email,
+                                    from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                    subject: 'New notification',
+                                    text: `
+                                        Hi ${user.name}, ${creatorName} just mentioned you in a post on weco:
+                                        http://${config.appURL}/p/${post.id}
+                                    `,
+                                    html: `
+                                        <p>
+                                            Hi ${user.name},
+                                            <br/>
+                                            <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+                                            just mentioned you in a 
+                                            <a href='${config.appURL}/p/${post.id}'>post</a>
+                                            on weco
+                                        </p>
+                                    `,
+                                })
 
-                                        Promise.all([sendNotification, sendEmail])
-                                            .then(() => reso())
-                                            .catch((error) => reso(error))
-                                    })
-                            )
-                        )
-                            .then((data) => resolve(data))
-                            .catch((error) => resolve(data, error))
-                    })
-                    .catch((error) => resolve(error))
+                                Promise.all([sendNotification, sendEmail])
+                                    .then(() => reso())
+                                    .catch((error) => reso(error))
+                            })
+                    )
+                )
+                    .then((data) => resolve(data))
+                    .catch((error) => resolve(data, error))
             })
 
             const createUrls = await Promise.all(
@@ -1220,57 +1214,60 @@ router.post('/update-post', authenticateToken, async (req, res) => {
             { where: { id: postId, creatorId: accountId } }
         )
 
-        const notifyMentions = await new Promise((resolve) => {
-            User.findAll({
+        const notifyMentions = await new Promise(async (resolve) => {
+            const users = await User.findAll({
                 where: { handle: mentions, state: 'active' },
                 attributes: ['id', 'name', 'email'],
             })
-                .then((users) => {
-                    Promise.all(
-                        users.map(
-                            (user) =>
-                                new Promise(async (reso) => {
-                                    const sendNotification = await Notification.create({
-                                        ownerId: user.id,
-                                        type: `${mentionType}-mention`,
-                                        seen: false,
-                                        userId: accountId,
-                                        postId,
-                                    })
-
-                                    const sendEmail = await sgMail.send({
-                                        to: user.email,
-                                        from: {
-                                            email: 'admin@weco.io',
-                                            name: 'we { collective }',
-                                        },
-                                        subject: 'New notification',
-                                        text: `
-                                            Hi ${user.name}, ${creatorName} just mentioned you in a ${mentionType} on weco:
-                                            http://${config.appURL}/p/${postId}
-                                        `,
-                                        html: `
-                                            <p>
-                                                Hi ${user.name},
-                                                <br/>
-                                                <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
-                                                just mentioned you in a 
-                                                <a href='${config.appURL}/p/${postId}'>${mentionType}</a>
-                                                on weco
-                                            </p>
-                                        `,
-                                    })
-
-                                    Promise.all([sendNotification, sendEmail])
-                                        .then(() => reso())
-                                        .catch((error) => reso(error))
+            Promise.all(
+                users.map(
+                    (user) =>
+                        new Promise(async (reso) => {
+                            const alreadySent = await Notification.findOne({
+                                where: {
+                                    ownerId: user.id,
+                                    type: `${mentionType}-mention`,
+                                    userId: accountId,
+                                    postId,
+                                },
+                            })
+                            if (alreadySent) reso()
+                            else {
+                                const sendNotification = await Notification.create({
+                                    ownerId: user.id,
+                                    type: `${mentionType}-mention`,
+                                    seen: false,
+                                    userId: accountId,
+                                    postId,
                                 })
-                        )
-                    )
-                        .then((data) => resolve(data))
-                        .catch((error) => resolve(data, error))
-                })
-                .catch((error) => resolve(error))
+                                const sendEmail = await sgMail.send({
+                                    to: user.email,
+                                    from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                    subject: 'New notification',
+                                    text: `
+                                        Hi ${user.name}, ${creatorName} just mentioned you in a ${mentionType} on weco:
+                                        http://${config.appURL}/p/${postId}
+                                    `,
+                                    html: `
+                                        <p>
+                                            Hi ${user.name},
+                                            <br/>
+                                            <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+                                            just mentioned you in a 
+                                            <a href='${config.appURL}/p/${postId}'>${mentionType}</a>
+                                            on weco
+                                        </p>
+                                    `,
+                                })
+                                Promise.all([sendNotification, sendEmail])
+                                    .then(() => reso())
+                                    .catch((error) => reso(error))
+                            }
+                        })
+                )
+            )
+                .then((data) => resolve(data))
+                .catch((error) => resolve(data, error))
         })
 
         Promise.all([updatePost, notifyMentions])
@@ -2358,8 +2355,8 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
 
         const notifyPostCreator = skipPostCreator
             ? null
-            : new Promise((resolve) => {
-                  const createNotification = Notification.create({
+            : new Promise(async (resolve) => {
+                  const createNotification = await Notification.create({
                       ownerId: post.Creator.id,
                       type: 'post-comment',
                       seen: false,
@@ -2368,7 +2365,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                       postId,
                       commentId: newComment.id,
                   })
-                  const sendEmail = sgMail.send({
+                  const sendEmail = await sgMail.send({
                       to: post.Creator.email,
                       from: { email: 'admin@weco.io', name: 'we { collective }' },
                       subject: 'New notification',
@@ -2394,8 +2391,8 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
 
         const notifyCommentCreator = skipCommentCreator
             ? null
-            : new Promise((resolve) => {
-                  const createNotification = Notification.create({
+            : new Promise(async (resolve) => {
+                  const createNotification = await Notification.create({
                       ownerId: comment.Creator.id,
                       type: 'comment-reply',
                       seen: false,
@@ -2404,7 +2401,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                       postId,
                       commentId: newComment.id,
                   })
-                  const sendEmail = sgMail.send({
+                  const sendEmail = await sgMail.send({
                       to: comment.Creator.email,
                       from: { email: 'admin@weco.io', name: 'we { collective }' },
                       subject: 'New notification',
@@ -2430,8 +2427,8 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
 
         const notifyReplyCreator = skipReplyCreator
             ? null
-            : new Promise((resolve) => {
-                  const createNotification = Notification.create({
+            : new Promise(async (resolve) => {
+                  const createNotification = await Notification.create({
                       ownerId: reply.Creator.id,
                       type: 'comment-reply',
                       seen: false,
@@ -2440,7 +2437,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                       postId,
                       commentId: newComment.id,
                   })
-                  const sendEmail = sgMail.send({
+                  const sendEmail = await sgMail.send({
                       to: reply.Creator.email,
                       from: { email: 'admin@weco.io', name: 'we { collective }' },
                       subject: 'New notification',
@@ -2545,40 +2542,50 @@ router.post('/update-comment', authenticateToken, async (req, res) => {
                 .map(
                     (user) =>
                         new Promise(async (resolve) => {
-                            // todo: check notification not already present for mentions
-
-                            const sendNotification = await Notification.create({
-                                ownerId: user.id,
-                                type: 'comment-mention',
-                                seen: false,
-                                userId: accountId,
-                                postId,
-                                commentId,
+                            const alreadySent = await Notification.findOne({
+                                where: {
+                                    ownerId: user.id,
+                                    type: 'comment-mention',
+                                    userId: accountId,
+                                    postId,
+                                    commentId,
+                                },
                             })
+                            if (alreadySent) resolve()
+                            else {
+                                const sendNotification = await Notification.create({
+                                    ownerId: user.id,
+                                    type: 'comment-mention',
+                                    seen: false,
+                                    userId: accountId,
+                                    postId,
+                                    commentId,
+                                })
 
-                            const sendEmail = await sgMail.send({
-                                to: user.email,
-                                from: { email: 'admin@weco.io', name: 'we { collective }' },
-                                subject: 'New notification',
-                                text: `
-                                    Hi ${user.name}, ${account.name} just mentioned you in a comment on weco:
-                                    http://${config.appURL}/p/${postId}?commentId=${commentId}
-                                `,
-                                html: `
-                                    <p>
-                                        Hi ${user.name},
-                                        <br/>
-                                        <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
-                                        just mentioned you in a
-                                        <a href='${config.appURL}/p/${postId}?commentId=${commentId}'>comment</a>
-                                        on weco
-                                    </p>
-                                `,
-                            })
+                                const sendEmail = await sgMail.send({
+                                    to: user.email,
+                                    from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                    subject: 'New notification',
+                                    text: `
+                                        Hi ${user.name}, ${account.name} just mentioned you in a comment on weco:
+                                        http://${config.appURL}/p/${postId}?commentId=${commentId}
+                                    `,
+                                    html: `
+                                        <p>
+                                            Hi ${user.name},
+                                            <br/>
+                                            <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
+                                            just mentioned you in a
+                                            <a href='${config.appURL}/p/${postId}?commentId=${commentId}'>comment</a>
+                                            on weco
+                                        </p>
+                                    `,
+                                })
 
-                            Promise.all([sendNotification, sendEmail])
-                                .then(() => resolve())
-                                .catch((error) => resolve(error))
+                                Promise.all([sendNotification, sendEmail])
+                                    .then(() => resolve())
+                                    .catch((error) => resolve(error))
+                            }
                         })
                 )
         )

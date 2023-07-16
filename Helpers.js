@@ -969,6 +969,7 @@ async function getLinkedItem(type, id) {
         model = Post
         attributes = [
             'id',
+            'type',
             'title',
             'text',
             'totalLikes',
