@@ -576,8 +576,11 @@ router.get('/find-child-spaces', authenticateToken, async (req, res) => {
     else res.status(500).json({ message: 'Error' })
 })
 
-router.get('/top-space-contributors', async (req, res) => {
-    const { spaceId } = req.query
+router.get('/top-contributors', async (req, res) => {
+    const { spaceId, offset } = req.query
+
+    // count not working with virtual columns ('having') so limit set to 11 to check for more users
+
     const users = await User.findAll({
         where: { state: 'active' },
         attributes: ['id', 'handle', 'name', 'flagImagePath', totalLikesReceivedInSpace(spaceId)],
@@ -585,11 +588,18 @@ router.get('/top-space-contributors', async (req, res) => {
             [sequelize.literal('likesReceived'), 'DESC'],
             ['createdAt', 'ASC'],
         ],
-        limit: 10,
+        offset: +offset,
+        limit: 11,
         having: { ['likesReceived']: { [Op.gt]: 0 } },
     })
-    if (users) res.status(200).json(users)
-    else res.status(500).json({ message: 'Error' })
+
+    res.status(200).json({ users: users.slice(0, 10), moreUsers: users.length > 10 })
+
+    // const totalContributors = await User.count({
+    //     where: { state: 'active' },
+    //     attributes: ['id', totalLikesReceivedInSpace(spaceId)],
+    //     having: { ['likesReceived']: { [Op.gt]: 0 } },
+    // })
 })
 
 router.get('/space-about', async (req, res) => {
