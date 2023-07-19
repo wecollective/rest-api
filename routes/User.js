@@ -14,6 +14,7 @@ const {
     findFullPostAttributes,
     findPostWhere,
     findPostInclude,
+    totalUserPosts,
 } = require('../Helpers')
 const {
     Space,
@@ -125,7 +126,16 @@ router.get('/user-data', async (req, res) => {
     const { userHandle } = req.query
     const user = await User.findOne({
         where: { handle: userHandle, state: { [Op.not]: 'deleted' } },
-        attributes: ['id', 'handle', 'name', 'bio', 'flagImagePath', 'coverImagePath', 'createdAt'],
+        attributes: [
+            'id',
+            'handle',
+            'name',
+            'bio',
+            'flagImagePath',
+            'coverImagePath',
+            'createdAt',
+            totalUserPosts,
+        ],
     })
     if (user) res.status(200).json(user)
     else res.status(404).json({ message: 'User not found' })
