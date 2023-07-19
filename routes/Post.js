@@ -369,6 +369,45 @@ router.get('/link-data', authenticateToken, async (req, res) => {
     res.status(200).json({ source, link, target })
 })
 
+router.get('/target-from-text', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { type, sourceId, text, userId } = req.query
+
+    if (type === 'Post') {
+        const where = {
+            state: 'visible',
+            [Op.or]: [{ text: { [Op.like]: `%${text}%` } }, { title: { [Op.like]: `%${text}%` } }],
+        }
+        if (sourceId) where[Op.not] = { id: sourceId }
+        if (userId) where.creatorId = userId
+        const matchingPosts = await Post.findAll({
+            where,
+            limit: 10,
+            include: findPostInclude(accountId),
+        })
+        res.status(200).json(matchingPosts)
+    }
+
+    if (type === 'Comment') {
+        const where = {
+            state: 'visible',
+            text: { [Op.like]: `%${text}%` },
+        }
+        if (sourceId) where[Op.not] = { id: sourceId }
+        if (userId) where.creatorId = userId
+        const matchingComments = await Comment.findAll({
+            where,
+            limit: 10,
+            include: {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            },
+        })
+        res.status(200).json(matchingComments)
+    }
+})
+
 router.get('/post-comments', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.query
