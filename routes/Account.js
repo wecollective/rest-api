@@ -238,7 +238,7 @@ router.post('/delete-account', authenticateToken, async (req, res) => {
 
 router.post('/help-message', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { helpMessage, email } = req.body
+    const { message, email } = req.body
 
     if (accountId) {
         const user = await User.findOne({
@@ -252,13 +252,13 @@ router.post('/help-message', authenticateToken, async (req, res) => {
                 subject: 'Help request',
                 text: `
                     Help request sent from ${user.name}: https://${config.appURL}/u/${user.handle} (email: ${user.email})
-                    Message: "${helpMessage}"
+                    Message: "${message}"
                 `,
                 html: `
                     <div>
                         <p>Help request sent from <a href='${config.appURL}/u/${user.handle}'>${user.name}</a> (email: ${user.email})</p>
                         <p>Message:</p>
-                        <p>"${helpMessage}"</p>
+                        <p>"${message}"</p>
                     </div>
                 `,
             })
@@ -271,13 +271,13 @@ router.post('/help-message', authenticateToken, async (req, res) => {
                 subject: 'Help request',
                 text: `
                     Help request sent from anonymous user with email: ${email}
-                    Message: "${helpMessage}"
+                    Message: "${message}"
                 `,
                 html: `
                     <div>
                         <p>Help request sent from anonymous user with email: ${email}</p>
                         <p>Message:</p>
-                        <p>"${helpMessage}"</p>
+                        <p>"${message}"</p>
                     </div>
                 `,
             })
