@@ -87,6 +87,20 @@ router.get('/account-notifications', authenticateToken, (req, res) => {
     }
 })
 
+router.get('/followed-spaces', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const user = await User.findOne({ where: { id: accountId } })
+        const spaces = await user.getFollowedSpaces({
+            where: { state: 'active' },
+            through: { where: { relationship: 'follower', state: 'active' } },
+            limit: 10,
+        })
+        res.json(spaces)
+    }
+})
+
 // POST
 router.post('/update-account-name', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
