@@ -706,6 +706,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 urls.map((urlData) =>
                     Url.create({
                         type: 'post',
+                        state: 'active',
                         itemId: post.id,
                         url: urlData.url,
                         image: urlData.image,
@@ -884,6 +885,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                               bead.type === 'url'
                                                   ? await Url.create({
                                                         type: 'post',
+                                                        state: 'active',
                                                         itemId: newBead.id,
                                                         creatorId: accountId,
                                                         ...bead.Urls[0],
@@ -1349,6 +1351,7 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                     ? await Url.create({
                           itemId: bead.id,
                           type: 'post',
+                          state: 'active',
                           creatorId: accountId,
                           url: Urls[0].url,
                           image: Urls[0].image,

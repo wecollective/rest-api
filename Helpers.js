@@ -775,6 +775,8 @@ function findPostInclude(accountId) {
         },
         {
             model: Url,
+            where: { state: 'active' },
+            required: false,
             attributes: ['url', 'image', 'title', 'description', 'domain'],
         },
         {
