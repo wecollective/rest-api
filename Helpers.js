@@ -927,11 +927,8 @@ function findSpaceSpaceAttributes(accountId) {
         'privacy',
         totalSpaceFollowers,
         totalSpaceComments,
-        totalSpaceReactions,
         totalSpaceLikes,
-        totalSpaceRatings,
         totalSpacePosts,
-        totalSpaceChildren,
         ancestorAccess(accountId),
     ]
 }
@@ -952,12 +949,14 @@ function findSpaceSpacesWhere(spaceId, depth, timeRange, searchQuery) {
 }
 
 function findSpaceSpacesInclude(depth) {
+    const fullDepth = depth === 'All Contained Spaces'
+    const state = fullDepth ? { [Op.or]: ['open', 'closed'] } : 'open'
     return [
         {
             model: Space,
-            as: depth === 'All Contained Spaces' ? 'SpaceAncestors' : 'DirectParentSpaces',
+            as: fullDepth ? 'SpaceAncestors' : 'DirectParentSpaces',
             attributes: [],
-            through: { attributes: [], where: { state: 'open' } },
+            through: { attributes: [], where: { state } },
         },
     ]
 }
