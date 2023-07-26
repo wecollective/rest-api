@@ -600,7 +600,6 @@ function totalLikesReceivedInSpace(spaceId) {
 }
 
 function totalSpaceResults(depth, timeRange, searchQuery) {
-    // todo: move to helpers (requires: timeRange, depth, searchQuery)
     const startDate = createSQLDate(findStartDate(timeRange))
     const endDate = createSQLDate(new Date())
 
@@ -617,14 +616,13 @@ function totalSpaceResults(depth, timeRange, searchQuery) {
                         RIGHT JOIN Spaces
                         ON SpaceAncestors.spaceBId = Spaces.id
                         WHERE SpaceAncestors.spaceAId = Space.id
-                        AND SpaceAncestors.state = 'open'
-                        OR SpaceAncestors.state = 'closed'
+                        AND (SpaceAncestors.state = 'open' OR SpaceAncestors.state = 'closed')
                     ) AND (
                         s.handle LIKE '%${searchQuery}%'
                         OR s.name LIKE '%${searchQuery}%'
                         OR s.description LIKE '%${searchQuery}%'
                     ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
-                    )`),
+                )`),
               'totalResults',
           ]
         : [
@@ -643,7 +641,7 @@ function totalSpaceResults(depth, timeRange, searchQuery) {
                         OR s.name LIKE '%${searchQuery}%'
                         OR s.description LIKE '%${searchQuery}%'
                     ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
-                    )`),
+                )`),
               'totalResults',
           ]
 }
