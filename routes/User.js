@@ -198,7 +198,7 @@ router.post('/find-people', (req, res) => {
             model: Space,
             as: 'FollowedSpaces',
             attributes: [],
-            through: { where: { state: 'active' }, attributes: [] },
+            through: { where: { state: 'active', relationship: 'follower' }, attributes: [] },
         })
     }
     User.findAll({

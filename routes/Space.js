@@ -1347,6 +1347,7 @@ router.post('/find-spaces', authenticateToken, (req, res) => {
             [Op.or]: [
                 { handle: { [Op.like]: `%${query}%` } },
                 { name: { [Op.like]: `%${query}%` } },
+                // bio not included here as it results in too many irrelevant matches
             ],
         }
         if (blacklist && blacklist.length) where[Op.not] = [{ id: blacklist }]
