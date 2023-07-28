@@ -10,6 +10,7 @@ const {
     findStartDate,
     findOrder,
     findPostType,
+    findInitialPostAttributes,
     findInitialPostAttributesWithAccess,
     findFullPostAttributes,
     findPostWhere,
@@ -145,11 +146,14 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { userId, timeRange, postType, sortBy, sortOrder, searchQuery, limit, offset } = req.query
 
+    const ownAccount = accountId === +userId
     const startDate = findStartDate(timeRange)
     const type = findPostType(postType)
     const order = findOrder(sortBy, sortOrder)
     const where = findPostWhere('user', userId, startDate, type, searchQuery)
-    const initialAttributes = findInitialPostAttributesWithAccess(sortBy, accountId)
+    const initialAttributes = ownAccount
+        ? findInitialPostAttributes(sortBy, accountId)
+        : findInitialPostAttributesWithAccess(sortBy, accountId)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 
     // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
@@ -163,7 +167,7 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
         limit: Number(limit),
         offset: Number(offset),
         attributes: initialAttributes,
-        having: { ['access']: 1 },
+        having: ownAccount ? null : { ['access']: 1 },
         include: [
             {
                 model: GlassBeadGame,
