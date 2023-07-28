@@ -3,6 +3,7 @@ const config = require('../Config')
 const express = require('express')
 const router = express.Router()
 const sequelize = require('sequelize')
+const { Op } = sequelize
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
@@ -22,7 +23,17 @@ const {
     GlassBeadGame,
 } = require('../models')
 const ScheduledTasks = require('../ScheduledTasks')
-const { unseenNotifications } = require('../Helpers')
+const {
+    unseenNotifications,
+    findStartDate,
+    findOrder,
+    findPostType,
+    findInitialPostAttributes,
+    findFullPostAttributes,
+    findPostThrough,
+    findPostWhere,
+    findPostInclude,
+} = require('../Helpers')
 
 // GET
 router.get('/account-data', authenticateToken, (req, res) => {
@@ -98,6 +109,61 @@ router.get('/followed-spaces', authenticateToken, async (req, res) => {
             limit: 10,
         })
         res.json(spaces)
+    }
+})
+
+router.post('/stream', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { timeRange, postType, sortBy, sortOrder, depth, searchQuery, limit, offset } = req.body
+
+    console.log(999, req.body)
+
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const startDate = findStartDate(timeRange)
+        const type = findPostType(postType)
+        const order = findOrder(sortBy, sortOrder)
+        const through = findPostThrough(depth)
+        // const where = findPostWhere('space', spaceId, startDate, type, searchQuery)
+        const initialAttributes = findInitialPostAttributes(sortBy)
+        const fullAttributes = findFullPostAttributes('Post', accountId)
+
+        const user = await User.findOne({ where: { id: accountId } })
+        const spaces = await user.getFollowedSpaces({
+            where: { state: 'active' },
+            through: { where: { relationship: 'follower', state: 'active' } },
+        })
+        // todo: if offset just use findAll and skip count?
+        const emptyPosts = await Post.findAndCountAll({
+            where: {
+                '$AllPostSpaces.id$': spaces.map((s) => s.id),
+                state: 'visible',
+                createdAt: { [Op.between]: [startDate, Date.now()] },
+                type,
+            },
+            include: [
+                {
+                    model: Space,
+                    as: 'AllPostSpaces',
+                    attributes: [],
+                    through,
+                },
+            ],
+            attributes: initialAttributes,
+            order,
+            subQuery: false,
+            limit: 10,
+            group: ['id'],
+        })
+
+        const postsWithData = await Post.findAll({
+            where: { id: emptyPosts.rows.map((post) => post.id) },
+            attributes: fullAttributes,
+            order,
+            include: findPostInclude(accountId),
+        })
+
+        res.json({ posts: postsWithData, total: emptyPosts.count })
     }
 })
 
