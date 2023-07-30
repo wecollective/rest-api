@@ -8,6 +8,9 @@ module.exports = {
                 primaryKey: true,
                 type: Sequelize.INTEGER,
             },
+            state: {
+                type: Sequelize.STRING,
+            },
             relationship: {
                 type: Sequelize.STRING,
             },

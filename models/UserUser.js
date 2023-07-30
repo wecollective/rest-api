@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
                 autoIncrement: true,
             },
             relationship: DataTypes.STRING,
+            state: DataTypes.STRING,
             userAId: DataTypes.INTEGER,
             userBId: DataTypes.INTEGER,
         },

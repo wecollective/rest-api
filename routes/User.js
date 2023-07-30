@@ -15,22 +15,10 @@ const {
     findFullPostAttributes,
     findPostWhere,
     findPostInclude,
+    isFollowingUser,
     totalUserPosts,
 } = require('../Helpers')
-const {
-    Space,
-    User,
-    Post,
-    Reaction,
-    Link,
-    Image,
-    Event,
-    GlassBeadGame,
-    GlassBead,
-    Weave,
-    Poll,
-    PollAnswer,
-} = require('../models')
+const { Space, User, Post, GlassBeadGame, UserUser } = require('../models')
 
 // GET
 router.get('/all-users', (req, res) => {
@@ -123,7 +111,8 @@ router.get('/all-users', (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
-router.get('/user-data', async (req, res) => {
+router.get('/user-data', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
     const { userHandle } = req.query
     const user = await User.findOne({
         where: { handle: userHandle, state: { [Op.not]: 'deleted' } },
@@ -136,6 +125,7 @@ router.get('/user-data', async (req, res) => {
             'coverImagePath',
             'createdAt',
             totalUserPosts,
+            isFollowingUser(accountId),
         ],
     })
     if (user) res.status(200).json(user)
@@ -221,6 +211,37 @@ router.post('/find-people', (req, res) => {
         attributes: ['id', 'handle', 'name', 'flagImagePath', 'coverImagePath'],
         subQuery: false,
     }).then((users) => res.send(users))
+})
+
+router.post('/toggle-follow-user', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { userId, isFollowing } = req.body
+
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const updateState = isFollowing
+            ? UserUser.update(
+                  { state: 'removed' },
+                  {
+                      where: {
+                          userAId: accountId,
+                          userBId: userId,
+                          relationship: 'follower',
+                          state: 'active',
+                      },
+                  }
+              )
+            : UserUser.create({
+                  userAId: accountId,
+                  userBId: userId,
+                  relationship: 'follower',
+                  state: 'active',
+              })
+
+        updateState
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
 })
 
 module.exports = router

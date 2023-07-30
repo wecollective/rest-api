@@ -565,7 +565,7 @@ function isModerator(accountId) {
     ]
 }
 
-function isFollowing(accountId) {
+function isFollowingSpace(accountId) {
     // checks user is following space
     return [
         sequelize.literal(`(
@@ -575,6 +575,21 @@ function isFollowing(accountId) {
             AND SpaceUsers.spaceId = Space.id
             AND SpaceUsers.relationship = 'follower'
             AND SpaceUsers.state = 'active'
+        )`),
+        'isFollowing',
+    ]
+}
+
+function isFollowingUser(accountId) {
+    // checks account is following user
+    return [
+        sequelize.literal(`(
+            SELECT COUNT(*)
+            FROM UserUsers
+            WHERE UserUsers.userAId = ${accountId}
+            AND UserUsers.userBId = User.id
+            AND UserUsers.relationship = 'follower'
+            AND UserUsers.state = 'active'
         )`),
         'isFollowing',
     ]
@@ -1075,7 +1090,8 @@ module.exports = {
     spaceAccess,
     ancestorAccess,
     isModerator,
-    isFollowing,
+    isFollowingSpace,
+    isFollowingUser,
     totalLikesReceivedInSpace,
     noMulterErrors,
     multerParams,

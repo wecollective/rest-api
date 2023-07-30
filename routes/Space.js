@@ -51,7 +51,7 @@ const {
     ancestorAccess,
     postAccess,
     isModerator,
-    isFollowing,
+    isFollowingSpace,
     createSQLDate,
     totalSpaceResults,
 } = require('../Helpers')
@@ -421,7 +421,7 @@ router.get('/space-data', authenticateToken, async (req, res) => {
             spaceAccess(accountId),
             ancestorAccess(accountId),
             isModerator(accountId),
-            isFollowing(accountId),
+            isFollowingSpace(accountId),
         ]
     }
 
