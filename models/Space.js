@@ -47,6 +47,13 @@ module.exports = (sequelize, DataTypes) => {
             otherKey: 'spaceBId',
         })
 
+        // Stream source relationship
+        Space.belongsToMany(models.Stream, {
+            through: models.StreamSource,
+            as: 'StreamSourceSpace',
+            foreignKey: 'sourceId',
+        })
+
         // SpacePosts relationship
         Space.belongsToMany(models.Post, {
             through: models.SpacePost,

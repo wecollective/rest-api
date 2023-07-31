@@ -78,6 +78,13 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'userId',
         })
 
+        User.belongsToMany(models.User, {
+            through: models.UserUser,
+            as: 'FollowedUsers',
+            foreignKey: 'userAId',
+            otherKey: 'userBId',
+        })
+
         // User.belongsToMany(models.Prism, {
         //     through: models.PrismUser,
         //     //as: 'ModeratedSpaces',
@@ -88,6 +95,13 @@ module.exports = (sequelize, DataTypes) => {
             through: models.UserEvent,
             // as: 'UserEvent',
             foreignKey: 'userId',
+        })
+
+        // Stream source relationship
+        User.belongsToMany(models.Stream, {
+            through: models.StreamSource,
+            as: 'StreamSourceUser',
+            foreignKey: 'sourceId',
         })
     }
     return User
