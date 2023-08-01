@@ -146,19 +146,22 @@ router.get('/stream-sources', authenticateToken, async (req, res) => {
                 where: { id, ownerId: accountId, state: 'active' },
                 attributes: ['id', 'name', 'image'],
             })
-            const spaces = await stream.getSourceSpaces({
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                through: { where: { state: 'active', sourceType: 'space' }, attributes: [] },
-                includeIgnoreAttributes: false,
-                limit: 10,
-            })
-            const users = await stream.getSourceUsers({
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                through: { where: { state: 'active', sourceType: 'user' }, attributes: [] },
-                includeIgnoreAttributes: false,
-                limit: 10,
-            })
-            res.json({ stream, spaces, users })
+            if (!stream) res.status(404).json({ message: 'Stream not found' })
+            else {
+                const spaces = await stream.getSourceSpaces({
+                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                    through: { where: { state: 'active', sourceType: 'space' }, attributes: [] },
+                    includeIgnoreAttributes: false,
+                    limit: 10,
+                })
+                const users = await stream.getSourceUsers({
+                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                    through: { where: { state: 'active', sourceType: 'user' }, attributes: [] },
+                    includeIgnoreAttributes: false,
+                    limit: 10,
+                })
+                res.json({ stream, spaces, users })
+            }
         } else {
             const user = await User.findOne({ where: { id: accountId }, attributes: ['id'] })
             const options = {
@@ -182,28 +185,33 @@ router.get('/stream-sources', authenticateToken, async (req, res) => {
 // POST
 router.post('/stream-posts', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { type, id, timeRange, postType, sortBy, sortOrder, depth, searchQuery, limit, offset } =
+    const { type, id, timeRange, postType, sortBy, sortOrder, depth, searchQuery, offset } =
         req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         // get sources
         let spaces
         let users
+        let streamFound = false
         if (type === 'custom') {
             const stream = await Stream.findOne({
                 where: { id, ownerId: accountId, state: 'active' },
                 attributes: ['id'],
             })
-            spaces = await stream.getSourceSpaces({
-                attributes: ['id'],
-                through: { where: { state: 'active', sourceType: 'space' }, attributes: [] },
-                includeIgnoreAttributes: false,
-            })
-            users = await stream.getSourceUsers({
-                attributes: ['id'],
-                through: { where: { state: 'active', sourceType: 'user' }, attributes: [] },
-                includeIgnoreAttributes: false,
-            })
+            if (!stream) res.status(404).json({ message: 'Stream not found' })
+            else {
+                streamFound = true
+                spaces = await stream.getSourceSpaces({
+                    attributes: ['id'],
+                    through: { where: { state: 'active', sourceType: 'space' }, attributes: [] },
+                    includeIgnoreAttributes: false,
+                })
+                users = await stream.getSourceUsers({
+                    attributes: ['id'],
+                    through: { where: { state: 'active', sourceType: 'user' }, attributes: [] },
+                    includeIgnoreAttributes: false,
+                })
+            }
         } else {
             const user = await User.findOne({ where: { id: accountId }, attributes: ['id'] })
             const options = {
@@ -215,45 +223,48 @@ router.post('/stream-posts', authenticateToken, async (req, res) => {
             spaces = ['all', 'spaces'].includes(type) ? await user.getFollowedSpaces(options) : []
             users = ['all', 'people'].includes(type) ? await user.getFollowedUsers(options) : []
         }
-        // set up post options
-        const order = findOrder(sortBy, sortOrder)
-        const include = spaces.length
-            ? {
-                  model: Space,
-                  as: 'AllPostSpaces',
-                  attributes: [],
-                  through: findPostThrough(depth),
-              }
-            : null
-        const where = {
-            state: 'visible',
-            type: findPostType(postType),
-            createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
+        if (streamFound || type !== 'custom') {
+            // set up post options
+            const order = findOrder(sortBy, sortOrder)
+            const include = spaces.length
+                ? {
+                      model: Space,
+                      as: 'AllPostSpaces',
+                      attributes: [],
+                      through: findPostThrough(depth),
+                  }
+                : null
+            const where = {
+                state: 'visible',
+                type: findPostType(postType),
+                createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
+            }
+            if (spaces.length && users.length) {
+                where[Op.or] = [
+                    { creatorId: users.map((p) => p.id) },
+                    { '$AllPostSpaces.id$': spaces.map((s) => s.id) },
+                ]
+            } else if (users.length) where.creatorId = users.map((p) => p.id)
+            else where['$AllPostSpaces.id$'] = spaces.map((s) => s.id)
+            // get posts
+            const emptyPosts = await Post.findAll({
+                where,
+                include,
+                attributes: findInitialPostAttributes(sortBy),
+                order,
+                subQuery: false,
+                limit: 10,
+                offset,
+                group: ['id'],
+            })
+            const postsWithData = await Post.findAll({
+                where: { id: emptyPosts.map((post) => post.id) },
+                attributes: findFullPostAttributes('Post', accountId),
+                order,
+                include: findPostInclude(accountId),
+            })
+            res.json(postsWithData)
         }
-        if (spaces.length && users.length) {
-            where[Op.or] = [
-                { creatorId: users.map((p) => p.id) },
-                { '$AllPostSpaces.id$': spaces.map((s) => s.id) },
-            ]
-        } else if (users.length) where.creatorId = users.map((p) => p.id)
-        else where['$AllPostSpaces.id$'] = spaces.map((s) => s.id)
-        // get posts
-        const emptyPosts = await Post.findAll({
-            where,
-            include,
-            attributes: findInitialPostAttributes(sortBy),
-            order,
-            subQuery: false,
-            limit: 10,
-            group: ['id'],
-        })
-        const postsWithData = await Post.findAll({
-            where: { id: emptyPosts.map((post) => post.id) },
-            attributes: findFullPostAttributes('Post', accountId),
-            order,
-            include: findPostInclude(accountId),
-        })
-        res.json(postsWithData)
     }
 })
 
@@ -269,7 +280,7 @@ router.post('/create-stream', authenticateToken, async (req, res) => {
                 const newStream = await Stream.create({
                     ownerId: accountId,
                     name,
-                    image: file.location,
+                    image: file ? file.location : null,
                     state: 'active',
                 })
                 const createSpaceSources = await Promise.all(
@@ -293,10 +304,70 @@ router.post('/create-stream', authenticateToken, async (req, res) => {
                     )
                 )
                 Promise.all([createSpaceSources, createUserSources])
-                    .then(() => res.status(200).json({ streamId: newStream.id }))
+                    .then(() => res.status(200).json(newStream))
                     .catch((error) => res.status(500).json({ message: 'Error', error }))
             }
         })
+    }
+})
+
+router.post('/edit-stream', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        multer(multerParams('stream-image', accountId)).single('file')(req, res, async (error) => {
+            const { file, body } = req
+            if (noMulterErrors(error, res)) {
+                const { streamId, name, spaceIds, userIds } = JSON.parse(body.data)
+                const update = { name }
+                if (file) update.image = file.location
+                const updatedStream = await Stream.update(update, {
+                    where: { id: streamId, ownerId: accountId },
+                })
+                if (!updatedStream) res.status(401).json({ message: 'Unauthorized' })
+                else {
+                    const removeOldSources = await StreamSource.update(
+                        { state: 'deleted' },
+                        { where: { streamId } }
+                    )
+                    // todo: if not already following, follow users and spaces
+                    const createSpaceSources = await Promise.all(
+                        spaceIds.map((id) =>
+                            StreamSource.create({
+                                streamId: streamId,
+                                sourceType: 'space',
+                                sourceId: id,
+                                state: 'active',
+                            })
+                        )
+                    )
+                    const createUserSources = await Promise.all(
+                        userIds.map((id) =>
+                            StreamSource.create({
+                                streamId: streamId,
+                                sourceType: 'user',
+                                sourceId: id,
+                                state: 'active',
+                            })
+                        )
+                    )
+                    Promise.all([removeOldSources, createSpaceSources, createUserSources])
+                        .then(() => res.status(200).json({ message: 'Success' }))
+                        .catch((error) => res.status(500).json({ message: 'Error', error }))
+                }
+            }
+        })
+    }
+})
+
+router.post('/delete-stream', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { streamId } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        Stream.update({ state: 'deleted' }, { where: { id: streamId, ownerId: accountId } })
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
