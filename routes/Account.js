@@ -373,11 +373,10 @@ router.post('/delete-stream', authenticateToken, async (req, res) => {
 
 router.post('/update-account-name', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { payload } = req.body
-
+    const { name } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        User.update({ name: payload }, { where: { id: accountId } })
+        User.update({ name }, { where: { id: accountId } })
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
@@ -385,11 +384,10 @@ router.post('/update-account-name', authenticateToken, async (req, res) => {
 
 router.post('/update-account-bio', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { payload } = req.body
-
+    const { bio } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        User.update({ bio: payload }, { where: { id: accountId } })
+        User.update({ bio }, { where: { id: accountId } })
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
