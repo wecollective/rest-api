@@ -97,7 +97,11 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'userId',
         })
 
-        // Stream source relationship
+        // Stream relationship
+        User.hasMany(models.Stream, {
+            as: 'Streams',
+            foreignKey: 'ownerId',
+        })
         User.belongsToMany(models.Stream, {
             through: models.StreamSource,
             as: 'StreamSourceUser',

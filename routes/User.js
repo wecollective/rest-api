@@ -219,6 +219,7 @@ router.post('/toggle-follow-user', authenticateToken, async (req, res) => {
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
+        // todo: notify user
         const updateState = isFollowing
             ? UserUser.update(
                   { state: 'removed' },

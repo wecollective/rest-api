@@ -28,6 +28,12 @@ const {
 const ScheduledTasks = require('../ScheduledTasks')
 const {
     unseenNotifications,
+    totalSpaceFollowers,
+    totalSpaceComments,
+    totalSpaceLikes,
+    totalSpacePosts,
+    totalUserPosts,
+    totalUserComments,
     findStartDate,
     findOrder,
     findPostType,
@@ -107,7 +113,16 @@ router.get('/toybar-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const user = await User.findOne({ where: { id: accountId } })
+        const user = await User.findOne({
+            where: { id: accountId },
+            include: {
+                model: Stream,
+                as: 'Streams',
+                where: { state: 'active' },
+                attributes: ['id', 'name', 'image'],
+                required: false,
+            },
+        })
         const spaces = await user.getFollowedSpaces({
             where: { state: 'active' },
             through: { where: { relationship: 'follower', state: 'active' } },
@@ -120,7 +135,7 @@ router.get('/toybar-data', authenticateToken, async (req, res) => {
             attributes: ['id', 'handle', 'name', 'flagImagePath'],
             limit: 10,
         })
-        res.json({ spaces, users })
+        res.json({ streams: user.Streams, spaces, users })
     }
 })
 
@@ -183,6 +198,60 @@ router.get('/stream-sources', authenticateToken, async (req, res) => {
 })
 
 // POST
+router.post('/followed-spaces', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const { offset } = req.body
+        const user = await User.findOne({ where: { id: accountId } })
+        const followedSpaces = await user.getFollowedSpaces({
+            where: { state: 'active' },
+            through: { where: { relationship: 'follower', state: 'active' } },
+            attributes: [
+                'id',
+                'handle',
+                'name',
+                'description',
+                'flagImagePath',
+                'coverImagePath',
+                'privacy',
+                totalSpaceFollowers,
+                totalSpaceComments,
+                totalSpaceLikes,
+                totalSpacePosts,
+            ],
+            limit: 10,
+            offset,
+        })
+        res.status(200).json(followedSpaces)
+    }
+})
+
+router.post('/followed-people', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const { offset } = req.body
+        const user = await User.findOne({ where: { id: accountId } })
+        const followedPeople = await user.getFollowedUsers({
+            where: { state: 'active' },
+            through: { where: { relationship: 'follower', state: 'active' } },
+            attributes: [
+                'id',
+                'handle',
+                'name',
+                'bio',
+                'flagImagePath',
+                'coverImagePath',
+                totalUserPosts,
+                totalUserComments,
+            ],
+            limit: 10,
+            offset,
+        })
+        res.status(200).json(followedPeople)
+    }
+})
 router.post('/stream-posts', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { type, id, timeRange, postType, sortBy, sortOrder, depth, searchQuery, offset } =
