@@ -167,13 +167,13 @@ router.get('/stream-sources', authenticateToken, async (req, res) => {
                     attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     through: { where: { state: 'active', sourceType: 'space' }, attributes: [] },
                     includeIgnoreAttributes: false,
-                    limit: 10,
+                    // limit: 10,
                 })
                 const users = await stream.getSourceUsers({
                     attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     through: { where: { state: 'active', sourceType: 'user' }, attributes: [] },
                     includeIgnoreAttributes: false,
-                    limit: 10,
+                    // limit: 10,
                 })
                 res.json({ stream, spaces, users })
             }
@@ -184,7 +184,7 @@ router.get('/stream-sources', authenticateToken, async (req, res) => {
                 through: { where: { relationship: 'follower', state: 'active' }, attributes: [] },
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
                 includeIgnoreAttributes: false,
-                limit: 10,
+                // limit: 10,
             }
             const spaces = ['all', 'spaces'].includes(type)
                 ? await user.getFollowedSpaces(options)
@@ -252,6 +252,7 @@ router.post('/followed-people', authenticateToken, async (req, res) => {
         res.status(200).json(followedPeople)
     }
 })
+
 router.post('/stream-posts', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { type, id, timeRange, postType, sortBy, sortOrder, depth, searchQuery, offset } =
@@ -314,25 +315,29 @@ router.post('/stream-posts', authenticateToken, async (req, res) => {
                     { '$AllPostSpaces.id$': spaces.map((s) => s.id) },
                 ]
             } else if (users.length) where.creatorId = users.map((p) => p.id)
-            else where['$AllPostSpaces.id$'] = spaces.map((s) => s.id)
-            // get posts
-            const emptyPosts = await Post.findAll({
-                where,
-                include,
-                attributes: findInitialPostAttributes(sortBy),
-                order,
-                subQuery: false,
-                limit: 10,
-                offset,
-                group: ['id'],
-            })
-            const postsWithData = await Post.findAll({
-                where: { id: emptyPosts.map((post) => post.id) },
-                attributes: findFullPostAttributes('Post', accountId),
-                order,
-                include: findPostInclude(accountId),
-            })
-            res.json(postsWithData)
+            else if (spaces.length) where['$AllPostSpaces.id$'] = spaces.map((s) => s.id)
+            // return empty array if no followed items
+            if (!users.length && !spaces.length) res.status(200).json([])
+            else {
+                // get posts
+                const emptyPosts = await Post.findAll({
+                    where,
+                    include,
+                    attributes: findInitialPostAttributes(sortBy),
+                    order,
+                    subQuery: false,
+                    limit: 10,
+                    offset,
+                    group: ['id'],
+                })
+                const postsWithData = await Post.findAll({
+                    where: { id: emptyPosts.map((post) => post.id) },
+                    attributes: findFullPostAttributes('Post', accountId),
+                    order,
+                    include: findPostInclude(accountId),
+                })
+                res.status(200).json(postsWithData)
+            }
         }
     }
 })
