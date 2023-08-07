@@ -233,6 +233,20 @@ function accountLike(itemType, model, accountId) {
     ]
 }
 
+function accountComment(itemType, model, accountId) {
+    return [
+        sequelize.literal(`(
+            SELECT COUNT(*) > 0
+            FROM Comments
+            WHERE Comments.itemType = '${itemType}'
+            AND Comments.itemId = ${model}.id
+            AND Comments.creatorId = ${accountId}
+            AND Comments.state = 'visible'
+        )`),
+        'accountComment',
+    ]
+}
+
 function accountRating(itemType, model, accountId) {
     return [
         sequelize.literal(`(
@@ -263,10 +277,10 @@ function accountRepost(itemType, model, accountId) {
     ]
 }
 
-function accountLinks(itemType, model, accountId) {
+function accountLink(itemType, model, accountId) {
     return [
         sequelize.literal(`(
-            SELECT COUNT(*)
+            SELECT COUNT(*) > 0
             FROM Links
             WHERE Links.state = 'visible'
             AND Links.creatorId = ${accountId}
@@ -276,7 +290,7 @@ function accountLinks(itemType, model, accountId) {
                 (Links.itemBId = ${model}.id AND (Links.type = 'post-${itemType}' OR Links.type = 'comment-${itemType}'))
             )
         )`),
-        'accountLinks',
+        'accountLink',
     ]
 }
 
@@ -739,9 +753,10 @@ function findFullPostAttributes(model, accountId) {
         'totalRatings',
         'totalLinks',
         accountLike('post', model, accountId),
+        accountComment('post', model, accountId),
+        accountLink('post', model, accountId),
         accountRating('post', model, accountId),
         accountRepost('post', model, accountId),
-        accountLinks('post', model, accountId),
     ]
 }
 
@@ -927,7 +942,7 @@ function findCommentAttributes(model, accountId) {
         'updatedAt',
         accountLike('comment', model, accountId),
         accountRating('comment', model, accountId),
-        accountLinks('comment', model, accountId),
+        accountLink('comment', model, accountId),
     ]
 }
 
