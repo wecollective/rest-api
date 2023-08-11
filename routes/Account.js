@@ -470,7 +470,6 @@ router.post('/update-account-bio', authenticateToken, async (req, res) => {
 router.post('/update-account-email', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { payload } = req.body
-
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         User.update({ email: payload }, { where: { id: accountId } })
@@ -482,7 +481,6 @@ router.post('/update-account-email', authenticateToken, async (req, res) => {
 router.post('/mark-notifications-seen', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const ids = req.body
-
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         Notification.update(
@@ -496,7 +494,6 @@ router.post('/mark-notifications-seen', authenticateToken, (req, res) => {
 
 router.post('/delete-account', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const removeAccountData = await User.update(
@@ -630,7 +627,6 @@ router.post('/help-message', authenticateToken, async (req, res) => {
 router.post('/respond-to-mod-invite', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { notificationId, userId, spaceId, response } = req.body
-
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const createModRelationship =
@@ -666,7 +662,6 @@ router.post('/respond-to-mod-invite', authenticateToken, async (req, res) => {
 router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId, notificationId, response } = req.body
-
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const updateUserPostState = await UserPost.update(

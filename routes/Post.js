@@ -133,6 +133,7 @@ router.get('/post-data', authenticateToken, async (req, res) => {
 })
 
 router.get('/comment-data', authenticateToken, async (req, res) => {
+    // todo: add access check
     const accountId = req.user ? req.user.id : null
     const { commentId } = req.query
     const comment = await Comment.findOne({
@@ -482,7 +483,6 @@ router.get('/plot-graph-data', (req, res) => {
 
 router.get('/scrape-url', async (req, res) => {
     const { url } = req.query
-
     const browser = await puppeteer.launch() // { headless: false })
     try {
         const page = await browser.newPage()
@@ -597,6 +597,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 cardBackText,
                 cardFrontWatermark,
                 cardBackWatermark,
+                sourceType,
+                sourceId,
+                linkDescription,
             } = postData
 
             const post = await Post.create({
@@ -1169,6 +1172,38 @@ router.post('/create-post', authenticateToken, (req, res) => {
                       })
                     : null
 
+            const createLink = sourceId
+                ? await new Promise(async (resolve) => {
+                      // todo: handle other source types when needed
+                      const source = await Post.findOne({
+                          where: { id: sourceId },
+                          attributes: ['id', 'totalLinks'],
+                      })
+                      const createNewLink = await Link.create({
+                          state: 'visible',
+                          type: `${sourceType}-post`,
+                          creatorId: accountId,
+                          itemAId: sourceId,
+                          itemBId: post.id,
+                          description: linkDescription,
+                          totalLikes: 0,
+                          totalComments: 0,
+                          totalRatings: 0,
+                      })
+                      const updateSourceLinks = await source.update(
+                          { totalLinks: source.totalLinks + 1 },
+                          { where: { id: sourceId }, silent: true }
+                      )
+                      const updateTargetLinks = await post.update(
+                          { totalLinks: 1 },
+                          { where: { id: post.id }, silent: true }
+                      )
+                      Promise.all([createNewLink, updateSourceLinks, updateTargetLinks])
+                          .then(() => resolve())
+                          .catch((error) => resolve(error))
+                  })
+                : null
+
             Promise.all([
                 createDirectRelationships,
                 createIndirectRelationships,
@@ -1180,6 +1215,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 createPoll,
                 createGBG,
                 createCard,
+                createLink,
             ]).then((data) => {
                 res.status(200).json({
                     post,
