@@ -356,6 +356,7 @@ router.get('/link-data', authenticateToken, async (req, res) => {
             'itemAId',
             'itemBId',
             'totalLikes',
+            'createdAt',
             accountLike('link', 'Link', accountId),
         ],
         include: {
@@ -2291,9 +2292,9 @@ router.post('/add-link', authenticateToken, async (req, res) => {
     }
 })
 
-router.post('/remove-link', authenticateToken, async (req, res) => {
+router.post('/delete-link', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    let { linkId } = req.body
+    const { linkId } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -2301,44 +2302,46 @@ router.post('/remove-link', authenticateToken, async (req, res) => {
             where: { id: linkId, creatorId: accountId },
             attributes: ['type', 'itemAId', 'itemBId'],
         })
+        if (!link) res.status(404).json({ message: 'Not found' })
+        else {
+            const linkTypes = link.type.split('-')
+            const sourceType = linkTypes[0]
+            const targetType = linkTypes[1]
 
-        const linkTypes = link.type.split('-')
-        const sourceType = linkTypes[0]
-        const targetType = linkTypes[1]
+            let sourceModel
+            if (sourceType === 'post') sourceModel = Post
+            if (sourceType === 'comment') sourceModel = Comment
 
-        let sourceModel
-        if (sourceType === 'post') sourceModel = Post
-        if (sourceType === 'comment') sourceModel = Comment
+            let targetModel
+            if (targetType === 'post') targetModel = Post
+            if (targetType === 'comment') targetModel = Comment
 
-        let targetModel
-        if (targetType === 'post') targetModel = Post
-        if (targetType === 'comment') targetModel = Comment
+            const source = await sourceModel.findOne({
+                where: { id: link.itemAId },
+                attributes: ['totalLinks'],
+            })
 
-        const source = await sourceModel.findOne({
-            where: { id: link.itemAId },
-            attributes: ['totalLinks'],
-        })
+            const target = await targetModel.findOne({
+                where: { id: link.itemBId },
+                attributes: ['totalLinks'],
+            })
 
-        const target = await targetModel.findOne({
-            where: { id: link.itemBId },
-            attributes: ['totalLinks'],
-        })
+            const updateSourceTotalLinks = await sourceModel.update(
+                { totalLinks: source.totalLinks - 1 },
+                { where: { id: link.itemAId }, silent: true }
+            )
 
-        const updateSourceTotalLinks = await sourceModel.update(
-            { totalLinks: source.totalLinks - 1 },
-            { where: { id: link.itemAId }, silent: true }
-        )
+            const updateTargetTotalLinks = await targetModel.update(
+                { totalLinks: target.totalLinks - 1 },
+                { where: { id: link.itemBId }, silent: true }
+            )
 
-        const updateTargetTotalLinks = await targetModel.update(
-            { totalLinks: target.totalLinks - 1 },
-            { where: { id: link.itemBId }, silent: true }
-        )
+            const removeLink = await Link.update({ state: 'deleted' }, { where: { id: linkId } })
 
-        const removeLink = await Link.update({ state: 'deleted' }, { where: { id: linkId } })
-
-        Promise.all([updateSourceTotalLinks, updateTargetTotalLinks, removeLink])
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
+            Promise.all([updateSourceTotalLinks, updateTargetTotalLinks, removeLink])
+                .then(() => res.status(200).json({ message: 'Success' }))
+                .catch((error) => res.status(500).json({ message: 'Error', error }))
+        }
     }
 })
 
