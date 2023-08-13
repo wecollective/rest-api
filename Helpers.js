@@ -841,34 +841,6 @@ function findPostInclude(accountId) {
             ],
         },
         {
-            model: Poll,
-            attributes: ['id', 'type', 'answersLocked'],
-            include: [
-                {
-                    model: PollAnswer,
-                    attributes: ['id', 'text', 'createdAt'],
-                    include: [
-                        {
-                            model: User,
-                            as: 'Creator',
-                            attributes: ['handle', 'name', 'flagImagePath'],
-                        },
-                        {
-                            model: Reaction,
-                            where: { itemType: 'poll-answer' },
-                            required: false,
-                            attributes: ['value', 'state', 'itemId', 'createdAt', 'updatedAt'],
-                            include: {
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                            },
-                        },
-                    ],
-                },
-            ],
-        },
-        {
             model: GlassBeadGame,
             // attributes: ['topic', 'topicGroup', 'topicImage'],
         },

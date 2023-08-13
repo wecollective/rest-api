@@ -459,6 +459,40 @@ router.get('/post-indirect-spaces', async (req, res) => {
     res.status(200).json(post.IndirectSpaces)
 })
 
+router.get('/poll-data', (req, res) => {
+    const { postId } = req.query
+    Poll.findOne({
+        where: { postId: postId },
+        attributes: ['id', 'type', 'answersLocked'],
+        include: [
+            {
+                model: PollAnswer,
+                attributes: ['id', 'text', 'createdAt'],
+                include: [
+                    {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['handle', 'name', 'flagImagePath'],
+                    },
+                    {
+                        model: Reaction,
+                        where: { itemType: 'poll-answer' },
+                        required: false,
+                        attributes: ['value', 'state', 'itemId', 'createdAt', 'updatedAt'],
+                        include: {
+                            model: User,
+                            as: 'Creator',
+                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                        },
+                    },
+                ],
+            },
+        ],
+    })
+        .then((pollData) => res.status(200).json(pollData))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
+})
+
 router.get('/prism-data', (req, res) => {
     const { postId } = req.query
     Prism.findOne({
