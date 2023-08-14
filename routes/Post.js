@@ -493,6 +493,48 @@ router.get('/poll-data', (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
+router.get('/gbg-data', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId } = req.query
+    const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
+    const beads = await post.getBeads({
+        attributes: [...findFullPostAttributes('Post', accountId), 'color'],
+        through: {
+            // todo: handle account deleted as well (visible used to hide drafts)
+            where: { type: 'gbg-post', state: ['visible', 'account-deleted'] },
+            attributes: ['index', 'relationship', 'state'],
+        },
+        include: [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            },
+            {
+                model: Url,
+                attributes: ['url', 'image', 'title', 'description', 'domain'],
+            },
+            {
+                model: Audio,
+                attributes: ['url'],
+            },
+            {
+                model: Image,
+                attributes: ['id', 'index', 'url', 'caption'],
+            },
+        ],
+    })
+    const players = await post.getPlayers({
+        attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
+        through: {
+            where: { type: 'glass-bead-game' },
+            attributes: ['index', 'state', 'color'],
+        },
+    })
+
+    res.status(200).json({ beads, players })
+})
+
 router.get('/prism-data', (req, res) => {
     const { postId } = req.query
     Prism.findOne({

@@ -840,48 +840,7 @@ function findPostInclude(accountId) {
                 },
             ],
         },
-        {
-            model: GlassBeadGame,
-            // attributes: ['topic', 'topicGroup', 'topicImage'],
-        },
-        {
-            model: Post,
-            as: 'Beads',
-            attributes: [...findFullPostAttributes('Beads', accountId), 'color'],
-            through: {
-                // todo: handle account deleted as well (visible used to hide drafts)
-                where: { type: 'gbg-post', state: ['visible', 'account-deleted'] },
-                attributes: ['index', 'relationship', 'state'],
-            },
-            include: [
-                {
-                    model: User,
-                    as: 'Creator',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                },
-                {
-                    model: Url,
-                    attributes: ['url', 'image', 'title', 'description', 'domain'],
-                },
-                {
-                    model: Audio,
-                    attributes: ['url'],
-                },
-                {
-                    model: Image,
-                    attributes: ['id', 'index', 'url', 'caption'],
-                },
-            ],
-        },
-        {
-            model: User,
-            as: 'Players',
-            attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
-            through: {
-                where: { type: 'glass-bead-game' },
-                attributes: ['index', 'state', 'color'],
-            },
-        },
+        { model: GlassBeadGame },
         {
             model: Post,
             as: 'CardSides',
