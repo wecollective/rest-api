@@ -1683,7 +1683,7 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                                   const nextPlayerId =
                                       +order[(post.Beads.length + 1) % post.Players.length]
                                   const nextPlayer = post.Players.find((p) => p.id === nextPlayerId)
-                                  const nextMoveNumber = post.Beads.length + 1
+                                  const nextMoveNumber = post.Beads.length + 2
                                   const createMoveNotification = await Notification.create({
                                       type: 'gbg-move',
                                       ownerId: nextPlayer.id,
@@ -1708,12 +1708,13 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                                             </p>
                                         `,
                                   })
-                                  const scheduleGBGMoveJobs = ScheduledTasks.scheduleGBGMoveJobs(
-                                      postId,
-                                      nextPlayer,
-                                      nextMoveNumber,
-                                      newDeadline
-                                  )
+                                  const scheduleGBGMoveJobs =
+                                      await ScheduledTasks.scheduleGBGMoveJobs(
+                                          postId,
+                                          nextPlayer,
+                                          nextMoveNumber,
+                                          newDeadline
+                                      )
                                   Promise.all([
                                       updateDeadline,
                                       createMoveNotification,

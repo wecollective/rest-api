@@ -71,13 +71,11 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
                             where: { state: 'visible' },
                             attributes: ['index'],
                         },
-                        include: [
-                            {
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['id'],
-                            },
-                        ],
+                        include: {
+                            model: User,
+                            as: 'Creator',
+                            attributes: ['id'],
+                        },
                     },
                 ],
             })
@@ -315,7 +313,7 @@ module.exports = {
             const { id, Beads, Players } = gbg
             const { state, movesPerPlayer, moveTimeWindow, nextMoveDeadline, playerOrder } =
                 gbg.GlassBeadGame
-            const movesLeft = Beads.length < Players.length * movesPerPlayer
+            const movesLeft = !movesPerPlayer || Beads.length < Players.length * movesPerPlayer
             if (
                 state === 'active' &&
                 Players.length > 0 &&

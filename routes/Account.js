@@ -74,7 +74,10 @@ router.get('/account-notifications', authenticateToken, (req, res) => {
     else {
         Notification.findAll({
             where: { ownerId: accountId },
-            order: [['createdAt', 'DESC']],
+            order: [
+                ['createdAt', 'DESC'],
+                ['id', 'DESC'],
+            ],
             include: [
                 {
                     model: User,
