@@ -70,6 +70,7 @@ router.get('/account-data', authenticateToken, (req, res) => {
 
 router.get('/account-notifications', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
+    const { offset } = req.query
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         Notification.findAll({
@@ -78,6 +79,8 @@ router.get('/account-notifications', authenticateToken, (req, res) => {
                 ['createdAt', 'DESC'],
                 ['id', 'DESC'],
             ],
+            limit: 10,
+            offset: +offset,
             include: [
                 {
                     model: User,
@@ -97,13 +100,11 @@ router.get('/account-notifications', authenticateToken, (req, res) => {
                 {
                     model: Post,
                     as: 'relatedPost',
-                    include: [
-                        {
-                            model: GlassBeadGame,
-                            attributes: ['state'],
-                            required: false,
-                        },
-                    ],
+                    include: {
+                        model: GlassBeadGame,
+                        attributes: ['state'],
+                        required: false,
+                    },
                 },
             ],
         })
