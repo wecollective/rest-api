@@ -451,6 +451,12 @@ router.get('/space-data', authenticateToken, async (req, res) => {
                 attributes: ['id'],
                 through: { attributes: [], where: { state: { [Op.or]: ['open', 'closed'] } } },
             },
+            {
+                model: User,
+                as: 'Moderators',
+                attributes: ['id'],
+                through: { attributes: [], where: { state: 'active', relationship: 'moderator' } },
+            },
         ],
     })
 
