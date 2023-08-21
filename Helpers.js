@@ -763,7 +763,7 @@ function findFullPostAttributes(model, accountId) {
 function findPostThrough(depth) {
     const relationship =
         depth === 'All Contained Posts' ? { [Op.or]: ['direct', 'indirect'] } : 'direct'
-    return { where: { relationship }, attributes: [] }
+    return { where: { state: 'active', relationship }, attributes: [] }
 }
 
 function findPostWhere(location, id, startDate, type, searchQuery) {

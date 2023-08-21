@@ -75,10 +75,7 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
-        // Link.update(
-        //     { totalLikes: 0, totalComments: 0, totalRatings: 0 },
-        //     { where: { totalLikes: null }, silent: true }
-        // )
+        // SpacePost.update({ state: 'active' }, { where: { state: null }, silent: true })
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json({ error }))
 
@@ -696,6 +693,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                         creatorId: accountId,
                         postId: post.id,
                         spaceId,
+                        state: 'active',
                     })
                 )
             )
@@ -728,6 +726,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                             creatorId: accountId,
                             postId: post.id,
                             spaceId: id,
+                            state: 'active',
                         })
                     )
                 )
@@ -1865,6 +1864,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                     creatorId: accountId,
                     postId,
                     spaceId: id,
+                    state: 'active',
                 })
             )
         )
@@ -1906,6 +1906,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                                     creatorId: accountId,
                                     postId,
                                     spaceId: id,
+                                    state: 'active',
                                 })
                                     .then(() => reso(id))
                                     .catch((error) => reso(error))
@@ -3047,6 +3048,69 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
             : null
 
         Promise.all([removePost, removeEvent])
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/remove-post', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId, spaceId, spaceHandle } = req.body
+
+    const isMod = await SpaceUser.findOne({
+        where: { userId: accountId, spaceId, relationship: 'moderator' },
+        attributes: ['id'],
+    })
+
+    if (!accountId || !isMod) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const post = await Post.findOne({
+            where: { id: postId },
+            attributes: [],
+            include: {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'email'],
+            },
+        })
+        const isOwnPost = post.Creator.id === accountId
+        const updatePostEntry = await SpacePost.update(
+            { state: 'removed-by-mod' },
+            { where: { postId, spaceId } }
+        )
+        const sendNotification = isOwnPost
+            ? null
+            : await Notification.create({
+                  ownerId: post.Creator.id,
+                  type: 'post-removed-by-mods',
+                  seen: false,
+                  postId,
+                  spaceAId: spaceId,
+              })
+        const sendEmail = isOwnPost
+            ? null
+            : await sgMail.send({
+                  to: post.Creator.email,
+                  from: { email: 'admin@weco.io', name: 'we { collective }' },
+                  subject: 'New notification',
+                  text: `
+                Hi ${post.Creator.name}, your post was just removed from s/${spaceHandle} by its mods:
+                http://${config.appURL}/p/${postId}
+            `,
+                  html: `
+                <p>
+                    Hi ${post.Creator.name},
+                    <br/>
+                    Your 
+                    <a href='${config.appURL}/p/${postId}'>post</a>
+                    was just removed from 
+                    <a href='${config.appURL}/s/${spaceHandle}'>s/${spaceHandle}</a>
+                    by its mods
+                </p>
+            `,
+              })
+
+        Promise.all([updatePostEntry, sendNotification, sendEmail])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }

@@ -13,6 +13,7 @@ module.exports = (sequelize, DataTypes) => {
             creatorId: DataTypes.INTEGER,
             postId: DataTypes.INTEGER,
             spaceId: DataTypes.INTEGER,
+            state: DataTypes.STRING,
         },
         {}
     )
