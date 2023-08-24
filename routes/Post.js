@@ -75,7 +75,7 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
-        // SpacePost.update({ state: 'active' }, { where: { state: null }, silent: true })
+        // PollAnswer.update({ state: 'active' }, { where: { state: null }, silent: true })
         //     .then(() => res.status(200).json({ message: 'success' }))
         //     .catch((error) => res.status(500).json({ error }))
 
@@ -465,6 +465,7 @@ router.get('/poll-data', (req, res) => {
             {
                 model: PollAnswer,
                 attributes: ['id', 'text', 'createdAt'],
+                where: { state: 'active' },
                 include: [
                     {
                         model: User,
@@ -850,6 +851,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                       pollId: newPoll.id,
                                       creatorId: accountId,
                                       text: answer.text,
+                                      state: 'active',
                                   })
                               )
                           ).then((answers) => resolve({ poll: newPoll, answers }))
@@ -2929,6 +2931,7 @@ router.post('/new-poll-answer', authenticateToken, async (req, res) => {
             pollId,
             creatorId: accountId,
             text: newAnswer,
+            state: 'active',
         })
             .then((pollAnswer) => res.status(200).json({ pollAnswer }))
             .catch((error) => res.status(500).json({ error }))

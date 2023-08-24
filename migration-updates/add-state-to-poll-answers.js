@@ -7,7 +7,7 @@ module.exports = {
         return queryInterface.sequelize.transaction((t) => {
             return Promise.all([
                 queryInterface.addColumn(
-                    'SpacePosts',
+                    'PollAnswers',
                     'state',
                     {
                         type: Sequelize.DataTypes.STRING,
@@ -21,7 +21,7 @@ module.exports = {
     down: (queryInterface, Sequelize) => {
         return queryInterface.sequelize.transaction((t) => {
             return Promise.all([
-                queryInterface.removeColumn('SpacePosts', 'state', { transaction: t }),
+                queryInterface.removeColumn('PollAnswers', 'state', { transaction: t }),
             ])
         })
     },
