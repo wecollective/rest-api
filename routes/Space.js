@@ -896,7 +896,6 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
     if (sortBy === 'Posts') fullAttributes.push(totalSpacePosts)
     if (sortBy === 'Comments') fullAttributes.push(totalSpaceComments)
     if (sortBy === 'Likes') fullAttributes.push(totalSpaceLikes)
-    if (sortBy === 'Ratings') fullAttributes.push(totalSpaceRatings)
 
     function findAttributes(type) {
         let attributes = ['id', 'createdAt']

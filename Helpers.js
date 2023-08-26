@@ -169,6 +169,12 @@ function findOrder(sortBy, sortOrder) {
             ['lastActivity', direction],
             ['id', 'ASC'],
         ]
+    if (sortBy === 'Signal')
+        return [
+            [sequelize.literal(`totalRatings`), direction],
+            ['createdAt', 'DESC'],
+            ['id', 'ASC'],
+        ]
     return [
         [sequelize.literal(`total${sortBy}`), direction],
         ['createdAt', 'DESC'],
@@ -722,19 +728,13 @@ function findInitialPostAttributes(sortBy) {
     if (sortBy === 'Links') attributes.push('totalLinks')
     if (sortBy === 'Comments') attributes.push('totalComments')
     if (sortBy === 'Likes') attributes.push('totalLikes')
-    if (sortBy === 'Ratings') attributes.push('totalRatings')
+    if (sortBy === 'Signal') attributes.push('totalRatings')
     if (sortBy === 'Reposts') attributes.push('totalReposts')
     return attributes
 }
 
 function findInitialPostAttributesWithAccess(sortBy, accountId) {
-    const attributes = ['id', postAccess(accountId)]
-    if (sortBy === 'Links') attributes.push('totalLinks')
-    if (sortBy === 'Comments') attributes.push('totalComments')
-    if (sortBy === 'Likes') attributes.push('totalLikes')
-    if (sortBy === 'Ratings') attributes.push('totalRatings')
-    if (sortBy === 'Reposts') attributes.push('totalReposts')
-    return attributes
+    return [...findInitialPostAttributes(sortBy), postAccess(accountId)]
 }
 
 function findFullPostAttributes(model, accountId) {
