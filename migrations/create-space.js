@@ -33,6 +33,9 @@ module.exports = {
             coverImagePath: {
                 type: Sequelize.TEXT,
             },
+            inviteToken: {
+                type: Sequelize.TEXT,
+            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE,

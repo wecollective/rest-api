@@ -16,6 +16,7 @@ module.exports = (sequelize, DataTypes) => {
             description: DataTypes.TEXT,
             flagImagePath: DataTypes.TEXT,
             coverImagePath: DataTypes.TEXT,
+            inviteToken: DataTypes.TEXT,
         },
         {}
     )

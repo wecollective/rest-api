@@ -4,6 +4,7 @@ const express = require('express')
 const router = express.Router()
 const sequelize = require('sequelize')
 const Op = sequelize.Op
+const crypto = require('crypto')
 const { v4: uuidv4 } = require('uuid')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
@@ -406,8 +407,9 @@ router.get('/space-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { handle } = req.query
 
-    function findSpaceDataAttributes(handle, accountId) {
-        return [
+    const spaceData = await Space.findOne({
+        where: { handle, state: 'active' },
+        attributes: [
             'id',
             'handle',
             'name',
@@ -415,6 +417,7 @@ router.get('/space-data', authenticateToken, async (req, res) => {
             'flagImagePath',
             'coverImagePath',
             'privacy',
+            'inviteToken',
             totalSpaceSpaces,
             totalSpacePosts,
             handle === 'all' ? totalUsers : totalSpaceUsers,
@@ -422,12 +425,7 @@ router.get('/space-data', authenticateToken, async (req, res) => {
             ancestorAccess(accountId),
             isModerator(accountId),
             isFollowingSpace(accountId),
-        ]
-    }
-
-    const spaceData = await Space.findOne({
-        where: { handle, state: 'active' },
-        attributes: findSpaceDataAttributes(handle, accountId),
+        ],
         include: [
             // todo: remove DirectParentSpaces and retrieve seperately where needed
             // (Navbar, ParentSpaceRequestModal, RemoveParentSpaceModal, SpaceNavigationList, SpacePageSpaceMap)
@@ -794,7 +792,6 @@ router.get('/space-spaces', authenticateToken, (req, res) => {
 router.get('/space-people', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { spaceId, timeRange, sortBy, sortOrder, searchQuery, limit, offset } = req.query
-    // console.log(req.query)
 
     User.findAll({
         where: {
@@ -1419,6 +1416,7 @@ router.post('/create-space', authenticateToken, async (req, res) => {
             description,
             state: 'active',
             privacy: private ? 'private' : 'public',
+            inviteToken: private ? crypto.randomBytes(64).toString('hex') : null,
         })
 
         const createModRelationship = SpaceUser.create({
@@ -1910,6 +1908,47 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
         Promise.all([updateAccess, followSpace, updateModNotifications, notifyRequestCreator])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/accept-space-invite-link', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { spaceId, inviteToken } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const validToken = await Space.findOne({
+            where: { id: spaceId, inviteToken },
+            attributes: ['id'],
+        })
+        if (!validToken) res.status(401).json({ message: 'Invalid token' })
+        else {
+            const removePending = await SpaceUser.update(
+                { state: 'removed' },
+                {
+                    where: {
+                        spaceId,
+                        userId: accountId,
+                        relationship: 'access',
+                        state: 'pending',
+                    },
+                }
+            )
+            const createAccess = await SpaceUser.create({
+                spaceId,
+                userId: accountId,
+                relationship: 'access',
+                state: 'active',
+            })
+            const followSpace = await SpaceUser.create({
+                spaceId,
+                userId: accountId,
+                relationship: 'follower',
+                state: 'active',
+            })
+            Promise.all([removePending, createAccess, followSpace])
+                .then(() => res.status(200).json({ message: 'Success' }))
+                .catch((error) => res.status(500).json({ message: 'Error', error }))
+        }
     }
 })
 

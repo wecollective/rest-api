@@ -13,6 +13,7 @@ const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 const authenticateToken = require('../middleware/authenticateToken')
 const sequelize = require('sequelize')
 const Op = sequelize.Op
+const crypto = require('crypto')
 const {
     defaultPostValues,
     findFullPostAttributes,
@@ -74,6 +75,13 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
+
+        // Space.update(
+        //     { inviteToken: crypto.randomBytes(64).toString('hex') },
+        //     { where: { privacy: 'private' }, silent: true }
+        // )
+        //     .then(() => res.status(200).json({ message: 'success' }))
+        //     .catch((error) => res.status(500).json({ error }))
 
         // PollAnswer.update({ state: 'active' }, { where: { state: null }, silent: true })
         //     .then(() => res.status(200).json({ message: 'success' }))
