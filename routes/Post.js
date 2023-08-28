@@ -75,44 +75,6 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
-
-        // Space.update(
-        //     { inviteToken: crypto.randomBytes(64).toString('hex') },
-        //     { where: { privacy: 'private' }, silent: true }
-        // )
-        //     .then(() => res.status(200).json({ message: 'success' }))
-        //     .catch((error) => res.status(500).json({ error }))
-
-        // PollAnswer.update({ state: 'active' }, { where: { state: null }, silent: true })
-        //     .then(() => res.status(200).json({ message: 'success' }))
-        //     .catch((error) => res.status(500).json({ error }))
-
-        // // update reaction values
-        // const reactions = await Reaction.findAll()
-        // Promise.all(
-        //     reactions.map(
-        //         async (reaction) =>
-        //             await new Promise((resolve) => {
-        //                 if (reaction.type === 'vote') {
-        //                     Reaction.update(
-        //                         {
-        //                             itemType: 'poll-answer',
-        //                             itemId: reaction.pollAnswerId,
-        //                             parentItemId: reaction.postId,
-        //                         },
-        //                         { where: { id: reaction.id }, silent: true }
-        //                     ).then(() => resolve())
-        //                 } else {
-        //                     Reaction.update(
-        //                         { itemType: 'post', itemId: reaction.postId },
-        //                         { where: { id: reaction.id }, silent: true }
-        //                     ).then(() => resolve())
-        //                 }
-        //             })
-        //     )
-        // )
-        //     .then(() => res.status(200).json({ message: 'success' }))
-        //     .catch((error) => res.status(500).json({ error }))
     }
 })
 

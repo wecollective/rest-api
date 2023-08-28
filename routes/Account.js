@@ -449,6 +449,30 @@ router.post('/delete-stream', authenticateToken, async (req, res) => {
     }
 })
 
+router.post('/liked-posts', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { offset } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const order = findOrder('Date Created', 'Descending')
+        const likes = await Reaction.findAll({
+            where: { creatorId: accountId, type: 'like', itemType: 'post', state: 'active' },
+            attributes: ['itemId'],
+            order,
+            subQuery: false,
+            limit: 10,
+            offset,
+        })
+        const posts = await Post.findAll({
+            where: { id: likes.map((like) => like.itemId) },
+            attributes: findFullPostAttributes('Post', accountId),
+            order,
+            include: findPostInclude(accountId),
+        })
+        res.status(200).json(posts)
+    }
+})
+
 router.post('/update-account-name', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { name } = req.body
