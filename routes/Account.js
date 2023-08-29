@@ -454,11 +454,10 @@ router.post('/liked-posts', authenticateToken, async (req, res) => {
     const { offset } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const order = findOrder('Date Created', 'Descending')
         const likes = await Reaction.findAll({
             where: { creatorId: accountId, type: 'like', itemType: 'post', state: 'active' },
             attributes: ['itemId'],
-            order,
+            order: findOrder('Date Created', 'Descending'),
             subQuery: false,
             limit: 10,
             offset,
@@ -466,10 +465,15 @@ router.post('/liked-posts', authenticateToken, async (req, res) => {
         const posts = await Post.findAll({
             where: { id: likes.map((like) => like.itemId) },
             attributes: findFullPostAttributes('Post', accountId),
-            order,
             include: findPostInclude(accountId),
         })
-        res.status(200).json(posts)
+        // order posts by reaction date
+        const orderedPosts = []
+        likes.forEach((like) => {
+            const post = posts.find((p) => p.id === like.itemId)
+            orderedPosts.push(post)
+        })
+        res.status(200).json(orderedPosts)
     }
 })
 
