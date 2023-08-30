@@ -5,9 +5,10 @@ const router = express.Router()
 const sequelize = require('sequelize')
 const { Op } = sequelize
 const sgMail = require('@sendgrid/mail')
-const multer = require('multer')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
+const multer = require('multer')
 const authenticateToken = require('../middleware/authenticateToken')
+const ScheduledTasks = require('../ScheduledTasks')
 const {
     Space,
     User,
@@ -18,14 +19,11 @@ const {
     Comment,
     Stream,
     StreamSource,
-    Weave,
-    Event,
     UserEvent,
     Link,
     Reaction,
     GlassBeadGame,
 } = require('../models')
-const ScheduledTasks = require('../ScheduledTasks')
 const {
     unseenNotifications,
     totalSpaceFollowers,
@@ -40,7 +38,6 @@ const {
     findInitialPostAttributes,
     findFullPostAttributes,
     findPostThrough,
-    findPostWhere,
     findPostInclude,
     multerParams,
     noMulterErrors,
