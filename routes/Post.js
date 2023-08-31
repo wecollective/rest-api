@@ -84,113 +84,257 @@ router.get('/test', async (req, res) => {
 
         const spaceId = 99999
         const public = true
+        const useTagsAsSpaces = true
+        const spaceHandlePrefix = 'mc'
+        const users = []
+        const spaces = []
+        const posts = []
+        const comments = []
 
-        // get users
-        const users = await new Promise((resolve) => {
-            client.query(`SELECT * FROM users WHERE users.id > 0`, (error, result) => {
-                if (error) resolve('error')
-                else
-                    resolve(
-                        result.rows.map((user) => {
-                            return {
-                                id: user.id,
-                                name: user.name || user.username,
-                                handle: user.username,
-                            }
-                        })
+        const getUsers = await new Promise((resolve1) => {
+            client.query(`SELECT * FROM users WHERE users.id > 0`, async (error, result) => {
+                if (error) resolve1(error)
+                else {
+                    Promise.all(
+                        result.rows.map(
+                            (user) =>
+                                // attach user data
+                                new Promise(async (resolve2) => {
+                                    // get email
+                                    const email = await new Promise(async (resolve3) => {
+                                        client.query(
+                                            `SELECT * FROM user_emails WHERE user_emails.user_id = ${user.id} `,
+                                            (error, result) => {
+                                                if (error || !result.rows[0]) resolve3(null)
+                                                else resolve3(result.rows[0].email)
+                                            }
+                                        )
+                                    })
+                                    // get bio
+                                    const bio = await new Promise(async (resolve3) => {
+                                        client.query(
+                                            `SELECT * FROM user_profiles WHERE user_profiles.user_id = ${user.id} `,
+                                            (error, result) => {
+                                                if (error || !result.rows[0]) resolve3(null)
+                                                else resolve3(result.rows[0].bio_raw)
+                                            }
+                                        )
+                                    })
+                                    // check for matching weco user
+                                    const wecoMatchId = await new Promise(async (resolve3) => {
+                                        const matchingUser = await User.findOne({
+                                            where: { email },
+                                        })
+                                        resolve3(matchingUser ? matchingUser.id : null)
+                                    })
+                                    // add user
+                                    users.push({
+                                        id: user.id,
+                                        name: user.name || user.username,
+                                        handle: user.username,
+                                        email,
+                                        bio,
+                                        wecoMatchId,
+                                    })
+                                    resolve2()
+                                })
+                        )
                     )
+                        .then(() => resolve1())
+                        .catch((err) => resolve1(err))
+                }
             })
         })
 
-        // add email, bio, and weco match id (if present) to users
-        const usersWithData = await Promise.all(
-            users.map(
-                (user) =>
-                    new Promise(async (resolve) => {
-                        const email = await new Promise(async (reso) => {
-                            client.query(
-                                `SELECT * FROM user_emails WHERE user_emails.user_id = ${user.id} `,
-                                (error, result) => {
-                                    if (error || !result.rows[0]) reso(null)
-                                    else reso(result.rows[0].email)
-                                }
-                            )
-                        })
-                        const bio = await new Promise(async (reso) => {
-                            client.query(
-                                `SELECT * FROM user_profiles WHERE user_profiles.user_id = ${user.mm_id} `,
-                                (error, result) => {
-                                    if (error || !result.rows[0]) reso(null)
-                                    else reso(result.rows[0].bio_raw)
-                                }
-                            )
-                        })
-                        const weocMatchId = await new Promise(async (reso) => {
-                            const matchingUser = await User.findOne({ where: { email } })
-                            reso(matchingUser ? matchingUser.id : null)
-                        })
-                        resolve({ ...user, email, bio, weocMatchId })
-                    })
-            )
-        )
+        const getSpaces = useTagsAsSpaces
+            ? await new Promise((resolve) => {
+                  // get tags
+                  client.query(`SELECT * FROM tags`, (error, result) => {
+                      if (error) resolve(error)
+                      else {
+                          result.rows.forEach((tag) => {
+                              spaces.push({
+                                  id: tag.id,
+                                  name: tag.name,
+                                  description: tag.description,
+                              })
+                          })
+                          resolve()
+                      }
+                  })
+              })
+            : await new Promise((resolve) => {
+                  // get categories
+                  client.query(`SELECT * FROM categories`, (error, result) => {
+                      if (error) resolve(error)
+                      else {
+                          result.rows.forEach((category) => {
+                              spaces.push({
+                                  id: category.id,
+                                  name: category.name,
+                                  handle: category.slug,
+                                  description: category.description,
+                                  private: category.read_restricted,
+                              })
+                          })
+                          resolve()
+                      }
+                  })
+              })
 
-        res.status(200).json(usersWithData.filter((u) => u.matchId))
-
-        const addUsers = await Promise.all(
-            usersWithData.map(
-                (user) =>
-                    new Promise(async (resolve) => {
-                        if (user.matchId) {
-                            // skip if public space
-                            if (public) resolve()
-                            else {
-                                // add space access if not yet present
-                                const spaceAccess = await SpaceUser.findOne({
-                                    where: {
-                                        userId: user.matchId,
-                                        spaceId,
-                                        relationship: 'access',
-                                        state: 'active',
-                                    },
-                                })
-                                if (spaceAccess) resolve()
-                                else {
-                                    SpaceUser.create({
-                                        relationship: 'access',
-                                        state: 'active',
-                                        spaceId,
-                                        userId: user.matchId,
+        const getPosts = await new Promise((resolve1) => {
+            client.query(
+                `SELECT * FROM topics WHERE archetype = 'regular' AND user_id > 0 ORDER BY created_at ASC`,
+                (error, result) => {
+                    if (error) resolve('error')
+                    else {
+                        Promise.all(
+                            result.rows.map(
+                                (post) =>
+                                    // attach post data
+                                    new Promise(async (resolve2) => {
+                                        // first comment used as post text
+                                        const firstComment = await new Promise(async (resolve3) => {
+                                            client.query(
+                                                `SELECT * FROM posts WHERE topic_id = ${post.id} AND post_number = 1`,
+                                                (error, result) => {
+                                                    if (error || !result.rows[0]) resolve3('')
+                                                    else resolve3(result.rows[0].raw)
+                                                }
+                                            )
+                                        })
+                                        // get post tags if used for spaces
+                                        const postTags = useTagsAsSpaces
+                                            ? await new Promise(async (resolve3) => {
+                                                  client.query(
+                                                      `SELECT * FROM topic_tags WHERE topic_id = ${post.id} `,
+                                                      (error, result) => {
+                                                          if (error || !result.rows[0]) resolve3([])
+                                                          else {
+                                                              let matchedTags = []
+                                                              result.rows.forEach((tag) => {
+                                                                  const match = spaces.find(
+                                                                      (s) => s.id === tag.tag_id
+                                                                  )
+                                                                  if (match) matchedTags.push(match)
+                                                              })
+                                                              resolve3(matchedTags)
+                                                          }
+                                                      }
+                                                  )
+                                              })
+                                            : null
+                                        // add post
+                                        posts.push({
+                                            id: post.id,
+                                            creatorId: post.user_id,
+                                            title: post.title,
+                                            text: firstComment,
+                                            categoryId: post.category_id,
+                                            deleted: post.deleted_at,
+                                            createdAt: post.created_at,
+                                            postTags,
+                                        })
+                                        resolve2()
                                     })
-                                        .then(() => resolve())
-                                        .catch(() => resolve('error'))
-                                }
-                            }
-                        } else {
-                            // create new user
-                            const newUser = await User.create({
-                                name: user.name,
-                                handle: user.handle,
-                                email,
-                                bio,
-                                emailVerified: false,
-                                state: 'unclaimed',
-                            })
-                            //  grant access if private space
-                            const grantAccess = public
-                                ? null
-                                : await SpaceUser.create({
-                                      relationship: 'access',
-                                      state: 'active',
-                                      spaceId,
-                                      userId: newUser.id,
-                                  })
-                            Promise.all([newUser, grantAccess])
-                                .then(() => resolve())
-                                .catch((error) => resolve(error))
-                        }
-                    })
+                            )
+                        )
+                            .then(() => resolve1())
+                            .catch((err) => resolve1(err))
+                    }
+                }
             )
-        )
+        })
+
+        const getComments = await new Promise((resolve) => {
+            client.query(
+                `SELECT * FROM posts WHERE user_id > 0 ORDER BY created_at ASC`,
+                (error, result) => {
+                    if (error) resolve(error)
+                    else {
+                        result.rows.forEach((comment) => {
+                            comments.push({
+                                postId: comment.topic_id,
+                                creatorId: comment.user_id,
+                                text: comment.raw,
+                                deleted: comment.deleted_at,
+                                createdAt: comment.created_at,
+                                commentNumber: comment.post_number,
+                                replyToCommentNumber: comment.reply_to_post_number,
+                            })
+                        })
+                        resolve()
+                    }
+                }
+            )
+        })
+
+        const tasks = [getUsers, getSpaces, getPosts, getComments]
+        for (const task of tasks) await task
+
+        res.status(200).json(comments)
+
+        // create spaces
+
+        // const addUsers = await Promise.all(
+        //     usersWithData.map(
+        //         (user) =>
+        //             new Promise(async (resolve) => {
+        //                 if (user.matchId) {
+        //                     // skip if public space
+        //                     if (public) resolve()
+        //                     else {
+        //                         // add space access if not yet present
+        //                         const spaceAccess = await SpaceUser.findOne({
+        //                             where: {
+        //                                 userId: user.matchId,
+        //                                 spaceId,
+        //                                 relationship: 'access',
+        //                                 state: 'active',
+        //                             },
+        //                         })
+        //                         if (spaceAccess) resolve()
+        //                         else {
+        //                             SpaceUser.create({
+        //                                 relationship: 'access',
+        //                                 state: 'active',
+        //                                 spaceId,
+        //                                 userId: user.matchId,
+        //                             })
+        //                                 .then(() => resolve())
+        //                                 .catch(() => resolve('error'))
+        //                         }
+        //                     }
+        //                 } else {
+        //                     // create new user
+        //                     const newUser = await User.create({
+        //                         name: user.name,
+        //                         handle: user.handle,
+        //                         email,
+        //                         bio,
+        //                         emailVerified: false,
+        //                         state: 'unclaimed',
+        //                     })
+        //                     //  grant access if private space
+        //                     const grantAccess = public
+        //                         ? null
+        //                         : await SpaceUser.create({
+        //                               relationship: 'access',
+        //                               state: 'active',
+        //                               spaceId,
+        //                               userId: newUser.id,
+        //                           })
+        //                     Promise.all([newUser, grantAccess])
+        //                         .then(() => resolve())
+        //                         .catch((error) => resolve(error))
+        //                 }
+        //             })
+        //     )
+        // )
+
+        // add posts
+
+        // add comments
     }
 })
 
@@ -3203,3 +3347,38 @@ router.post('/remove-post', authenticateToken, async (req, res) => {
 })
 
 module.exports = router
+
+// // add email, bio, and weco match id (if present) to users
+// const addUserData = await Promise.all(
+//     users.map(
+//         (user) =>
+//             new Promise(async (resolve) => {
+//                 const email = await new Promise(async (reso) => {
+//                     client.query(
+//                         `SELECT * FROM user_emails WHERE user_emails.user_id = ${user.id} `,
+//                         (error, result) => {
+//                             if (error || !result.rows[0]) reso(null)
+//                             else reso(result.rows[0].email)
+//                         }
+//                     )
+//                 })
+//                 const bio = await new Promise(async (reso) => {
+//                     client.query(
+//                         `SELECT * FROM user_profiles WHERE user_profiles.user_id = ${user.id} `,
+//                         (error, result) => {
+//                             if (error || !result.rows[0]) reso(null)
+//                             else reso(result.rows[0].bio_raw)
+//                         }
+//                     )
+//                 })
+//                 const weocMatchId = await new Promise(async (reso) => {
+//                     const matchingUser = await User.findOne({ where: { email } })
+//                     reso(matchingUser ? matchingUser.id : null)
+//                 })
+//                 user.email = email
+//                 user.bio = bio
+//                 user.weocMatchId = weocMatchId
+//                 resolve()
+//             })
+//     )
+// )
