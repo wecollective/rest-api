@@ -46,44 +46,6 @@ router.post('/log-in', async (req, res) => {
     }
 })
 
-router.post('/verfiy-mm-email', async (req, res) => {
-    const { mmEmail, mmPassword } = req.body
-    const match = await User.findOne({ where: { email: mmEmail, [Op.not]: { mmId: null } } })
-    if (!match) res.status(403).send({ message: 'No matching account found' })
-    else if (match.state !== 'unclaimed')
-        res.status(403).send({ message: 'Account already claimed' })
-    else {
-        const hashedPassword = await bcrypt.hash(mmPassword, 10)
-        const emailToken = crypto.randomBytes(64).toString('hex')
-        const updateAccount = await User.update(
-            { password: hashedPassword, emailToken },
-            { where: { email: mmEmail } }
-        )
-        const sendEmail = await sgMail.send({
-            to: mmEmail,
-            from: {
-                email: 'admin@weco.io',
-                name: 'we { collective }',
-            },
-            subject: 'Verify your email',
-            text: `
-                Hi, we've recieved a request to reclaim your metamodern forum account on weco.io.
-                If this was you, copy and paste the address below to verify your account:
-                http://${appURL}?alert=verify-email&token=${emailToken}
-            `,
-            html: `
-                <h1>Hi</h1>
-                <p>We've recieved a request to reclaim your metamodern forum account on weco.io.</p>
-                <p>If this was you, click the link below to verify your account:</p>
-                <a href='${appURL}?alert=verify-email&token=${emailToken}'>Verfiy your account</a>
-            `,
-        })
-        Promise.all([updateAccount, sendEmail])
-            .then(() => res.status(200).send('success'))
-            .catch(() => res.status(500).send('error'))
-    }
-})
-
 router.post('/register', async (req, res) => {
     const { reCaptchaToken, handle, name, email, password } = req.body
     // verify recaptcha
@@ -228,6 +190,37 @@ router.post('/verify-email', async (req, res) => {
         })
         Promise.all([markEmailVerified, createNotification])
             .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).send(error))
+    }
+})
+
+router.post('/claim-account', async (req, res) => {
+    const { email, password } = req.body
+    const match = await User.findOne({ where: { email } })
+    if (!match) res.status(403).send({ message: 'Account not found' })
+    else if (match.state !== 'unclaimed')
+        res.status(403).send({ message: 'Account already claimed' })
+    else {
+        const hashedPassword = await bcrypt.hash(password, 10)
+        const emailToken = crypto.randomBytes(64).toString('hex')
+        const updateAccount = await match.update({ password: hashedPassword, emailToken })
+        const sendEmail = await sgMail.send({
+            to: email,
+            from: { email: 'admin@weco.io', name: 'we { collective }' },
+            subject: 'Claim your account',
+            text: `
+                Hi, we've recieved a request to claim your account on weco.io.
+                If this was you, copy and paste the address below to verify your email:
+                http://${appURL}?alert=verify-email&token=${emailToken}
+            `,
+            html: `
+                <h1>Hi</h1>
+                <p>We've recieved a request to claim your account on weco.io.</p>
+                <p>If this was you, click <a href='${appURL}?alert=verify-email&token=${emailToken}'>here</a> to verify your email.</p>
+            `,
+        })
+        Promise.all([updateAccount, sendEmail])
+            .then(() => res.status(200).send({ message: 'Success' }))
             .catch((error) => res.status(500).send(error))
     }
 })
