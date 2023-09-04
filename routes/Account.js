@@ -14,6 +14,7 @@ const {
     User,
     Notification,
     SpaceUser,
+    UserUser,
     UserPost,
     Post,
     Comment,
@@ -195,6 +196,20 @@ router.get('/stream-sources', authenticateToken, async (req, res) => {
                 : []
             res.json({ spaces, users })
         }
+    }
+})
+
+router.get('/muted-users', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const user = await User.findOne({ where: { id: accountId }, attributes: ['id'] })
+        const mutedUsers = await user.getMutedUsers({
+            where: { state: 'active' },
+            through: { where: { relationship: 'muted', state: 'active' } },
+            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        })
+        res.status(200).json(mutedUsers)
     }
 })
 
@@ -516,6 +531,33 @@ router.post('/mark-notifications-seen', authenticateToken, (req, res) => {
             { seen: true },
             { where: { id: ids, ownerId: accountId }, silent: true }
         )
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/save-muted-users', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { userIds } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const user = await User.findOne({ where: { id: accountId }, attributes: ['id'] })
+        const mutedUsers = await user.getMutedUsers({
+            where: { state: 'active' },
+            through: { where: { relationship: 'muted', state: 'active' } },
+            attributes: ['id'],
+        })
+        const mutedUserIds = mutedUsers.map((u) => u.id)
+        const unmutedUsers = mutedUserIds.filter((id) => !userIds.includes(id))
+        const newlyMutedUsers = userIds.filter((id) => !mutedUserIds.includes(id))
+        const unmuteUsers = await Promise.all(unmutedUsers.map((userId) => UserUser.update(
+            { state: 'removed' },
+            { where: { relationship: 'muted', state: 'active', userAId: accountId, userBId: userId } }
+        )))
+        const muteUsers = await Promise.all(newlyMutedUsers.map((userId) => UserUser.create({
+            relationship: 'muted', state: 'active', userAId: accountId, userBId: userId
+        })))
+        Promise.all([unmuteUsers, muteUsers])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }

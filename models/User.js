@@ -85,6 +85,13 @@ module.exports = (sequelize, DataTypes) => {
             otherKey: 'userBId',
         })
 
+        User.belongsToMany(models.User, {
+            through: models.UserUser,
+            as: 'MutedUsers',
+            foreignKey: 'userAId',
+            otherKey: 'userBId',
+        })
+
         // User.belongsToMany(models.Prism, {
         //     through: models.PrismUser,
         //     //as: 'ModeratedSpaces',
