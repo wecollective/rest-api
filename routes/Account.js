@@ -58,6 +58,7 @@ router.get('/account-data', authenticateToken, async (req, res) => {
                 'bio',
                 'email',
                 'flagImagePath',
+                'emailsDisabled',
                 unseenNotifications,
             ],
         })
@@ -217,6 +218,17 @@ router.post('/account-notifications', authenticateToken, async (req, res) => {
         })
             .then((notifications) => res.send(notifications))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/toggle-emails-disabled', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { emailsDisabled } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        User.update({ emailsDisabled: !emailsDisabled }, { where: { id: accountId } })
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json(error))
     }
 })
 
@@ -787,7 +799,7 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                     {
                         model: User,
                         as: 'Creator',
-                        attributes: ['id', 'name', 'handle', 'email'],
+                        attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
                     },
                     {
                         model: GlassBeadGame,
@@ -796,7 +808,7 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                     {
                         model: User,
                         as: 'Players',
-                        attributes: ['id', 'name', 'handle', 'email'],
+                        attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
                         through: {
                             where: { type: 'glass-bead-game' },
                             attributes: ['index', 'state'],
@@ -826,18 +838,20 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                                         postId: postId,
                                         seen: false,
                                     })
-                                    const emailPlayer = await sgMail.send({
-                                        to: p.email,
-                                        from: {
-                                            email: 'admin@weco.io',
-                                            name: 'we { collective }',
-                                        },
-                                        subject: 'New notification',
-                                        text: `
+                                    const emailPlayer = p.emailsDisabled
+                                        ? null
+                                        : await sgMail.send({
+                                              to: p.email,
+                                              from: {
+                                                  email: 'admin@weco.io',
+                                                  name: 'we { collective }',
+                                              },
+                                              subject: 'New notification',
+                                              text: `
                                         Hi ${p.name}, ${respondingPlayer.name} has rejected their invitation to weave so the game is now cancelled.
                                         https://${config.appURL}/p/${postId}
                                     `,
-                                        html: `
+                                              html: `
                                         <p>
                                             Hi ${p.name},
                                             <br/>
@@ -845,7 +859,7 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                                             their invitation to weave so <a href='${config.appURL}/p/${postId}'>the game</a> is now cancelled.
                                         </p>
                                     `,
-                                    })
+                                          })
                                     Promise.all([notifyPlayer, emailPlayer])
                                         .then(() => resolve())
                                         .catch((error) => resolve(error))
@@ -864,18 +878,17 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                         postId: postId,
                         seen: false,
                     })
-                    const emailGameCreator = await sgMail.send({
-                        to: post.Creator.email,
-                        from: {
-                            email: 'admin@weco.io',
-                            name: 'we { collective }',
-                        },
-                        subject: 'New notification',
-                        text: `
+                    const emailGameCreator = post.Creator.emailsDisabled
+                        ? null
+                        : await sgMail.send({
+                              to: post.Creator.email,
+                              from: { email: 'admin@weco.io', name: 'we { collective }' },
+                              subject: 'New notification',
+                              text: `
                                 Hi ${post.Creator.name}, ${respondingPlayer.name} has accepted their invitation to your Weave.
                                 https://${config.appURL}/p/${postId}
                             `,
-                        html: `
+                              html: `
                             <p>
                                 Hi ${post.Creator.name},
                                 <br/>
@@ -883,7 +896,7 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                                 their invitation to your <a href='${config.appURL}/p/${postId}'>Weave</a>.
                             </p>
                         `,
-                    })
+                          })
                     Promise.all([notifyGameCreator, emailGameCreator]).then(async () => {
                         // if some players still pending: return
                         if (
@@ -910,18 +923,20 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                                 postId: postId,
                                 seen: false,
                             })
-                            const emailFirstPlayer = await sgMail.send({
-                                to: players[0].email,
-                                from: {
-                                    email: 'admin@weco.io',
-                                    name: 'we { collective }',
-                                },
-                                subject: 'New notification',
-                                text: `
+                            const emailFirstPlayer = players[0].emailsDisabled
+                                ? null
+                                : await sgMail.send({
+                                      to: players[0].email,
+                                      from: {
+                                          email: 'admin@weco.io',
+                                          name: 'we { collective }',
+                                      },
+                                      subject: 'New notification',
+                                      text: `
                                         Hi ${players[0].name}, it's your move!
                                         Add a new bead to the weave on weco: https://${config.appURL}/p/${postId}
                                     `,
-                                html: `
+                                      html: `
                                         <p>
                                             Hi ${players[0].name},
                                             <br/>
@@ -930,7 +945,7 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                                             Add a new bead to the <a href='${config.appURL}/p/${postId}'>weave</a> on weco.
                                         </p>
                                     `,
-                            })
+                                  })
                             const scheduleGBGMoveJobs = post.GlassBeadGame.moveTimeWindow
                                 ? ScheduledTasks.scheduleGBGMoveJobs(
                                       postId,

@@ -1481,7 +1481,7 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                         {
                             model: User,
                             as: 'Moderators',
-                            attributes: ['id', 'handle', 'name', 'email'],
+                            attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
                             through: {
                                 where: { relationship: 'moderator', state: 'active' },
                                 attributes: [],
@@ -1534,18 +1534,20 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                                     userId: accountId,
                                     seen: false,
                                 })
-                                const sendEmail = await sgMail.send({
-                                    to: mod.email,
-                                    from: {
-                                        email: 'admin@weco.io',
-                                        name: 'we { collective }',
-                                    },
-                                    subject: 'New notification',
-                                    text: `
+                                const sendEmail = mod.emailsDisabled
+                                    ? null
+                                    : await sgMail.send({
+                                          to: mod.email,
+                                          from: {
+                                              email: 'admin@weco.io',
+                                              name: 'we { collective }',
+                                          },
+                                          subject: 'New notification',
+                                          text: `
                                         Hi ${mod.name}, ${accountName} wants to make ${name} a child space of ${parentSpace.name} on weco.
                                         Log in and go to your notification to accept or reject the request.
                                     `,
-                                    html: `
+                                          html: `
                                         <p>
                                             Hi ${mod.name},
                                             <br/>
@@ -1561,7 +1563,7 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                                             to accept or reject the request.
                                         </p>
                                     `,
-                                })
+                                      })
                                 Promise.all([createNotification, sendEmail])
                                     .then(() => resolve())
                                     .catch((error) => resolve(error))
@@ -1634,7 +1636,7 @@ router.post('/invite-space-users', authenticateToken, async (req, res) => {
     else {
         const invitedUsers = await User.findAll({
             where: { id: userIds },
-            attributes: ['id', 'name', 'email'],
+            attributes: ['id', 'name', 'email', 'emailsDisabled'],
         })
 
         Promise.all(
@@ -1649,18 +1651,20 @@ router.post('/invite-space-users', authenticateToken, async (req, res) => {
                             spaceAId: spaceId,
                             userId: accountId,
                         })
-                        const sendEmail = await sgMail.send({
-                            to: user.email,
-                            from: {
-                                email: 'admin@weco.io',
-                                name: 'we { collective }',
-                            },
-                            subject: 'New notification',
-                            text: `
+                        const sendEmail = user.emailsDisabled
+                            ? null
+                            : await sgMail.send({
+                                  to: user.email,
+                                  from: {
+                                      email: 'admin@weco.io',
+                                      name: 'we { collective }',
+                                  },
+                                  subject: 'New notification',
+                                  text: `
                                 Hi ${user.name}, ${accountName} just invited you to join ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
                                 Log in and go to your notifications to accept the request.
                             `,
-                            html: `
+                                  html: `
                                 <p>
                                     Hi ${user.name},
                                     <br/>
@@ -1672,7 +1676,7 @@ router.post('/invite-space-users', authenticateToken, async (req, res) => {
                                     Log in and go to your notifications to accept the request.
                                 </p>
                             `,
-                        })
+                              })
                         Promise.all([createNotification, sendEmail])
                             .then(() => resolve())
                             .catch((error) => resolve(error))
@@ -1727,7 +1731,7 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
         const notifyInviteCreator = await new Promise(async (resolve) => {
             const inviteCreator = await User.findOne({
                 where: { id: userId },
-                attributes: ['id', 'name', 'email'],
+                attributes: ['id', 'name', 'email', 'emailsDisabled'],
             })
             const createNotification = await Notification.create({
                 ownerId: inviteCreator.id,
@@ -1737,17 +1741,19 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
                 spaceAId: spaceId,
                 userId: accountId,
             })
-            const sendEmail = await sgMail.send({
-                to: inviteCreator.email,
-                from: {
-                    email: 'admin@weco.io',
-                    name: 'we { collective }',
-                },
-                subject: 'New notification',
-                text: `
+            const sendEmail = inviteCreator.emailsDisabled
+                ? null
+                : await sgMail.send({
+                      to: inviteCreator.email,
+                      from: {
+                          email: 'admin@weco.io',
+                          name: 'we { collective }',
+                      },
+                      subject: 'New notification',
+                      text: `
                     Hi ${inviteCreator.name}, ${accountName} just ${response} your invite to join ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
                 `,
-                html: `
+                      html: `
                     <p>
                         Hi ${inviteCreator.name},
                         <br/>
@@ -1758,7 +1764,7 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
                         <br/>
                     </p>
                 `,
-            })
+                  })
             Promise.all([createNotification, sendEmail])
                 .then(() => resolve())
                 .catch((error) => resolve(error))
@@ -1782,7 +1788,7 @@ router.post('/request-space-access', authenticateToken, async (req, res) => {
             include: {
                 model: User,
                 as: 'Moderators',
-                attributes: ['id', 'name', 'email'],
+                attributes: ['id', 'name', 'email', 'emailsDisabled'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
             },
         })
@@ -1806,18 +1812,20 @@ router.post('/request-space-access', authenticateToken, async (req, res) => {
                             spaceAId: spaceId,
                             userId: accountId,
                         })
-                        const sendEmail = await sgMail.send({
-                            to: mod.email,
-                            from: {
-                                email: 'admin@weco.io',
-                                name: 'we { collective }',
-                            },
-                            subject: 'New notification',
-                            text: `
+                        const sendEmail = mod.emailsDisabled
+                            ? null
+                            : await sgMail.send({
+                                  to: mod.email,
+                                  from: {
+                                      email: 'admin@weco.io',
+                                      name: 'we { collective }',
+                                  },
+                                  subject: 'New notification',
+                                  text: `
                                 Hi ${mod.name}, ${accountName} just requested access to ${space.name}: ${config.appURL}/s/${space.handle} on weco.
                                 Log in and go to your notifications to respond to the request.
                             `,
-                            html: `
+                                  html: `
                                 <p>
                                     Hi ${mod.name},
                                     <br/>
@@ -1829,7 +1837,7 @@ router.post('/request-space-access', authenticateToken, async (req, res) => {
                                     Log in and go to your notifications to respond to the request.
                                 </p>
                             `,
-                        })
+                              })
                         Promise.all([createNotification, sendEmail])
                             .then(() => resolve())
                             .catch((error) => resolve(error))
@@ -1888,7 +1896,7 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
         const notifyRequestCreator = await new Promise(async (resolve) => {
             const requestCreator = await User.findOne({
                 where: { id: userId },
-                attributes: ['id', 'name', 'email'],
+                attributes: ['id', 'name', 'email', 'emailsDisabled'],
             })
             const createNotification = await Notification.create({
                 ownerId: requestCreator.id,
@@ -1898,17 +1906,19 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
                 spaceAId: spaceId,
                 userId: accountId,
             })
-            const sendEmail = await sgMail.send({
-                to: requestCreator.email,
-                from: {
-                    email: 'admin@weco.io',
-                    name: 'we { collective }',
-                },
-                subject: 'New notification',
-                text: `
+            const sendEmail = requestCreator.emailsDisabled
+                ? null
+                : await sgMail.send({
+                      to: requestCreator.email,
+                      from: {
+                          email: 'admin@weco.io',
+                          name: 'we { collective }',
+                      },
+                      subject: 'New notification',
+                      text: `
                     Hi ${requestCreator.name}, ${accountName} just ${response} your request to access ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
                 `,
-                html: `
+                      html: `
                     <p>
                         Hi ${requestCreator.name},
                         <br/>
@@ -1919,7 +1929,7 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
                         <br/>
                     </p>
                 `,
-            })
+                  })
             Promise.all([createNotification, sendEmail])
                 .then(() => resolve())
                 .catch((error) => resolve(error))
@@ -1981,7 +1991,7 @@ router.post('/invite-space-moderator', authenticateToken, async (req, res) => {
     else {
         const user = await User.findOne({
             where: { handle: userHandle },
-            attributes: ['id', 'name', 'email'],
+            attributes: ['id', 'name', 'email', 'emailsDisabled'],
         })
 
         const notifyUser = await Notification.create({
@@ -1993,18 +2003,20 @@ router.post('/invite-space-moderator', authenticateToken, async (req, res) => {
             userId: accountId,
         })
 
-        const emailUser = await sgMail.send({
-            to: user.email,
-            from: {
-                email: 'admin@weco.io',
-                name: 'we { collective }',
-            },
-            subject: 'New notification',
-            text: `
+        const emailUser = user.emailsDisabled
+            ? null
+            : await sgMail.send({
+                  to: user.email,
+                  from: {
+                      email: 'admin@weco.io',
+                      name: 'we { collective }',
+                  },
+                  subject: 'New notification',
+                  text: `
                 Hi ${user.name}, ${accountName} just invited you to moderate ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
                 Log in and go to your notifications to accept the request.
             `,
-            html: `
+                  html: `
                 <p>
                     Hi ${user.name},
                     <br/>
@@ -2016,7 +2028,7 @@ router.post('/invite-space-moderator', authenticateToken, async (req, res) => {
                     Log in and go to your notifications to accept the request.
                 </p>
             `,
-        })
+              })
 
         Promise.all([notifyUser, emailUser])
             .then(() => res.status(200).json({ message: 'Success' }))
@@ -2033,7 +2045,7 @@ router.post('/remove-space-moderator', authenticateToken, async (req, res) => {
     else {
         const user = await User.findOne({
             where: { handle: userHandle },
-            attributes: ['id', 'name', 'email'],
+            attributes: ['id', 'name', 'email', 'emailsDisabled'],
         })
 
         const removeModRelationship = await SpaceUser.update(
@@ -2050,17 +2062,19 @@ router.post('/remove-space-moderator', authenticateToken, async (req, res) => {
             userId: accountId,
         })
 
-        const emailUser = await sgMail.send({
-            to: user.email,
-            from: {
-                email: 'admin@weco.io',
-                name: 'we { collective }',
-            },
-            subject: 'New notification',
-            text: `
+        const emailUser = user.emailsDisabled
+            ? null
+            : await sgMail.send({
+                  to: user.email,
+                  from: {
+                      email: 'admin@weco.io',
+                      name: 'we { collective }',
+                  },
+                  subject: 'New notification',
+                  text: `
                 Hi ${user.name}, ${accountName} just removed you from moderating ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
             `,
-            html: `
+                  html: `
                 <p>
                     Hi ${user.name},
                     <br/>
@@ -2071,7 +2085,7 @@ router.post('/remove-space-moderator', authenticateToken, async (req, res) => {
                     <br/>
                 </p>
             `,
-        })
+              })
 
         Promise.all([removeModRelationship, notifyUser, emailUser])
             .then(() => res.status(200).json({ message: 'Success' }))
@@ -2144,7 +2158,7 @@ router.post('/send-parent-space-request', authenticateToken, async (req, res) =>
             include: {
                 model: User,
                 as: 'Moderators',
-                attributes: ['id', 'handle', 'name', 'email'],
+                attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
             },
         })
@@ -2163,34 +2177,33 @@ router.post('/send-parent-space-request', authenticateToken, async (req, res) =>
                             seen: false,
                         })
 
-                        const sendEmail = await sgMail.send({
-                            to: mod.email,
-                            from: {
-                                email: 'admin@weco.io',
-                                name: 'we { collective }',
-                            },
-                            subject: 'New notification',
-                            text: `
-                                Hi ${mod.name}, ${accountName} wants to make ${childName} a child space of ${parent.name} on weco.
-                                Log in and navigate to your notifications to accept or reject the request.
-                            `,
-                            html: `
-                                <p>
-                                    Hi ${mod.name},
-                                    <br/>
-                                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
-                                    wants to make
-                                    <a href='${config.appURL}/s/${childHandle}'>${childName}</a>
-                                    a child space of
-                                    <a href='${config.appURL}/s/${parent.handle}'>${parent.name}</a>
-                                    on weco.
-                                    <br/>
-                                    Log in and navigate to your
-                                    <a href='${config.appURL}/u/${mod.handle}/notifications'>notifications</a>
-                                    to accept or reject the request.
-                                </p>
-                            `,
-                        })
+                        const sendEmail = mode.emailsDisabled
+                            ? null
+                            : await sgMail.send({
+                                  to: mod.email,
+                                  from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                  subject: 'New notification',
+                                  text: `
+                                        Hi ${mod.name}, ${accountName} wants to make ${childName} a child space of ${parent.name} on weco.
+                                        Log in and navigate to your notifications to accept or reject the request.
+                                    `,
+                                  html: `
+                                        <p>
+                                            Hi ${mod.name},
+                                            <br/>
+                                            <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                            wants to make
+                                            <a href='${config.appURL}/s/${childHandle}'>${childName}</a>
+                                            a child space of
+                                            <a href='${config.appURL}/s/${parent.handle}'>${parent.name}</a>
+                                            on weco.
+                                            <br/>
+                                            Log in and navigate to your
+                                            <a href='${config.appURL}/u/${mod.handle}/notifications'>notifications</a>
+                                            to accept or reject the request.
+                                        </p>
+                                    `,
+                              })
 
                         Promise.all([createNotification, sendEmail])
                             .then(() => resolve())

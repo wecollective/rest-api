@@ -35,6 +35,9 @@ module.exports = {
             emailVerified: {
                 type: Sequelize.BOOLEAN,
             },
+            emailsDisabled: {
+                type: Sequelize.BOOLEAN,
+            },
             emailToken: {
                 type: Sequelize.TEXT,
             },

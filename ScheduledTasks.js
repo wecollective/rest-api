@@ -7,7 +7,17 @@ const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
 function scheduleEventNotification(data) {
-    const { type, postId, eventId, userEventId, startTime, userId, userName, userEmail } = data
+    const {
+        type,
+        postId,
+        eventId,
+        userEventId,
+        startTime,
+        userId,
+        userName,
+        userEmail,
+        emailsDisabled,
+    } = data
     // calculate reminder time
     const offset = 1000 * 60 * 15 // 15 minutes
     const reminderTime = new Date(new Date(startTime).getTime() - offset)
@@ -29,15 +39,16 @@ function scheduleEventNotification(data) {
                 })
                 // send email
                 const typeText = type === 'going' ? 'going to' : 'interested in'
-                sgMail.send({
-                    to: userEmail,
-                    from: { email: 'admin@weco.io', name: 'we { collective }' },
-                    subject: 'New notification',
-                    text: `
+                if (!emailsDisabled)
+                    sgMail.send({
+                        to: userEmail,
+                        from: { email: 'admin@weco.io', name: 'we { collective }' },
+                        subject: 'New notification',
+                        text: `
                         Hi ${userName}, an event you marked yourself as ${typeText} is starting in 15 minutes:
                         http://${config.appURL}/p/${postId}
                     `,
-                    html: `
+                        html: `
                         <p>
                             Hi ${userName},
                             <br/>
@@ -45,7 +56,7 @@ function scheduleEventNotification(data) {
                             An <a href='${config.appURL}/p/${postId}'>event</a> you marked yourself as ${typeText} is starting in 15 minutes.
                         </p>
                     `,
-                })
+                    })
             }
         })
     }
@@ -91,16 +102,17 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
                         postId,
                     })
                     // send email
-                    sgMail.send({
-                        to: player.email,
-                        from: { email: 'admin@weco.io', name: 'we { collective }' },
-                        subject: 'New notification',
-                        text: `
+                    if (!player.emailsDisabled)
+                        sgMail.send({
+                            to: player.email,
+                            from: { email: 'admin@weco.io', name: 'we { collective }' },
+                            subject: 'New notification',
+                            text: `
                             Hi ${player.name}, you have 15 minutes left to complete your move on this glass bead game:
                             http://${config.appURL}/p/${postId}
                             If you fail to do this, the game ends!
                         `,
-                        html: `
+                            html: `
                             <p>
                                 Hi ${player.name},
                                 <br/>
@@ -111,7 +123,7 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
                                 If you fail to do this, the game ends!
                             </p>
                         `,
-                    })
+                        })
                 }
             }
         })
@@ -129,7 +141,7 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
                     {
                         model: User,
                         as: 'Players',
-                        attributes: ['id', 'name', 'email'],
+                        attributes: ['id', 'name', 'email', 'emailsDisabled'],
                         through: {
                             where: { type: 'glass-bead-game' },
                             attributes: ['index'],
@@ -143,13 +155,11 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
                             where: { state: 'visible' },
                             attributes: ['index'],
                         },
-                        include: [
-                            {
-                                model: User,
-                                as: 'Creator',
-                                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                            },
-                        ],
+                        include: {
+                            model: User,
+                            as: 'Creator',
+                            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                        },
                     },
                 ],
             })
@@ -174,35 +184,40 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
                                         seen: false,
                                     })
                                     const you = p.id === player.id
-                                    const sendEmail = await sgMail.send({
-                                        to: p.email,
-                                        from: { email: 'admin@weco.io', name: 'we { collective }' },
-                                        subject: 'New notification',
-                                        text: `
+                                    const sendEmail = p.emailsDisabled
+                                        ? null
+                                        : await sgMail.send({
+                                              to: p.email,
+                                              from: {
+                                                  email: 'admin@weco.io',
+                                                  name: 'we { collective }',
+                                              },
+                                              subject: 'New notification',
+                                              text: `
                                             Hi ${p.name}, ${
-                                            you ? 'You' : player.name
-                                        } failed to make ${
-                                            you ? 'your' : 'their'
-                                        } move in time on this glass bead game:
+                                                  you ? 'You' : player.name
+                                              } failed to make ${
+                                                  you ? 'your' : 'their'
+                                              } move in time on this glass bead game:
                                             http://${config.appURL}/p/${postId}
                                             The game has now ended!
                                         `,
-                                        html: `
+                                              html: `
                                             <p>
                                                 Hi ${p.name},
                                                 <br/>
                                                 <br/>
                                                 ${you ? 'You' : player.name} failed to make ${
-                                            you ? 'your' : 'their'
-                                        } move in time on <a href='${
-                                            config.appURL
-                                        }/p/${postId}'>this glass bead game</a>.
+                                                  you ? 'your' : 'their'
+                                              } move in time on <a href='${
+                                                  config.appURL
+                                              }/p/${postId}'>this glass bead game</a>.
                                                 <br/>
                                                 <br/>
                                                 The game has now ended!
                                             </p>
                                         `,
-                                    })
+                                          })
                                     Promise.all([createNotification, sendEmail])
                                         .then(() => resolve())
                                         .catch((error) => resolve(error))
@@ -225,7 +240,7 @@ module.exports = {
                 {
                     model: User,
                     as: 'Going',
-                    attributes: ['id', 'handle', 'name', 'email'],
+                    attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
                     through: {
                         where: { relationship: 'going', state: 'active' },
                         attributes: ['id'],
@@ -234,7 +249,7 @@ module.exports = {
                 {
                     model: User,
                     as: 'Interested',
-                    attributes: ['id', 'handle', 'name', 'email'],
+                    attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
                     through: {
                         where: { relationship: 'interested', state: 'active' },
                         attributes: ['id'],
@@ -253,6 +268,7 @@ module.exports = {
                     userId: user.id,
                     userName: user.name,
                     userEmail: user.email,
+                    emailsDisabled: user.emailsDisabled,
                 })
             )
             event.Interested.forEach((user) =>
@@ -265,6 +281,7 @@ module.exports = {
                     userId: user.id,
                     userName: user.name,
                     userEmail: user.email,
+                    emailsDisabled: user.emailsDisabled,
                 })
             )
         })
@@ -292,7 +309,7 @@ module.exports = {
                 {
                     model: User,
                     as: 'Players',
-                    attributes: ['id', 'name', 'email'],
+                    attributes: ['id', 'name', 'email', 'emailsDisabled'],
                     through: {
                         where: { type: 'glass-bead-game' },
                         attributes: ['index'],

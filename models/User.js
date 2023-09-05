@@ -17,6 +17,7 @@ module.exports = (sequelize, DataTypes) => {
             coverImagePath: DataTypes.TEXT,
             facebookId: DataTypes.STRING,
             emailVerified: DataTypes.BOOLEAN,
+            emailsDisabled: DataTypes.BOOLEAN,
             emailToken: DataTypes.TEXT,
             accountVerified: DataTypes.BOOLEAN,
             passwordResetToken: DataTypes.TEXT,
