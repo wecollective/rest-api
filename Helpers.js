@@ -343,6 +343,16 @@ function postAccess(accountId) {
     ]
 }
 
+async function accountMuted(accountId, user) {
+    // checks if account included in users muted users
+    const mutedUsers = await user.getMutedUsers({
+        where: { state: 'active' },
+        through: { where: { relationship: 'muted', state: 'active' } },
+        attributes: ['id'],
+    })
+    return mutedUsers.map((u) => u.id).includes(accountId)
+}
+
 // space literal
 // rename to total space descendents
 const totalSpaceSpaces = [
@@ -1052,6 +1062,7 @@ module.exports = {
     getLinkedItem,
     getFullLinkedItem,
     accountLike,
+    accountMuted,
 }
 
 // function totalPostLinks(model) {

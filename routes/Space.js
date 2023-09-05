@@ -622,24 +622,27 @@ router.get('/space-about', async (req, res) => {
     res.status(200).json(aboutData)
 })
 
-router.get('/space-posts', authenticateToken, async (req, res) => {
+router.post('/space-posts', authenticateToken, async (req, res) => {
     // todo: potentially merge with user posts: get('/posts')
     const accountId = req.user ? req.user.id : null
-    const { spaceId, timeRange, postType, sortBy, sortOrder, depth, searchQuery, limit, offset } =
-        req.query
-
-    const user = await User.findOne({ where: { id: accountId }, attributes: ['id'] })
-    const mutedUsers = user ? await user.getMutedUsers({
-        where: { state: 'active' },
-        through: { where: { relationship: 'muted', state: 'active' } },
-        attributes: ['id'],
-    }) : []
+    const {
+        spaceId,
+        timeRange,
+        type,
+        sortBy,
+        sortOrder,
+        depth,
+        searchQuery,
+        limit,
+        offset,
+        mutedUsers,
+    } = req.body
 
     const startDate = findStartDate(timeRange)
-    const type = findPostType(postType)
+    const postType = findPostType(type)
     const order = findOrder(sortBy, sortOrder)
     const through = findPostThrough(depth)
-    const where = findPostWhere('space', spaceId, startDate, type, searchQuery, mutedUsers.map((u) => u.id))
+    const where = findPostWhere('space', spaceId, startDate, postType, searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 
@@ -686,23 +689,26 @@ router.get('/space-posts', authenticateToken, async (req, res) => {
     res.status(200).json(postsWithData)
 })
 
-router.get('/post-map-data', authenticateToken, async (req, res) => {
+router.post('/post-map-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { spaceId, timeRange, postType, sortBy, sortOrder, depth, searchQuery, limit, offset } =
-        req.query
-
-    const user = await User.findOne({ where: { id: accountId }, attributes: ['id'] })
-    const mutedUsers = user ? await user.getMutedUsers({
-        where: { state: 'active' },
-        through: { where: { relationship: 'muted', state: 'active' } },
-        attributes: ['id'],
-    }) : []
+    const {
+        spaceId,
+        timeRange,
+        type,
+        sortBy,
+        sortOrder,
+        depth,
+        searchQuery,
+        limit,
+        offset,
+        mutedUsers,
+    } = req.body
 
     const startDate = findStartDate(timeRange)
-    const type = findPostType(postType)
+    const postType = findPostType(type)
     const order = findOrder(sortBy, sortOrder)
     const through = findPostThrough(depth)
-    const where = findPostWhere('space', spaceId, startDate, type, searchQuery, mutedUsers.map((u) => u.id))
+    const where = findPostWhere('space', spaceId, startDate, postType, searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 
@@ -733,8 +739,8 @@ router.get('/post-map-data', authenticateToken, async (req, res) => {
     const emptyPosts = await Post.findAll({
         where,
         order,
-        limit: Number(limit),
-        offset: Number(offset),
+        limit,
+        offset,
         subQuery: false,
         attributes: initialAttributes,
         include: [

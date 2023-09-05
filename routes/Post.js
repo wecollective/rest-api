@@ -27,6 +27,7 @@ const {
     getLinkedItem,
     getFullLinkedItem,
     accountLike,
+    accountMuted,
 } = require('../Helpers')
 const {
     Space,
@@ -704,16 +705,21 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                     userId: accountId,
                                     postId: post.id,
                                 })
-
-                                const sendEmail = await sgMail.send({
-                                    to: user.email,
-                                    from: { email: 'admin@weco.io', name: 'we { collective }' },
-                                    subject: 'New notification',
-                                    text: `
+                                const skipEmail = await accountMuted(accountId, user)
+                                const sendEmail = skipEmail
+                                    ? null
+                                    : await sgMail.send({
+                                          to: user.email,
+                                          from: {
+                                              email: 'admin@weco.io',
+                                              name: 'we { collective }',
+                                          },
+                                          subject: 'New notification',
+                                          text: `
                                         Hi ${user.name}, ${creatorName} just mentioned you in a post on weco:
                                         http://${config.appURL}/p/${post.id}
                                     `,
-                                    html: `
+                                          html: `
                                         <p>
                                             Hi ${user.name},
                                             <br/>
@@ -723,7 +729,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             on weco
                                         </p>
                                     `,
-                                })
+                                      })
 
                                 Promise.all([sendNotification, sendEmail])
                                     .then(() => reso())
@@ -877,17 +883,23 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                             postId: post.id,
                                             seen: false,
                                         })
-                                        const emailCreator = await sgMail.send({
-                                            to: sourceCreator.email,
-                                            from: {
-                                                email: 'admin@weco.io',
-                                                name: 'we { collective }',
-                                            },
-                                            subject: 'New notification',
-                                            text: `
+                                        const skipEmail = await accountMuted(
+                                            accountId,
+                                            sourceCreator
+                                        )
+                                        const emailCreator = skipEmail
+                                            ? null
+                                            : await sgMail.send({
+                                                  to: sourceCreator.email,
+                                                  from: {
+                                                      email: 'admin@weco.io',
+                                                      name: 'we { collective }',
+                                                  },
+                                                  subject: 'New notification',
+                                                  text: `
                                                 Hi ${sourceCreator.name}, ${creatorName} just created a new glass bead game from your post on weco: https://${config.appURL}/p/${post.id}
                                             `,
-                                            html: `
+                                                  html: `
                                                 <p>
                                                     Hi ${sourceCreator.name},
                                                     <br/>
@@ -895,7 +907,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                     just created a new <a href='${config.appURL}/p/${post.id}'>glass bead game</a> from your post on weco.
                                                 </p>
                                             `,
-                                        })
+                                              })
                                         Promise.all([notifyCreator, emailCreator])
                                             .then(() => Resolve())
                                             .catch((error) => Resolve(error))
@@ -1753,21 +1765,15 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
             },
         })
 
-        const mutedUsers = await post.Creator.getMutedUsers({
-            where: { state: 'active' },
-            through: { where: { relationship: 'muted', state: 'active' } },
-            attributes: ['id'],
-        })
-
         const updateTotalReposts = await Post.update(
             { totalReposts: post.totalReposts + spaceIds.length },
             { where: { id: postId }, silent: true }
         )
 
-        const isOwnPost = post.Creator.id === accountId
-        const isMuted = mutedUsers.map((u) => u.id).includes(accountId)
+        const skipNotification = post.Creator.id === accountId
+        const skipEmail = skipNotification || (await accountMuted(accountId, post.Creator))
 
-        const sendNotification = isOwnPost
+        const sendNotification = skipNotification
             ? null
             : await Notification.create({
                   ownerId: post.Creator.id,
@@ -1778,7 +1784,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                   postId,
               })
 
-        const sendEmail = isOwnPost || isMuted
+        const sendEmail = skipEmail
             ? null
             : await sgMail.send({
                   to: post.Creator.email,
@@ -1921,12 +1927,6 @@ router.post('/add-like', authenticateToken, async (req, res) => {
             },
         })
 
-        const mutedUsers = await item.Creator.getMutedUsers({
-            where: { state: 'active' },
-            through: { where: { relationship: 'muted', state: 'active' } },
-            attributes: ['id'],
-        })
-
         const updateTotalLikes = model.update(
             { totalLikes: item.totalLikes + 1 },
             { where: { id: itemId }, silent: true }
@@ -1940,9 +1940,6 @@ router.post('/add-like', authenticateToken, async (req, res) => {
             spaceId,
             creatorId: accountId,
         })
-
-        const isOwnItem = item.Creator.id === accountId
-        const isMuted = mutedUsers.map((u) => u.id).includes(accountId)
 
         let postId = null
         let commentId = null
@@ -1958,7 +1955,10 @@ router.post('/add-like', authenticateToken, async (req, res) => {
             if (sourceType === 'space') spaceAId = sourceId
         }
 
-        const createNotification = isOwnItem
+        const skipNotification = item.Creator.id === accountId
+        const skipEmail = skipNotification || (await accountMuted(accountId, item.Creator))
+
+        const createNotification = skipNotification
             ? null
             : await Notification.create({
                   ownerId: item.Creator.id,
@@ -1977,7 +1977,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         if (itemType === 'link')
             itemUrl = `${config.appURL}/linkmap?item=${sourceType}&id=${sourceId}`
 
-        const sendEmail = isOwnItem || isMuted
+        const sendEmail = skipEmail
             ? null
             : await sgMail.send({
                   to: item.Creator.email,
@@ -2066,19 +2066,10 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
             },
         })
 
-        const mutedUsers = await item.Creator.getMutedUsers({
-            where: { state: 'active' },
-            through: { where: { relationship: 'muted', state: 'active' } },
-            attributes: ['id'],
-        })
-
         const updateTotalRatings = await model.update(
             { totalRatings: item.totalRatings + 1 },
             { where: { id: itemId }, silent: true }
         )
-
-        const isOwnPost = item.Creator.id === accountId
-        const isMuted = mutedUsers.map((u) => u.id).includes(accountId)
 
         const createReaction = await Reaction.create({
             type: 'rating',
@@ -2094,7 +2085,10 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
         if (itemType === 'post') notificationPostId = itemId
         if (itemType === 'comment') notificationPostId = parentItemId
 
-        const sendNotification = isOwnPost
+        const skipNotification = item.Creator.id === accountId
+        const skipEmail = skipNotification || (await accountMuted(accountId, item.Creator))
+
+        const sendNotification = skipNotification
             ? null
             : await Notification.create({
                   ownerId: item.Creator.id,
@@ -2112,7 +2106,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
         if (itemType === 'comment')
             itemUrl = `${config.appURL}/p/${parentItemId}?commentId=${itemId}`
 
-        const sendEmail = isOwnPost || isMuted
+        const sendEmail = skipEmail
             ? null
             : await sgMail.send({
                   to: item.Creator.email,
@@ -2277,7 +2271,6 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                                 commentId = location === 'source' ? sourceId : targetId
                             if (type === 'space')
                                 spaceAId = location === 'source' ? sourceId : targetId
-
                             // todo: need 3 slots for each model type (until then only include link to source)
                             const createNotification = await Notification.create({
                                 ownerId: id,
@@ -2288,21 +2281,23 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                                 postId,
                                 commentId,
                             })
-
+                            const skipEmail = await accountMuted(accountId, recipitent)
                             const url = `${config.appURL}/linkmap?item=${type}&id=${item.id}`
-                            const sendEmail = await sgMail.send({
-                                to: email,
-                                from: { email: 'admin@weco.io', name: 'we { collective }' },
-                                subject: 'New notification',
-                                text: `
+                            const sendEmail = skipEmail
+                                ? null
+                                : await sgMail.send({
+                                      to: email,
+                                      from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                      subject: 'New notification',
+                                      text: `
                                     Hi ${name}, ${accountName} just linked ${
-                                    type === 'user' ? 'you' : `your ${type}`
-                                } to another ${
-                                    location === 'source' ? sourceType : targetType
-                                } on weco:
+                                          type === 'user' ? 'you' : `your ${type}`
+                                      } to another ${
+                                          location === 'source' ? sourceType : targetType
+                                      } on weco:
                                         http://${url}
                                 `,
-                                html: `
+                                      html: `
                                     <p>
                                         Hi ${name},
                                         <br/>
@@ -2319,8 +2314,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                                         } on weco
                                     </p>
                                 `,
-                            })
-
+                                  })
                             Promise.all([createNotification, sendEmail])
                                 .then(() => resolve())
                                 .catch((error) => resolve(error))
@@ -2344,6 +2338,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
     }
 })
 
+// todo: decrement link tally of connected items
 router.post('/delete-link', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { linkId } = req.body
@@ -2400,7 +2395,6 @@ router.post('/delete-link', authenticateToken, async (req, res) => {
 router.post('/create-comment', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { text, postId, commentId, replyId, spaceId, mentions } = req.body
-
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const account = await User.findOne({
@@ -2467,12 +2461,6 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             totalGlassBeadGames: 0,
         })
 
-        // const postCreatorMutedUsers = await post.Creator.getMutedUsers({
-        //     where: { state: 'active' },
-        //     through: { where: { relationship: 'muted', state: 'active' } },
-        //     attributes: ['id'],
-        // })
-
         // the following logic ensures only one notification/email is sent to each user and own account is always skipped
         const commentCreatorId = comment ? comment.Creator.id : null
         const replyCreatorId = reply ? reply.Creator.id : null
@@ -2504,15 +2492,18 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                       postId,
                       commentId: newComment.id,
                   })
-                  const sendEmail = await sgMail.send({
-                      to: post.Creator.email,
-                      from: { email: 'admin@weco.io', name: 'we { collective }' },
-                      subject: 'New notification',
-                      text: `
+                  const skipEmail = await accountMuted(accountId, post.Creator)
+                  const sendEmail = skipEmail
+                      ? null
+                      : await sgMail.send({
+                            to: post.Creator.email,
+                            from: { email: 'admin@weco.io', name: 'we { collective }' },
+                            subject: 'New notification',
+                            text: `
                             Hi ${post.Creator.name}, ${account.name} just commented on your post on weco:
                             http://${config.appURL}/p/${postId}?commentId=${newComment.id}
                         `,
-                      html: `
+                            html: `
                             <p>
                                 Hi ${post.Creator.name},
                                 <br/>
@@ -2522,7 +2513,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                                 on weco
                             </p>
                         `,
-                  })
+                        })
                   Promise.all([createNotification, sendEmail])
                       .then(() => resolve())
                       .catch((error) => resolve(error))
@@ -2540,15 +2531,18 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                       postId,
                       commentId: newComment.id,
                   })
-                  const sendEmail = await sgMail.send({
-                      to: comment.Creator.email,
-                      from: { email: 'admin@weco.io', name: 'we { collective }' },
-                      subject: 'New notification',
-                      text: `
+                  const skipEmail = await accountMuted(accountId, comment.Creator)
+                  const sendEmail = skipEmail
+                      ? null
+                      : await sgMail.send({
+                            to: comment.Creator.email,
+                            from: { email: 'admin@weco.io', name: 'we { collective }' },
+                            subject: 'New notification',
+                            text: `
                             Hi ${comment.Creator.name}, ${account.name} just replied to your comment on weco:
                             http://${config.appURL}/p/${postId}?commentId=${newComment.id}
                         `,
-                      html: `
+                            html: `
                             <p>
                                 Hi ${comment.Creator.name},
                                 <br/>
@@ -2558,7 +2552,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                                 on weco
                             </p>
                         `,
-                  })
+                        })
                   Promise.all([createNotification, sendEmail])
                       .then(() => resolve())
                       .catch((error) => resolve(error))
@@ -2576,15 +2570,18 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                       postId,
                       commentId: newComment.id,
                   })
-                  const sendEmail = await sgMail.send({
-                      to: reply.Creator.email,
-                      from: { email: 'admin@weco.io', name: 'we { collective }' },
-                      subject: 'New notification',
-                      text: `
+                  const skipEmail = await accountMuted(accountId, reply.Creator)
+                  const sendEmail = skipEmail
+                      ? null
+                      : await sgMail.send({
+                            to: reply.Creator.email,
+                            from: { email: 'admin@weco.io', name: 'we { collective }' },
+                            subject: 'New notification',
+                            text: `
                               Hi ${reply.Creator.name}, ${account.name} just replied to your comment on weco:
                               http://${config.appURL}/p/${postId}?commentId=${newComment.id}
                           `,
-                      html: `
+                            html: `
                               <p>
                                   Hi ${reply.Creator.name},
                                   <br/>
@@ -2594,7 +2591,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                                   on weco
                               </p>
                           `,
-                  })
+                        })
                   Promise.all([createNotification, sendEmail])
                       .then(() => resolve())
                       .catch((error) => resolve(error))
@@ -2614,16 +2611,18 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                                 postId,
                                 commentId: newComment.id,
                             })
-
-                            const sendEmail = await sgMail.send({
-                                to: user.email,
-                                from: { email: 'admin@weco.io', name: 'we { collective }' },
-                                subject: 'New notification',
-                                text: `
+                            const skipEmail = await accountMuted(accountId, user)
+                            const sendEmail = skipEmail
+                                ? null
+                                : await sgMail.send({
+                                      to: user.email,
+                                      from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                      subject: 'New notification',
+                                      text: `
                                     Hi ${user.name}, ${account.name} just mentioned you in a comment on weco:
                                     http://${config.appURL}/p/${postId}?commentId=${newComment.id}
                                 `,
-                                html: `
+                                      html: `
                                     <p>
                                         Hi ${user.name},
                                         <br/>
@@ -2633,7 +2632,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                                         on weco
                                     </p>
                                 `,
-                            })
+                                  })
 
                             Promise.all([sendNotification, sendEmail])
                                 .then(() => resolve())
@@ -2735,6 +2734,7 @@ router.post('/update-comment', authenticateToken, async (req, res) => {
     }
 })
 
+// todo: decrement link tally of connected items
 router.post('/delete-comment', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId, commentId } = req.body
@@ -3021,6 +3021,7 @@ router.post('/save-gbg-topic', (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
+// todo: decrement link tally of connected items
 router.post('/delete-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.body

@@ -45,11 +45,11 @@ const {
 } = require('../Helpers')
 
 // GET
-router.get('/account-data', authenticateToken, (req, res) => {
+router.get('/account-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        User.findOne({
+        const user = await User.findOne({
             where: { id: accountId },
             attributes: [
                 'id',
@@ -61,53 +61,12 @@ router.get('/account-data', authenticateToken, (req, res) => {
                 unseenNotifications,
             ],
         })
-            .then((user) => res.status(200).send(user))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
-    }
-})
-
-router.get('/account-notifications', authenticateToken, (req, res) => {
-    const accountId = req.user ? req.user.id : null
-    const { offset } = req.query
-    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
-    else {
-        Notification.findAll({
-            where: { ownerId: accountId },
-            order: [
-                ['createdAt', 'DESC'],
-                ['id', 'DESC'],
-            ],
-            limit: 10,
-            offset: +offset,
-            include: [
-                {
-                    model: User,
-                    as: 'triggerUser',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                },
-                {
-                    model: Space,
-                    as: 'triggerSpace',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                },
-                {
-                    model: Space,
-                    as: 'secondarySpace',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                },
-                {
-                    model: Post,
-                    as: 'relatedPost',
-                    include: {
-                        model: GlassBeadGame,
-                        attributes: ['state'],
-                        required: false,
-                    },
-                },
-            ],
+        const mutedUsers = await user.getMutedUsers({
+            where: { state: 'active' },
+            through: { where: { relationship: 'muted', state: 'active' } },
+            attributes: ['id', 'handle', 'name', 'flagImagePath'],
         })
-            .then((notifications) => res.send(notifications))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
+        res.status(200).json({ ...user.dataValues, mutedUsers: mutedUsers.map((u) => u.id) })
     }
 })
 
@@ -214,6 +173,53 @@ router.get('/muted-users', authenticateToken, async (req, res) => {
 })
 
 // POST
+router.post('/account-notifications', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { offset, mutedUsers } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const where = { ownerId: accountId }
+        if (mutedUsers.length) where[Op.not] = { userId: mutedUsers }
+        Notification.findAll({
+            where,
+            order: [
+                ['createdAt', 'DESC'],
+                ['id', 'DESC'],
+            ],
+            limit: 10,
+            offset: +offset,
+            include: [
+                {
+                    model: User,
+                    as: 'triggerUser',
+                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                },
+                {
+                    model: Space,
+                    as: 'triggerSpace',
+                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                },
+                {
+                    model: Space,
+                    as: 'secondarySpace',
+                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                },
+                {
+                    model: Post,
+                    as: 'relatedPost',
+                    include: {
+                        model: GlassBeadGame,
+                        attributes: ['state'],
+                        required: false,
+                    },
+                },
+            ],
+        })
+            .then((notifications) => res.send(notifications))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
 router.post('/followed-spaces', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
@@ -271,8 +277,18 @@ router.post('/followed-people', authenticateToken, async (req, res) => {
 
 router.post('/stream-posts', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { type, id, timeRange, postType, sortBy, sortOrder, depth, searchQuery, offset } =
-        req.body
+    const {
+        type,
+        id,
+        timeRange,
+        postType,
+        sortBy,
+        sortOrder,
+        depth,
+        searchQuery,
+        offset,
+        mutedUsers,
+    } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         // get sources
@@ -325,6 +341,7 @@ router.post('/stream-posts', authenticateToken, async (req, res) => {
                 type: findPostType(postType),
                 createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
             }
+            if (mutedUsers.length) where[Op.not] = { creatorId: mutedUsers }
             if (spaces.length && users.length) {
                 where[Op.or] = [
                     { creatorId: users.map((p) => p.id) },
@@ -550,13 +567,31 @@ router.post('/save-muted-users', authenticateToken, async (req, res) => {
         const mutedUserIds = mutedUsers.map((u) => u.id)
         const unmutedUsers = mutedUserIds.filter((id) => !userIds.includes(id))
         const newlyMutedUsers = userIds.filter((id) => !mutedUserIds.includes(id))
-        const unmuteUsers = await Promise.all(unmutedUsers.map((userId) => UserUser.update(
-            { state: 'removed' },
-            { where: { relationship: 'muted', state: 'active', userAId: accountId, userBId: userId } }
-        )))
-        const muteUsers = await Promise.all(newlyMutedUsers.map((userId) => UserUser.create({
-            relationship: 'muted', state: 'active', userAId: accountId, userBId: userId
-        })))
+        const unmuteUsers = await Promise.all(
+            unmutedUsers.map((userId) =>
+                UserUser.update(
+                    { state: 'removed' },
+                    {
+                        where: {
+                            relationship: 'muted',
+                            state: 'active',
+                            userAId: accountId,
+                            userBId: userId,
+                        },
+                    }
+                )
+            )
+        )
+        const muteUsers = await Promise.all(
+            newlyMutedUsers.map((userId) =>
+                UserUser.create({
+                    relationship: 'muted',
+                    state: 'active',
+                    userAId: accountId,
+                    userBId: userId,
+                })
+            )
+        )
         Promise.all([unmuteUsers, muteUsers])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
