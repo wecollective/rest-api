@@ -766,13 +766,16 @@ function findPostThrough(depth) {
     return { where: { state: 'active', relationship }, attributes: [] }
 }
 
-function findPostWhere(location, id, startDate, type, searchQuery) {
+function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers) {
     const where = {
         state: 'visible',
         createdAt: { [Op.between]: [startDate, Date.now()] },
         type,
     }
-    if (location === 'space') where['$AllPostSpaces.id$'] = id
+    if (location === 'space') {
+        where['$AllPostSpaces.id$'] = id
+        if (mutedUsers.length) where[Op.not] = { creatorId: mutedUsers }
+    }
     if (location === 'user') where.creatorId = id
     if (searchQuery) {
         where[Op.or] = [

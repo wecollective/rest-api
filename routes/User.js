@@ -140,7 +140,7 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
     const startDate = findStartDate(timeRange)
     const type = findPostType(postType)
     const order = findOrder(sortBy, sortOrder)
-    const where = findPostWhere('user', userId, startDate, type, searchQuery)
+    const where = findPostWhere('user', userId, startDate, type, searchQuery, [])
     const initialAttributes = ownAccount
         ? findInitialPostAttributes(sortBy, accountId)
         : findInitialPostAttributesWithAccess(sortBy, accountId)

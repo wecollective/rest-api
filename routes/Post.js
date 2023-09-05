@@ -1753,12 +1753,19 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
             },
         })
 
+        const mutedUsers = await post.Creator.getMutedUsers({
+            where: { state: 'active' },
+            through: { where: { relationship: 'muted', state: 'active' } },
+            attributes: ['id'],
+        })
+
         const updateTotalReposts = await Post.update(
             { totalReposts: post.totalReposts + spaceIds.length },
             { where: { id: postId }, silent: true }
         )
 
         const isOwnPost = post.Creator.id === accountId
+        const isMuted = mutedUsers.map((u) => u.id).includes(accountId)
 
         const sendNotification = isOwnPost
             ? null
@@ -1771,7 +1778,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                   postId,
               })
 
-        const sendEmail = isOwnPost
+        const sendEmail = isOwnPost || isMuted
             ? null
             : await sgMail.send({
                   to: post.Creator.email,
@@ -1914,6 +1921,12 @@ router.post('/add-like', authenticateToken, async (req, res) => {
             },
         })
 
+        const mutedUsers = await item.Creator.getMutedUsers({
+            where: { state: 'active' },
+            through: { where: { relationship: 'muted', state: 'active' } },
+            attributes: ['id'],
+        })
+
         const updateTotalLikes = model.update(
             { totalLikes: item.totalLikes + 1 },
             { where: { id: itemId }, silent: true }
@@ -1929,6 +1942,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         })
 
         const isOwnItem = item.Creator.id === accountId
+        const isMuted = mutedUsers.map((u) => u.id).includes(accountId)
 
         let postId = null
         let commentId = null
@@ -1963,7 +1977,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         if (itemType === 'link')
             itemUrl = `${config.appURL}/linkmap?item=${sourceType}&id=${sourceId}`
 
-        const sendEmail = isOwnItem
+        const sendEmail = isOwnItem || isMuted
             ? null
             : await sgMail.send({
                   to: item.Creator.email,
@@ -2052,12 +2066,19 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
             },
         })
 
+        const mutedUsers = await item.Creator.getMutedUsers({
+            where: { state: 'active' },
+            through: { where: { relationship: 'muted', state: 'active' } },
+            attributes: ['id'],
+        })
+
         const updateTotalRatings = await model.update(
             { totalRatings: item.totalRatings + 1 },
             { where: { id: itemId }, silent: true }
         )
 
         const isOwnPost = item.Creator.id === accountId
+        const isMuted = mutedUsers.map((u) => u.id).includes(accountId)
 
         const createReaction = await Reaction.create({
             type: 'rating',
@@ -2091,7 +2112,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
         if (itemType === 'comment')
             itemUrl = `${config.appURL}/p/${parentItemId}?commentId=${itemId}`
 
-        const sendEmail = isOwnPost
+        const sendEmail = isOwnPost || isMuted
             ? null
             : await sgMail.send({
                   to: item.Creator.email,
@@ -2445,6 +2466,12 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             totalReposts: 0,
             totalGlassBeadGames: 0,
         })
+
+        // const postCreatorMutedUsers = await post.Creator.getMutedUsers({
+        //     where: { state: 'active' },
+        //     through: { where: { relationship: 'muted', state: 'active' } },
+        //     attributes: ['id'],
+        // })
 
         // the following logic ensures only one notification/email is sent to each user and own account is always skipped
         const commentCreatorId = comment ? comment.Creator.id : null
