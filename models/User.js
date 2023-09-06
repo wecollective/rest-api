@@ -46,6 +46,10 @@ module.exports = (sequelize, DataTypes) => {
             //as: 'createdComments'
         })
 
+        User.hasMany(models.Notification, {
+            foreignKey: 'ownerId',
+        })
+
         // User.hasMany(models.GlassBead, {
         //     foreignKey: 'userId',
         //     // as: 'user'

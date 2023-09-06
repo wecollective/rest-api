@@ -719,13 +719,6 @@ const totalUserComments = [
     'totalComments',
 ]
 
-const unseenNotifications = [
-    sequelize.literal(
-        `(SELECT COUNT(*) FROM Notifications AS Notification WHERE Notification.ownerId = User.id AND Notification.seen = false)`
-    ),
-    'unseenNotifications',
-]
-
 // post functions
 function findPostType(type) {
     return type === 'All Types'
@@ -1030,7 +1023,6 @@ module.exports = {
     totalSpaceChildren,
     totalUserPosts,
     totalUserComments,
-    unseenNotifications,
     findStartDate,
     findOrder,
     findPostType,

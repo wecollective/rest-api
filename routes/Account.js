@@ -26,7 +26,6 @@ const {
     GlassBeadGame,
 } = require('../models')
 const {
-    unseenNotifications,
     totalSpaceFollowers,
     totalSpaceComments,
     totalSpaceLikes,
@@ -51,23 +50,18 @@ router.get('/account-data', authenticateToken, async (req, res) => {
     else {
         const user = await User.findOne({
             where: { id: accountId },
-            attributes: [
-                'id',
-                'name',
-                'handle',
-                'bio',
-                'email',
-                'flagImagePath',
-                'emailsDisabled',
-                unseenNotifications,
-            ],
+            attributes: ['id', 'name', 'handle', 'bio', 'email', 'flagImagePath', 'emailsDisabled'],
         })
         const mutedUsers = await user.getMutedUsers({
             where: { state: 'active' },
             through: { where: { relationship: 'muted', state: 'active' } },
-            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            attributes: ['id'],
         })
-        res.status(200).json({ ...user.dataValues, mutedUsers: mutedUsers.map((u) => u.id) })
+        const mutedUserIds = mutedUsers.map((u) => u.id)
+        const where = { seen: false }
+        if (mutedUsers.length) where[Op.not] = { userId: mutedUserIds }
+        const unseenNotifications = await user.countNotifications({ where })
+        res.status(200).json({ ...user.dataValues, mutedUsers: mutedUserIds, unseenNotifications })
     }
 })
 
