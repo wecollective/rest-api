@@ -517,66 +517,72 @@ router.get('/plot-graph-data', (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
-router.get('/scrape-url', async (req, res) => {
-    // todo: add authenticateToken, return error code intead of empty data if error, set up timeout
+router.get('/scrape-url', authenticateToken, async (req, res) => {
+    // todo: return error code intead of empty data if error, set up timeout
+    const accountId = req.user ? req.user.id : null
     const { url } = req.query
-    const browser = await puppeteer.launch() // { headless: false })
-    try {
-        const page = await browser.newPage()
-        await page.goto(url, { waitUntil: 'domcontentloaded' }) // { timeout: 60000 }, { waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2' }
-        await page.evaluate(async () => {
-            const youtubeCookieConsent = await document.querySelector(
-                'base[href="https://consent.youtube.com/"]'
-            )
-            if (youtubeCookieConsent) {
-                const rejectButton = await document.querySelector('button[aria-label="Reject all"]')
-                rejectButton.click()
-                return
-            } else {
-                return
-            }
-        })
-        await page.waitForSelector('title')
-        const urlData = await page.evaluate(async () => {
-            let data = {
-                title: document.title || null,
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const browser = await puppeteer.launch() // { headless: false })
+        try {
+            const page = await browser.newPage()
+            await page.goto(url, { waitUntil: 'domcontentloaded' }) // { timeout: 60000 }, { waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2' }
+            await page.evaluate(async () => {
+                const youtubeCookieConsent = await document.querySelector(
+                    'base[href="https://consent.youtube.com/"]'
+                )
+                if (youtubeCookieConsent) {
+                    const rejectButton = await document.querySelector(
+                        'button[aria-label="Reject all"]'
+                    )
+                    rejectButton.click()
+                    return
+                } else {
+                    return
+                }
+            })
+            await page.waitForSelector('title')
+            const urlData = await page.evaluate(async () => {
+                let data = {
+                    title: document.title || null,
+                    description: null,
+                    domain: null,
+                    image: null,
+                }
+                // description
+                const ogDescription = document.querySelector('meta[property="og:description"]')
+                if (ogDescription) data.description = ogDescription.content
+                else {
+                    const nameDescription = document.querySelector('meta[name="description"]')
+                    if (nameDescription) data.description = nameDescription.content
+                }
+                // domain
+                const ogSiteName = document.querySelector('meta[property="og:site_name"]')
+                if (ogSiteName) data.domain = ogSiteName.content
+                // image
+                const metaImage = document.querySelector('meta[property="og:image"]')
+                if (metaImage) data.image = metaImage.content
+                else {
+                    const firstImage = document.querySelector('body div img')
+                    if (firstImage) data.image = firstImage.src
+                }
+                return data
+            })
+            if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
+            if (urlData.image[0] === '/')
+                urlData.image = `https://${new URL(url).hostname}${urlData.image}`
+            res.send(urlData)
+        } catch (e) {
+            console.log('error: ', e)
+            res.send({
+                title: null,
                 description: null,
                 domain: null,
                 image: null,
-            }
-            // description
-            const ogDescription = document.querySelector('meta[property="og:description"]')
-            if (ogDescription) data.description = ogDescription.content
-            else {
-                const nameDescription = document.querySelector('meta[name="description"]')
-                if (nameDescription) data.description = nameDescription.content
-            }
-            // domain
-            const ogSiteName = document.querySelector('meta[property="og:site_name"]')
-            if (ogSiteName) data.domain = ogSiteName.content
-            // image
-            const metaImage = document.querySelector('meta[property="og:image"]')
-            if (metaImage) data.image = metaImage.content
-            else {
-                const firstImage = document.querySelector('body div img')
-                if (firstImage) data.image = firstImage.src
-            }
-            return data
-        })
-        if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
-        if (urlData.image[0] === '/')
-            urlData.image = `https://${new URL(url).hostname}${urlData.image}`
-        res.send(urlData)
-    } catch (e) {
-        console.log('error: ', e)
-        res.send({
-            title: null,
-            description: null,
-            domain: null,
-            image: null,
-        })
-    } finally {
-        await browser.close()
+            })
+        } finally {
+            await browser.close()
+        }
     }
 })
 
