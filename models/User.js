@@ -15,14 +15,12 @@ module.exports = (sequelize, DataTypes) => {
             bio: DataTypes.TEXT,
             flagImagePath: DataTypes.TEXT,
             coverImagePath: DataTypes.TEXT,
-            facebookId: DataTypes.STRING,
             emailVerified: DataTypes.BOOLEAN,
             emailsDisabled: DataTypes.BOOLEAN,
             emailToken: DataTypes.TEXT,
             accountVerified: DataTypes.BOOLEAN,
             passwordResetToken: DataTypes.TEXT,
             state: DataTypes.STRING,
-            mmId: DataTypes.INTEGER,
         },
         {}
     )

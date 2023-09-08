@@ -29,9 +29,6 @@ module.exports = {
             coverImagePath: {
                 type: Sequelize.TEXT,
             },
-            facebookId: {
-                type: Sequelize.STRING,
-            },
             emailVerified: {
                 type: Sequelize.BOOLEAN,
             },
@@ -57,9 +54,6 @@ module.exports = {
             updatedAt: {
                 allowNull: false,
                 type: Sequelize.DATE,
-            },
-            mmId: {
-                type: Sequelize.INTEGER,
             },
         })
     },

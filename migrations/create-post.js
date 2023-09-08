@@ -47,22 +47,6 @@ module.exports = {
             totalGlassBeadGames: {
                 type: Sequelize.INTEGER,
             },
-            // todo: remove urls
-            // url: {
-            //     type: Sequelize.TEXT,
-            // },
-            // urlImage: {
-            //     type: Sequelize.TEXT,
-            // },
-            // urlDomain: {
-            //     type: Sequelize.TEXT,
-            // },
-            // urlTitle: {
-            //     type: Sequelize.TEXT,
-            // },
-            // urlDescription: {
-            //     type: Sequelize.TEXT,
-            // },
             lastActivity: {
                 type: Sequelize.DATE,
             },
@@ -73,9 +57,6 @@ module.exports = {
             updatedAt: {
                 allowNull: false,
                 type: Sequelize.DATE,
-            },
-            mmId: {
-                type: Sequelize.INTEGER,
             },
         })
     },

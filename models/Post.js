@@ -22,8 +22,6 @@ module.exports = (sequelize, DataTypes) => {
             totalRatings: DataTypes.INTEGER,
             totalGlassBeadGames: DataTypes.INTEGER,
             lastActivity: DataTypes.DATE,
-            // todo: remove
-            mmId: DataTypes.INTEGER,
         },
         {}
     )

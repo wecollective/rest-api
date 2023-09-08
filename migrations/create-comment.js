@@ -44,12 +44,6 @@ module.exports = {
             totalGlassBeadGames: {
                 type: Sequelize.INTEGER,
             },
-            mmId: {
-                type: Sequelize.INTEGER,
-            },
-            mmCommentNumber: {
-                type: Sequelize.INTEGER,
-            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE,

@@ -617,12 +617,10 @@ router.post('/delete-account', authenticateToken, async (req, res) => {
                 bio: null,
                 flagImagePath: null,
                 coverImagePath: null,
-                facebookId: null,
                 emailVerified: false,
                 emailToken: null,
                 passwordResetToken: null,
                 accountVerified: null,
-                mmId: null,
                 state: 'deleted',
             },
             { where: { id: accountId } }
@@ -638,7 +636,6 @@ router.post('/delete-account', authenticateToken, async (req, res) => {
                 urlTitle: null,
                 urlDescription: null,
                 color: null,
-                mmId: null,
             },
             { where: { creatorId: accountId } }
         )
