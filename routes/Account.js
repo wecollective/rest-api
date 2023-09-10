@@ -24,6 +24,7 @@ const {
     Link,
     Reaction,
     GlassBeadGame,
+    Url,
 } = require('../models')
 const {
     totalSpaceFollowers,
@@ -202,11 +203,29 @@ router.post('/account-notifications', authenticateToken, async (req, res) => {
                 {
                     model: Post,
                     as: 'relatedPost',
-                    include: {
-                        model: GlassBeadGame,
-                        attributes: ['state'],
-                        required: false,
-                    },
+                    include: [
+                        {
+                            model: Space,
+                            as: 'DirectSpaces',
+                            required: false,
+                            attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
+                            through: {
+                                where: { relationship: 'direct', type: 'post' },
+                                attributes: [],
+                            },
+                        },
+                        {
+                            model: Url,
+                            where: { state: 'active' },
+                            attributes: ['url', 'image', 'title', 'description', 'domain'],
+                            required: false,
+                        },
+                        {
+                            model: GlassBeadGame,
+                            attributes: ['state'],
+                            required: false,
+                        },
+                    ],
                 },
             ],
         })
