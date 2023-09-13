@@ -172,10 +172,11 @@ router.get('/muted-users', authenticateToken, async (req, res) => {
 // POST
 router.post('/account-notifications', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { offset, mutedUsers } = req.body
+    const { offset, includeSeen, mutedUsers } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const where = { ownerId: accountId }
+        if (!includeSeen) where.seen = false
         if (mutedUsers.length) where[Op.not] = { userId: mutedUsers }
         Notification.findAll({
             where,
