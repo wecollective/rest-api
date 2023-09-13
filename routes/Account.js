@@ -25,6 +25,7 @@ const {
     Reaction,
     GlassBeadGame,
     Url,
+    Image,
 } = require('../models')
 const {
     totalSpaceFollowers,
@@ -218,11 +219,33 @@ router.post('/account-notifications', authenticateToken, async (req, res) => {
                             model: Url,
                             where: { state: 'active' },
                             attributes: ['url', 'image', 'title', 'description', 'domain'],
+                            limit: 1,
+                            required: false,
+                        },
+                        {
+                            model: Image,
+                            attributes: ['id', 'index', 'url', 'caption'],
+                            limit: 6,
                             required: false,
                         },
                         {
                             model: GlassBeadGame,
-                            attributes: ['state'],
+                            attributes: ['topic', 'topicImage', 'state'],
+                            required: false,
+                        },
+                        {
+                            model: Post,
+                            as: 'CardSides',
+                            attributes: ['id'],
+                            through: {
+                                where: { type: 'card-post', state: ['visible', 'account-deleted'] },
+                                attributes: [],
+                            },
+                            include: {
+                                model: Image,
+                                attributes: ['id', 'url'],
+                                required: false,
+                            },
                             required: false,
                         },
                     ],
@@ -553,6 +576,7 @@ router.post('/update-account-bio', authenticateToken, async (req, res) => {
     }
 })
 
+// todo: go through verification process before updating
 router.post('/update-account-email', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { payload } = req.body
@@ -564,15 +588,12 @@ router.post('/update-account-email', authenticateToken, async (req, res) => {
     }
 })
 
-router.post('/mark-notifications-seen', authenticateToken, (req, res) => {
+router.post('/toggle-notification-seen', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const ids = req.body
+    const { id, seen } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        Notification.update(
-            { seen: true },
-            { where: { id: ids, ownerId: accountId }, silent: true }
-        )
+        Notification.update({ seen }, { where: { id, ownerId: accountId }, silent: true })
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
