@@ -251,6 +251,15 @@ router.post('/account-notifications', authenticateToken, async (req, res) => {
                         },
                     ],
                 },
+                {
+                    model: Comment,
+                    as: 'relatedComment',
+                    include: {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'name', 'flagImagePath'],
+                    },
+                },
             ],
         })
             .then((notifications) => res.send(notifications))
