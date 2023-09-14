@@ -324,7 +324,7 @@ async function isAuthorizedModerator(accountId, spaceId) {
 router.get('/homepage-highlights', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
 
-    const totals = Space.findOne({
+    const totals = await Space.findOne({
         where: { id: 1 },
         attributes: [
             [
@@ -344,7 +344,7 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
         ],
     })
 
-    const posts = Post.findAll({
+    const posts = await Post.findAll({
         where: {
             state: 'visible',
             type: ['image', 'url'],
@@ -366,7 +366,7 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
         ],
     })
 
-    const spaces = Space.findAll({
+    const spaces = await Space.findAll({
         where: {
             state: 'active',
             flagImagePath: { [Op.ne]: null },
@@ -377,7 +377,7 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
         limit: 3,
     })
 
-    const users = User.findAll({
+    const users = await User.findAll({
         where: {
             state: 'active',
             emailVerified: true,
@@ -388,18 +388,15 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
         limit: 3,
     })
 
-    Promise.all([totals, posts, spaces, users]).then((data) =>
-        res.send({
-            totals: data[0],
-            posts: data[1],
-            posts: data[1].map((p) => {
-                if (p.type === 'image') return p.Images[0].url
-                return p.Urls[0].image
-            }),
-            spaces: data[2].map((s) => s.flagImagePath),
-            users: data[3].map((u) => u.flagImagePath),
-        })
-    )
+    res.status(200).json({
+        totals,
+        posts: posts.map((p) => {
+            if (p.type === 'image') return p.Images[0].url
+            return p.Urls[0].image
+        }),
+        spaces: spaces.map((s) => s.flagImagePath),
+        users: users.map((u) => u.flagImagePath),
+    })
 })
 
 // todo: clean up like post routes
