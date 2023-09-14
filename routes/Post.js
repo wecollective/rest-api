@@ -471,7 +471,7 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
             },
             {
                 model: Url,
-                attributes: ['url', 'image', 'title', 'description', 'domain'],
+                attributes: ['id', 'url', 'image', 'title', 'description', 'domain'],
             },
             {
                 model: Audio,
@@ -606,7 +606,6 @@ router.get('/glass-bead-game-comments', (req, res) => {
 router.post('/create-post', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { uploadType } = req.query
-
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         async function createPost(postData, files) {
@@ -1342,77 +1341,121 @@ router.post('/create-post', authenticateToken, (req, res) => {
 
 router.post('/update-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { postId, type, text, mentions, creatorName, creatorHandle } = req.body
-    const mentionType = type.includes('string-') ? 'bead' : 'post'
-    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    const { postId, title, text, mentions, urls } = req.body
+    const post = await Post.findOne({
+        where: { id: postId },
+        attributes: ['id', 'type'],
+        include: {
+            model: User,
+            as: 'Creator',
+            attributes: ['id', 'name', 'handle'],
+        },
+    })
+    if (post.Creator.id !== accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
+        const mentionedUsers = await User.findAll({
+            where: { handle: mentions, state: 'active' },
+            attributes: ['id', 'name', 'email', 'emailsDisabled'],
+        })
+
+        // todo: handle sub-post types
+        let postType = post.type
+        if (post.type === 'text' && urls.filter((u) => u.removed).length) postType = 'url'
+        if (post.type === 'url' && urls.filter((u) => u.removed).length > 0) postType = 'text'
+
         const updatePost = await Post.update(
-            { text: text || null },
+            { type: postType, title: title || null, text: text || null },
             { where: { id: postId, creatorId: accountId } }
         )
-        // todo: move users out of promise
-        const notifyMentions = await new Promise(async (resolve) => {
-            const users = await User.findAll({
-                where: { handle: mentions, state: 'active' },
-                attributes: ['id', 'name', 'email', 'emailsDisabled'],
-            })
-            Promise.all(
-                users.map(
-                    (user) =>
-                        new Promise(async (reso) => {
-                            const alreadySent = await Notification.findOne({
-                                where: {
-                                    ownerId: user.id,
-                                    type: `${mentionType}-mention`,
-                                    userId: accountId,
-                                    postId,
-                                },
+
+        const updateUrls = await Promise.all(
+            urls.map(
+                (url) =>
+                    new Promise(async (resolve) => {
+                        const remove =
+                            !url.new && url.removed
+                                ? await Url.update(
+                                      {
+                                          state: 'removed',
+                                      },
+                                      { where: { id: url.id } }
+                                  )
+                                : null
+                        const add =
+                            url.new && !url.removed
+                                ? await Url.create({
+                                      type: 'post',
+                                      state: 'active',
+                                      itemId: postId,
+                                      url: url.url,
+                                      image: url.image,
+                                      title: url.title,
+                                      description: url.description,
+                                      domain: url.domain,
+                                  })
+                                : null
+                        Promise.all([remove, add])
+                            .then(() => resolve())
+                            .catch((error) => resolve(error))
+                    })
+            )
+        )
+
+        const notifyMentions = await Promise.all(
+            mentionedUsers.map(
+                (user) =>
+                    new Promise(async (resolve) => {
+                        const mentionType = postType.includes('string-') ? 'bead' : 'post'
+                        const alreadySent = await Notification.findOne({
+                            where: {
+                                ownerId: user.id,
+                                type: `${mentionType}-mention`,
+                                userId: accountId,
+                                postId,
+                            },
+                        })
+                        if (alreadySent) resolve()
+                        else {
+                            const sendNotification = await Notification.create({
+                                ownerId: user.id,
+                                type: `${mentionType}-mention`,
+                                seen: false,
+                                userId: accountId,
+                                postId,
                             })
-                            if (alreadySent) reso()
-                            else {
-                                const sendNotification = await Notification.create({
-                                    ownerId: user.id,
-                                    type: `${mentionType}-mention`,
-                                    seen: false,
-                                    userId: accountId,
-                                    postId,
-                                })
-                                const sendEmail = user.emailsDisabled
-                                    ? null
-                                    : await sgMail.send({
-                                          to: user.email,
-                                          from: {
-                                              email: 'admin@weco.io',
-                                              name: 'we { collective }',
-                                          },
-                                          subject: 'New notification',
-                                          text: `
-                                        Hi ${user.name}, ${creatorName} just mentioned you in a ${mentionType} on weco:
+                            const sendEmail = user.emailsDisabled
+                                ? null
+                                : await sgMail.send({
+                                      to: user.email,
+                                      from: {
+                                          email: 'admin@weco.io',
+                                          name: 'we { collective }',
+                                      },
+                                      subject: 'New notification',
+                                      text: `
+                                        Hi ${user.name}, ${post.Creator.name} just mentioned you in a ${mentionType} on weco:
                                         http://${config.appURL}/p/${postId}
                                     `,
-                                          html: `
+                                      html: `
                                         <p>
                                             Hi ${user.name},
                                             <br/>
-                                            <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+                                            <a href='${config.appURL}/u/${post.Creator.handle}'>${post.Creator.name}</a>
                                             just mentioned you in a 
                                             <a href='${config.appURL}/p/${postId}'>${mentionType}</a>
                                             on weco
                                         </p>
                                     `,
-                                      })
-                                Promise.all([sendNotification, sendEmail])
-                                    .then(() => reso())
-                                    .catch((error) => reso(error))
-                            }
-                        })
-                )
+                                  })
+                            Promise.all([sendNotification, sendEmail])
+                                .then(() => resolve())
+                                .catch((error) => resolve(error))
+                        }
+                    })
             )
-                .then((data) => resolve(data))
-                .catch((error) => resolve(data, error))
-        })
+        )
 
-        Promise.all([updatePost, notifyMentions])
+        Promise.all([updatePost, updateUrls, notifyMentions])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
