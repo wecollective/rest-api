@@ -36,6 +36,18 @@ module.exports = {
             inviteToken: {
                 type: Sequelize.TEXT,
             },
+            totalPostLikes: {
+                type: Sequelize.INTEGER,
+            },
+            totalPosts: {
+                type: Sequelize.INTEGER,
+            },
+            totalComments: {
+                type: Sequelize.INTEGER,
+            },
+            totalFollowers: {
+                type: Sequelize.INTEGER,
+            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE,

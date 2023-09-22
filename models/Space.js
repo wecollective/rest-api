@@ -17,6 +17,10 @@ module.exports = (sequelize, DataTypes) => {
             flagImagePath: DataTypes.TEXT,
             coverImagePath: DataTypes.TEXT,
             inviteToken: DataTypes.TEXT,
+            totalPostLikes: DataTypes.INTEGER,
+            totalPosts: DataTypes.INTEGER,
+            totalComments: DataTypes.INTEGER,
+            totalFollowers: DataTypes.INTEGER,
         },
         {}
     )
