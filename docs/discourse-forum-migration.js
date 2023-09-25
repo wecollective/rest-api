@@ -223,6 +223,7 @@ const createSpaces = Promise.all(
         (space) =>
             new Promise(async (resolve) => {
                 const handle = space.handle || space.name
+                // todo: set up space stats
                 const newSpace = await Space.create({
                     creatorId,
                     handle: `${spaceHandlePrefix}-${handle

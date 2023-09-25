@@ -157,7 +157,7 @@ function findStartDate(timeRange) {
     return startDate.setTime(startDate.getTime() - offset)
 }
 
-function findOrder(sortBy, sortOrder) {
+function findPostOrder(sortBy, sortOrder) {
     const direction = sortOrder === 'Ascending' ? 'ASC' : 'DESC'
     if (sortBy === 'Date Created')
         return [
@@ -171,12 +171,46 @@ function findOrder(sortBy, sortOrder) {
         ]
     if (sortBy === 'Signal')
         return [
-            [sequelize.literal(`totalRatings`), direction],
+            ['totalRatings', direction],
             ['createdAt', 'DESC'],
             ['id', 'ASC'],
         ]
     return [
-        [sequelize.literal(`total${sortBy}`), direction],
+        [`total${sortBy}`, direction],
+        ['createdAt', 'DESC'],
+        ['id', 'ASC'],
+    ]
+}
+
+function findSpaceOrder(sortBy, sortOrder) {
+    const direction = sortOrder === 'Ascending' ? 'ASC' : 'DESC'
+    if (sortBy === 'Date Created')
+        return [
+            ['createdAt', direction],
+            ['id', 'ASC'],
+        ]
+    if (sortBy === 'Likes')
+        return [
+            ['totalPostLikes', direction],
+            ['createdAt', 'DESC'],
+            ['id', 'ASC'],
+        ]
+    return [
+        [`total${sortBy}`, direction],
+        ['createdAt', 'DESC'],
+        ['id', 'ASC'],
+    ]
+}
+
+function findUserOrder(sortBy, sortOrder) {
+    const direction = sortOrder === 'Ascending' ? 'ASC' : 'DESC'
+    if (sortBy === 'Date Created')
+        return [
+            ['createdAt', direction],
+            ['id', 'ASC'],
+        ]
+    return [
+        [`total${sortBy}`, direction],
         ['createdAt', 'DESC'],
         ['id', 'ASC'],
     ]
@@ -892,10 +926,10 @@ function findSpaceSpaceAttributes(accountId) {
         'flagImagePath',
         'coverImagePath',
         'privacy',
-        totalSpaceFollowers,
-        totalSpaceComments,
-        totalSpaceLikes,
-        totalSpacePosts,
+        'totalPostLikes',
+        'totalPosts',
+        'totalComments',
+        'totalFollowers',
         ancestorAccess(accountId),
     ]
 }
@@ -1024,7 +1058,9 @@ module.exports = {
     totalUserPosts,
     totalUserComments,
     findStartDate,
-    findOrder,
+    findPostOrder,
+    findSpaceOrder,
+    findUserOrder,
     findPostType,
     postAccess,
     findInitialPostAttributes,

@@ -8,7 +8,8 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 const {
     findStartDate,
-    findOrder,
+    findPostOrder,
+    findUserOrder,
     findPostType,
     findInitialPostAttributes,
     findInitialPostAttributesWithAccess,
@@ -17,6 +18,7 @@ const {
     findPostInclude,
     isFollowingUser,
     totalUserPosts,
+    totalUserComments,
 } = require('../Helpers')
 const { Space, User, Post, GlassBeadGame, UserUser } = require('../models')
 
@@ -26,33 +28,13 @@ router.get('/all-users', (req, res) => {
 
     function findFirstAttributes() {
         let firstAttributes = ['id']
-        if (sortBy === 'Posts') {
-            firstAttributes.push([
-                sequelize.literal(`(
-            SELECT COUNT(*)
-                FROM Posts
-                WHERE Posts.state = 'visible'
-                AND Posts.creatorId = User.id
-                AND Posts.type IN ('text', 'url', 'image', 'audio', 'event', 'poll', 'glass-bead-game')
-            )`),
-                'totalPosts',
-            ])
-        }
-        if (sortBy === 'Comments') {
-            firstAttributes.push([
-                sequelize.literal(`(
-            SELECT COUNT(*)
-                FROM Comments
-                WHERE Comments.creatorId = User.id
-            )`),
-                'totalComments',
-            ])
-        }
+        if (sortBy === 'Posts') firstAttributes.push(totalUserPosts)
+        if (sortBy === 'Comments') firstAttributes.push(totalUserComments)
         return firstAttributes
     }
 
     let startDate = findStartDate(timeRange)
-    let order = findOrder(sortBy, sortOrder)
+    let order = findUserOrder(sortBy, sortOrder)
     let firstAttributes = findFirstAttributes()
 
     User.findAll({
@@ -83,24 +65,8 @@ router.get('/all-users', (req, res) => {
                     'flagImagePath',
                     'coverImagePath',
                     'createdAt',
-                    [
-                        sequelize.literal(`(
-                    SELECT COUNT(*)
-                        FROM Posts
-                        WHERE Posts.state = 'visible'
-                        AND Posts.type IN ('text', 'url', 'images', 'audio', 'event', 'string', 'glass-bead-game', 'prism')
-                        AND Posts.creatorId = User.id
-                    )`),
-                        'totalPosts',
-                    ],
-                    [
-                        sequelize.literal(`(
-                    SELECT COUNT(*)
-                        FROM Comments
-                        WHERE Comments.creatorId = User.id
-                    )`),
-                        'totalComments',
-                    ],
+                    totalUserPosts,
+                    totalUserComments,
                 ],
                 order,
                 // include: []
@@ -139,7 +105,7 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
     const ownAccount = accountId === +userId
     const startDate = findStartDate(timeRange)
     const type = findPostType(postType)
-    const order = findOrder(sortBy, sortOrder)
+    const order = findPostOrder(sortBy, sortOrder)
     const where = findPostWhere('user', userId, startDate, type, searchQuery, [])
     const initialAttributes = ownAccount
         ? findInitialPostAttributes(sortBy, accountId)

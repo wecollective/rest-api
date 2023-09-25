@@ -35,7 +35,7 @@ const {
     totalUserPosts,
     totalUserComments,
     findStartDate,
-    findOrder,
+    findPostOrder,
     findPostType,
     findInitialPostAttributes,
     findFullPostAttributes,
@@ -385,7 +385,7 @@ router.post('/stream-posts', authenticateToken, async (req, res) => {
         }
         if (streamFound || type !== 'custom') {
             // set up post options
-            const order = findOrder(sortBy, sortOrder)
+            const order = findPostOrder(sortBy, sortOrder)
             const include = spaces.length
                 ? {
                       model: Space,
@@ -544,7 +544,7 @@ router.post('/liked-posts', authenticateToken, async (req, res) => {
         const likes = await Reaction.findAll({
             where: { creatorId: accountId, type: 'like', itemType: 'post', state: 'active' },
             attributes: ['itemId'],
-            order: findOrder('Date Created', 'Descending'),
+            order: findPostOrder('Date Created', 'Descending'),
             subQuery: false,
             limit: 10,
             offset,

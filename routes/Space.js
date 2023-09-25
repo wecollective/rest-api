@@ -38,7 +38,9 @@ const {
     totalUsers,
     totalLikesReceivedInSpace,
     findStartDate,
-    findOrder,
+    findPostOrder,
+    findSpaceOrder,
+    findUserOrder,
     findPostType,
     findInitialPostAttributes,
     findFullPostAttributes,
@@ -415,9 +417,10 @@ router.get('/space-data', authenticateToken, async (req, res) => {
             'coverImagePath',
             'privacy',
             'inviteToken',
+            'totalPosts',
             totalSpaceSpaces,
-            totalSpacePosts,
-            handle === 'all' ? totalUsers : totalSpaceUsers,
+            // todo: set up tally system and display next to tabs
+            // handle === 'all' ? totalUsers : totalSpaceUsers,
             spaceAccess(accountId),
             ancestorAccess(accountId),
             isModerator(accountId),
@@ -477,7 +480,7 @@ router.get('/nav-list-spaces', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { spaceId, offset, includeParents } = req.query
     const order = [
-        [sequelize.literal(`totalLikes`), 'DESC'],
+        ['totalPostLikes', 'DESC'],
         ['createdAt', 'DESC'],
     ]
 
@@ -490,7 +493,7 @@ router.get('/nav-list-spaces', authenticateToken, async (req, res) => {
                       'handle',
                       'name',
                       'flagImagePath',
-                      totalSpaceLikes,
+                      'totalPostLikes',
                       totalSpaceChildren,
                   ],
                   order,
@@ -513,7 +516,7 @@ router.get('/nav-list-spaces', authenticateToken, async (req, res) => {
             'name',
             'flagImagePath',
             'privacy',
-            totalSpaceLikes,
+            'totalPostLikes',
             totalSpaceChildren,
             ancestorAccess(accountId),
             spaceAccess(accountId),
@@ -637,7 +640,7 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
 
     const startDate = findStartDate(timeRange)
     const postType = findPostType(type)
-    const order = findOrder(sortBy, sortOrder)
+    const order = findPostOrder(sortBy, sortOrder)
     const through = findPostThrough(depth)
     const where = findPostWhere('space', spaceId, startDate, postType, searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
@@ -703,7 +706,7 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
 
     const startDate = findStartDate(timeRange)
     const postType = findPostType(type)
-    const order = findOrder(sortBy, sortOrder)
+    const order = findPostOrder(sortBy, sortOrder)
     const through = findPostThrough(depth)
     const where = findPostWhere('space', spaceId, startDate, postType, searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
@@ -794,7 +797,7 @@ router.get('/space-spaces', authenticateToken, (req, res) => {
 
     Space.findAll({
         where: findSpaceSpacesWhere(spaceId, depth, timeRange, searchQuery),
-        order: findOrder(sortBy, sortOrder),
+        order: findSpaceOrder(sortBy, sortOrder),
         attributes: findSpaceSpaceAttributes(accountId),
         having: { ['ancestorAccess']: 1 },
         include: findSpaceSpacesInclude(depth),
@@ -822,24 +825,22 @@ router.get('/space-people', authenticateToken, (req, res) => {
                 { bio: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
             ],
         },
-        order: findOrder(sortBy, sortOrder),
+        order: findUserOrder(sortBy, sortOrder),
         limit: Number(limit),
         offset: Number(offset),
         attributes: findUserFirstAttributes(sortBy),
         subQuery: false,
-        include: [
-            {
-                model: Space,
-                as: 'FollowedSpaces',
-                attributes: [],
-                through: { where: { relationship: 'follower', state: 'active' }, attributes: [] },
-            },
-        ],
+        include: {
+            model: Space,
+            as: 'FollowedSpaces',
+            attributes: [],
+            through: { where: { relationship: 'follower', state: 'active' }, attributes: [] },
+        },
     })
         .then((users) => {
             User.findAll({
                 where: { id: users.map((user) => user.id) },
-                order: findOrder(sortBy, sortOrder),
+                order: findUserOrder(sortBy, sortOrder),
                 attributes: userAttributes,
             }).then((data) => res.status(200).json(data))
         })
@@ -906,10 +907,10 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
         lens === 'Tree' ? [7, 3, 3, 3] : [200, 100, 100, 100, 100, 100, 100, 100] // space limits per generation (length of array determines max depth)
 
     const fullAttributes = ['name', 'handle', 'flagImagePath', 'privacy', spaceAccess(accountId)]
-    if (sortBy === 'Followers') fullAttributes.push(totalSpaceFollowers)
-    if (sortBy === 'Posts') fullAttributes.push(totalSpacePosts)
-    if (sortBy === 'Comments') fullAttributes.push(totalSpaceComments)
-    if (sortBy === 'Likes') fullAttributes.push(totalSpaceLikes)
+    if (sortBy === 'Followers') fullAttributes.push('totalFollowers')
+    if (sortBy === 'Posts') fullAttributes.push('totalPosts')
+    if (sortBy === 'Comments') fullAttributes.push('totalComments')
+    if (sortBy === 'Likes') fullAttributes.push('totalPostLikes')
 
     function findAttributes(type) {
         let attributes = ['id', 'createdAt']
@@ -1033,7 +1034,7 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
                 include: findChildInclude(generation), // findInclude('child', generation)
                 limit: generationLimits[generation],
                 offset: generation === 0 ? +offset : 0,
-                order: findOrder(sortBy, sortOrder),
+                order: findSpaceOrder(sortBy, sortOrder),
             })
 
             const { totalResults, totalChildren } = parent.dataValues
@@ -1101,7 +1102,7 @@ router.get('/space-map-space-data', async (req, res) => {
     const { spaceId } = req.query
     const space = await Space.findOne({
         where: { id: spaceId },
-        attributes: ['description', totalSpaceFollowers, totalSpacePosts, totalSpaceComments],
+        attributes: ['description', 'totalFollowers', 'totalPosts', 'totalComments'],
     })
     res.status(200).json(space)
 })
@@ -1434,6 +1435,10 @@ router.post('/create-space', authenticateToken, async (req, res) => {
             state: 'active',
             privacy: private ? 'private' : 'public',
             inviteToken: private ? crypto.randomBytes(64).toString('hex') : null,
+            totalPostLikes: 0,
+            totalPosts: 0,
+            totalComments: 0,
+            totalFollowers: 1,
         })
 
         const createModRelationship = SpaceUser.create({
@@ -1712,11 +1717,24 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
 
         const followSpace =
             response === 'accepted'
-                ? await SpaceUser.create({
-                      relationship: 'follower',
-                      state: 'active',
-                      spaceId,
-                      userId: accountId,
+                ? await new Promise(async (resolve) => {
+                      const createSpaceUser = await SpaceUser.create({
+                          relationship: 'follower',
+                          state: 'active',
+                          spaceId,
+                          userId: accountId,
+                      })
+                      const space = await Space.findOne({
+                          where: { id: spaceId },
+                          attributes: ['totalFollowers'],
+                      })
+                      const updateSpaceStats = await Space.update(
+                          { totalFollowers: space.totalFollowers + 1 },
+                          { where: { id: spaceId }, silent: true }
+                      )
+                      Promise.all([createSpaceUser, updateSpaceStats])
+                          .then(() => resolve())
+                          .catch((error) => resolve(error))
                   })
                 : null
 
@@ -1870,11 +1888,24 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
 
         const followSpace =
             response === 'accepted'
-                ? await SpaceUser.create({
-                      relationship: 'follower',
-                      state: 'active',
-                      spaceId,
-                      userId,
+                ? await new Promise(async (resolve) => {
+                      const createSpaceUser = await SpaceUser.create({
+                          relationship: 'follower',
+                          state: 'active',
+                          spaceId,
+                          userId,
+                      })
+                      const space = await Space.findOne({
+                          where: { id: spaceId },
+                          attributes: ['totalFollowers'],
+                      })
+                      const updateSpaceStats = await Space.update(
+                          { totalFollowers: space.totalFollowers + 1 },
+                          { where: { id: spaceId }, silent: true }
+                      )
+                      Promise.all([createSpaceUser, updateSpaceStats])
+                          .then(() => resolve())
+                          .catch((error) => resolve(error))
                   })
                 : null
 
@@ -1966,11 +1997,24 @@ router.post('/accept-space-invite-link', authenticateToken, async (req, res) => 
                 relationship: 'access',
                 state: 'active',
             })
-            const followSpace = await SpaceUser.create({
-                spaceId,
-                userId: accountId,
-                relationship: 'follower',
-                state: 'active',
+            const followSpace = await new Promise(async (resolve) => {
+                const createSpaceUser = await SpaceUser.create({
+                    spaceId,
+                    userId: accountId,
+                    relationship: 'follower',
+                    state: 'active',
+                })
+                const space = await Space.findOne({
+                    where: { id: spaceId },
+                    attributes: ['totalFollowers'],
+                })
+                const updateSpaceStats = await Space.update(
+                    { totalFollowers: space.totalFollowers + 1 },
+                    { where: { id: spaceId }, silent: true }
+                )
+                Promise.all([createSpaceUser, updateSpaceStats])
+                    .then(() => resolve())
+                    .catch((error) => resolve(error))
             })
             Promise.all([removePending, createAccess, followSpace])
                 .then(() => res.status(200).json({ message: 'Success' }))
@@ -2096,47 +2140,48 @@ router.post('/toggle-follow-space', authenticateToken, async (req, res) => {
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
+        const space = await Space.findOne({
+            where: { id: spaceId },
+            attributes: ['totalFollowers'],
+        })
         const updateState = isFollowing
-            ? SpaceUser.update(
-                  { state: 'removed' },
-                  {
-                      where: {
-                          userId: accountId,
-                          spaceId,
-                          relationship: 'follower',
-                          state: 'active',
-                      },
-                  }
-              )
-            : SpaceUser.create({
-                  userId: accountId,
-                  spaceId,
-                  relationship: 'follower',
-                  state: 'active',
+            ? new Promise(async (resolve) => {
+                  const updateSpaceUser = await SpaceUser.update(
+                      { state: 'removed' },
+                      {
+                          where: {
+                              userId: accountId,
+                              spaceId,
+                              relationship: 'follower',
+                              state: 'active',
+                          },
+                      }
+                  )
+                  const updateSpaceStats = await Space.update(
+                      { totalFollowers: space.totalFollowers - 1 },
+                      { where: { id: spaceId }, silent: true }
+                  )
+                  Promise.all([updateSpaceUser, updateSpaceStats])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
+              })
+            : new Promise(async (resolve) => {
+                  const updateSpaceUser = await SpaceUser.create({
+                      userId: accountId,
+                      spaceId,
+                      relationship: 'follower',
+                      state: 'active',
+                  })
+                  const updateSpaceStats = await Space.update(
+                      { totalFollowers: space.totalFollowers + 1 },
+                      { where: { id: spaceId }, silent: true }
+                  )
+                  Promise.all([updateSpaceUser, updateSpaceStats])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
               })
 
         updateState
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
-    }
-})
-
-router.post('/join-spaces', authenticateToken, (req, res) => {
-    const accountId = req.user ? req.user.id : null
-    const spaceIds = req.body
-
-    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
-    else {
-        Promise.all(
-            spaceIds.map((spaceId) =>
-                SpaceUser.create({
-                    userId: accountId,
-                    spaceId,
-                    relationship: 'follower',
-                    state: 'active',
-                })
-            )
-        )
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
@@ -2336,3 +2381,24 @@ router.post('/delete-space', authenticateToken, async (req, res) => {
 })
 
 module.exports = router
+
+// router.post('/join-spaces', authenticateToken, (req, res) => {
+//     const accountId = req.user ? req.user.id : null
+//     const spaceIds = req.body
+
+//     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+//     else {
+//         Promise.all(
+//             spaceIds.map((spaceId) =>
+//                 SpaceUser.create({
+//                     userId: accountId,
+//                     spaceId,
+//                     relationship: 'follower',
+//                     state: 'active',
+//                 })
+//             )
+//         )
+//             .then(() => res.status(200).json({ message: 'Success' }))
+//             .catch((error) => res.status(500).json({ message: 'Error', error }))
+//     }
+// })
