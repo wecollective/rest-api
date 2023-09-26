@@ -476,50 +476,41 @@ router.get('/space-data', authenticateToken, async (req, res) => {
     }
 })
 
-router.get('/nav-list-spaces', authenticateToken, async (req, res) => {
+router.post('/nav-list-spaces', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { spaceId, offset, includeParents } = req.query
+    const { spaceId, offset, includeParents } = req.body
     const order = [
         ['totalPostLikes', 'DESC'],
         ['createdAt', 'DESC'],
     ]
+    const baseAttributes = [
+        'id',
+        'handle',
+        'name',
+        'flagImagePath',
+        'totalPostLikes',
+        totalSpaceChildren,
+    ]
 
-    const parents =
-        includeParents === 'true'
-            ? await Space.findAll({
-                  where: { '$DirectChildSpaces.id$': spaceId, state: 'active' },
-                  attributes: [
-                      'id',
-                      'handle',
-                      'name',
-                      'flagImagePath',
-                      'totalPostLikes',
-                      totalSpaceChildren,
-                  ],
-                  order,
-                  limit: 10,
-                  subQuery: false,
-                  include: {
-                      model: Space,
-                      as: 'DirectChildSpaces',
-                      attributes: ['id'],
-                      through: { attributes: [], where: { state: 'open' } },
-                  },
-              })
-            : null
+    const parents = includeParents
+        ? await Space.findAll({
+              where: { '$DirectChildSpaces.id$': spaceId, state: 'active' },
+              attributes: baseAttributes,
+              order,
+              limit: 10,
+              subQuery: false,
+              include: {
+                  model: Space,
+                  as: 'DirectChildSpaces',
+                  attributes: ['id'],
+                  through: { attributes: [], where: { state: 'open' } },
+              },
+          })
+        : null
 
     const children = await Space.findAndCountAll({
         where: { '$DirectParentSpaces.id$': spaceId, state: 'active' },
-        attributes: [
-            'id',
-            'handle',
-            'name',
-            'flagImagePath',
-            'privacy',
-            'totalPostLikes',
-            totalSpaceChildren,
-            spaceAccess(accountId),
-        ],
+        attributes: [...baseAttributes, 'privacy', spaceAccess(accountId)],
         order,
         offset: +offset,
         limit: 10,
