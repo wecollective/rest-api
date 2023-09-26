@@ -508,7 +508,7 @@ router.get('/nav-list-spaces', authenticateToken, async (req, res) => {
               })
             : null
 
-    const children = await Space.findAll({
+    const children = await Space.findAndCountAll({
         where: { '$DirectParentSpaces.id$': spaceId, state: 'active' },
         attributes: [
             'id',
@@ -518,12 +518,10 @@ router.get('/nav-list-spaces', authenticateToken, async (req, res) => {
             'privacy',
             'totalPostLikes',
             totalSpaceChildren,
-            ancestorAccess(accountId),
             spaceAccess(accountId),
         ],
         order,
         offset: +offset,
-        having: { ['ancestorAccess']: 1 },
         limit: 10,
         subQuery: false,
         include: {
@@ -534,20 +532,7 @@ router.get('/nav-list-spaces', authenticateToken, async (req, res) => {
         },
     })
 
-    const totalChildren = await Space.count({
-        where: { '$DirectParentSpaces.id$': spaceId, state: 'active' },
-        attributes: [ancestorAccess(accountId)],
-        having: { ['ancestorAccess']: 1 },
-        subQuery: false,
-        include: {
-            model: Space,
-            as: 'DirectParentSpaces',
-            attributes: ['id'],
-            through: { attributes: [], where: { state: 'open' } },
-        },
-    })
-
-    res.status(200).json({ parents, children, totalChildren })
+    res.status(200).json({ parents, children: children.rows, totalChildren: children.count })
 })
 
 router.get('/find-child-spaces', authenticateToken, async (req, res) => {
