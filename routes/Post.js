@@ -28,10 +28,8 @@ const {
     getFullLinkedItem,
     accountLike,
     accountMuted,
-    // totalSpaceFollowers,
-    // totalSpaceComments,
-    // totalSpaceLikes,
-    // totalSpacePosts,
+    updateAllSpaceStats,
+    updateAllSpaceUserStats,
 } = require('../Helpers')
 const {
     Space,
@@ -76,33 +74,8 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
-
-        // const spaces = await Space.findAll({
-        //     attributes: [
-        //         'id',
-        //         'name',
-        //         totalSpaceFollowers,
-        //         totalSpaceComments,
-        //         totalSpaceLikes,
-        //         totalSpacePosts,
-        //     ],
-        // })
-
-        // Promise.all(
-        //     spaces.map((space) =>
-        //         Space.update(
-        //             {
-        //                 totalPostLikes: space.dataValues.totalLikes,
-        //                 totalPosts: space.dataValues.totalPosts,
-        //                 totalComments: space.dataValues.totalComments,
-        //                 totalFollowers: space.dataValues.totalFollowers,
-        //             },
-        //             { where: { id: space.id }, silent: true }
-        //         )
-        //     )
-        // )
-        //     .then(() => res.status(200).json({ message: 'Success' }))
-        //     .catch((error) => res.status(500).json(error))
+        // updateAllSpaceStats(res)
+        // updateAllSpaceUserStats(res)
     }
 })
 

@@ -13,6 +13,7 @@ const {
     Image,
     Url,
     Audio,
+    SpaceUserStat,
 } = require('./models')
 
 var aws = require('aws-sdk')
@@ -1041,6 +1042,67 @@ async function getFullLinkedItem(type, id, accountId) {
     return null
 }
 
+// database operations
+async function updateAllSpaceStats(res) {
+    // calculate and update all space stats
+    const spaces = await Space.findAll({
+        attributes: [
+            'id',
+            'name',
+            totalSpaceLikes,
+            totalSpacePosts,
+            totalSpaceComments,
+            totalSpaceFollowers,
+        ],
+    })
+    Promise.all(
+        spaces.map((space) =>
+            Space.update(
+                {
+                    totalPostLikes: space.dataValues.totalLikes,
+                    totalPosts: space.dataValues.totalPosts,
+                    totalComments: space.dataValues.totalComments,
+                    totalFollowers: space.dataValues.totalFollowers,
+                },
+                { where: { id: space.id }, silent: true }
+            )
+        )
+    )
+        .then(() => res.status(200).json({ message: 'Success' }))
+        .catch((error) => res.status(500).json(error))
+}
+
+async function updateAllSpaceUserStats(res) {
+    // calculate and update all SpaceUserStats (currently only totalPostLikes value)
+    // warning: long operation (~10 mins with 680 spaces)
+    const spaces = await Space.findAll({
+        where: { totalPostLikes: { [Op.gt]: 0 } },
+        attributes: ['id'],
+        order: [['totalPostLikes', 'DESC']],
+    })
+
+    for (const space of spaces) {
+        const users = await User.findAll({
+            where: { state: 'active' },
+            attributes: ['id', totalLikesReceivedInSpace(space.id)],
+            order: [
+                [sequelize.literal('likesReceived'), 'DESC'],
+                ['createdAt', 'ASC'],
+            ],
+            having: { ['likesReceived']: { [Op.gt]: 0 } },
+        })
+        for (const user of users) {
+            await SpaceUserStat.create({
+                spaceId: space.id,
+                userId: user.id,
+                totalPostLikes: +user.dataValues.likesReceived,
+            })
+        }
+    }
+
+    res.status(200).json({ message: 'Success' })
+}
+
 module.exports = {
     imageMBLimit,
     audioMBLimit,
@@ -1091,6 +1153,9 @@ module.exports = {
     getFullLinkedItem,
     accountLike,
     accountMuted,
+    // database operations
+    updateAllSpaceStats,
+    updateAllSpaceUserStats,
 }
 
 // function totalPostLinks(model) {
