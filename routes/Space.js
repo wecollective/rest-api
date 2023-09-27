@@ -22,6 +22,7 @@ const {
     Event,
     Image,
     Url,
+    SpaceUserStat,
 } = require('../models')
 const {
     totalSpaceSpaces,
@@ -559,27 +560,27 @@ router.get('/find-child-spaces', authenticateToken, async (req, res) => {
 router.get('/top-contributors', async (req, res) => {
     const { spaceId, offset } = req.query
 
-    // count not working with virtual columns ('having') so limit set to 11 to check for more users
-
-    const users = await User.findAll({
-        where: { state: 'active' },
-        attributes: ['id', 'handle', 'name', 'flagImagePath', totalLikesReceivedInSpace(spaceId)],
+    const stats = await SpaceUserStat.findAndCountAll({
+        where: { spaceId, totalPostLikes: { [Op.gt]: 0 } },
+        attributes: ['totalPostLikes'],
         order: [
-            [sequelize.literal('likesReceived'), 'DESC'],
+            ['totalPostLikes', 'DESC'],
             ['createdAt', 'ASC'],
         ],
         offset: +offset,
-        limit: 11,
-        having: { ['likesReceived']: { [Op.gt]: 0 } },
+        limit: 10,
+        include: {
+            model: User,
+            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+        },
     })
 
-    res.status(200).json({ users: users.slice(0, 10), moreUsers: users.length > 10 })
-
-    // const totalContributors = await User.count({
-    //     where: { state: 'active' },
-    //     attributes: ['id', totalLikesReceivedInSpace(spaceId)],
-    //     having: { ['likesReceived']: { [Op.gt]: 0 } },
-    // })
+    res.status(200).json({
+        users: stats.rows.map((stat) => {
+            return { ...stat.User.dataValues, totalPostLikes: stat.totalPostLikes }
+        }),
+        totalUsers: stats.count,
+    })
 })
 
 router.get('/space-about', async (req, res) => {
