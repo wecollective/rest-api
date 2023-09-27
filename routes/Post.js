@@ -3340,7 +3340,6 @@ router.post('/save-gbg-topic', (req, res) => {
 router.post('/delete-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.body
-
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const post = await Post.findOne({
@@ -3364,19 +3363,34 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
         })
         const removePost = await Post.update({ state: 'deleted' }, { where: { id: postId } })
         const updateSpaceStats = await Promise.all(
-            post.AllPostSpaces.map((space) =>
-                Space.update(
-                    {
-                        totalPostLikes: space.totalPostLikes - post.totalLikes,
-                        totalComments: space.totalComments - post.totalComments,
-                        totalPosts: space.totalPosts - 1,
-                    },
-                    { where: { id: space.id }, silent: true }
-                )
+            post.AllPostSpaces.map(
+                (space) =>
+                    new Promise(async (resolve) => {
+                        const updateSpace = await Space.update(
+                            {
+                                totalPostLikes: space.totalPostLikes - post.totalLikes,
+                                totalComments: space.totalComments - post.totalComments,
+                                totalPosts: space.totalPosts - 1,
+                            },
+                            { where: { id: space.id }, silent: true }
+                        )
+                        const spaceUserStat = await SpaceUserStat.findOne({
+                            where: { spaceId: space.id, userId: accountId },
+                            attributes: ['id', 'totalPostLikes'],
+                        })
+                        const updateSpaceUserStat = spaceUserStat
+                            ? await spaceUserStat.update({
+                                  totalPostLikes: spaceUserStat.totalPostLikes - post.totalLikes,
+                              })
+                            : null
+                        Promise.all([updateSpace, updateSpaceUserStat])
+                            .then(() => resolve())
+                            .catch((error) => resolve(error))
+                    })
             )
         )
         const removeEvent = post.Event
-            ? Event.update({ state: 'deleted' }, { where: { id: post.Event.id } })
+            ? await Event.update({ state: 'deleted' }, { where: { id: post.Event.id } })
             : null
 
         Promise.all([removePost, updateSpaceStats, removeEvent])
@@ -3424,6 +3438,16 @@ router.post('/remove-post', authenticateToken, async (req, res) => {
             { where: { id: spaceId }, silent: true }
         )
 
+        const spaceUserStat = await SpaceUserStat.findOne({
+            where: { spaceId, userId: post.Creator.id },
+            attributes: ['id', 'totalPostLikes'],
+        })
+        const updateSpaceUserStat = spaceUserStat
+            ? await spaceUserStat.update({
+                  totalPostLikes: spaceUserStat.totalPostLikes - post.totalLikes,
+              })
+            : null
+
         const skipNotification = post.Creator.id === accountId
         const skipEmail = skipNotification || post.Creator.emailsDisabled
         const sendNotification = skipNotification
@@ -3458,7 +3482,13 @@ router.post('/remove-post', authenticateToken, async (req, res) => {
             `,
               })
 
-        Promise.all([updatePostEntry, updateSpaceStats, sendNotification, sendEmail])
+        Promise.all([
+            updatePostEntry,
+            updateSpaceStats,
+            updateSpaceUserStat,
+            sendNotification,
+            sendEmail,
+        ])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
