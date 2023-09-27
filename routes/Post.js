@@ -37,6 +37,7 @@ const {
     SpaceUser,
     SpaceParent,
     SpaceAncestor,
+    SpaceUserStat,
     User,
     Post,
     Comment,
@@ -2064,9 +2065,9 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                 model: Space,
                 as: 'AllPostSpaces',
                 where: { state: 'active' },
-                required: false,
                 attributes: ['id', 'totalPostLikes'],
                 through: { where: { state: 'active' }, attributes: [] },
+                required: false,
             })
         }
         if (itemType === 'comment') model = Comment
@@ -2086,11 +2087,30 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         const updateSpaceStats =
             itemType === 'post'
                 ? Promise.all(
-                      item.AllPostSpaces.map((space) =>
-                          Space.update(
-                              { totalPostLikes: space.totalPostLikes + 1 },
-                              { where: { id: space.id }, silent: true }
-                          )
+                      item.AllPostSpaces.map(
+                          (space) =>
+                              new Promise(async (resolve) => {
+                                  const updateSpaceStat = await Space.update(
+                                      { totalPostLikes: space.totalPostLikes + 1 },
+                                      { where: { id: space.id }, silent: true }
+                                  )
+                                  const spaceUserStat = await SpaceUserStat.findOne({
+                                      where: { spaceId: space.id, userId: item.Creator.id },
+                                      attributes: ['id', 'totalPostLikes'],
+                                  })
+                                  const updateSpaceUserStat = spaceUserStat
+                                      ? await spaceUserStat.update({
+                                            totalPostLikes: spaceUserStat.totalPostLikes + 1,
+                                        })
+                                      : await SpaceUserStat.create({
+                                            spaceId: space.id,
+                                            userId: item.Creator.id,
+                                            totalPostLikes: 1,
+                                        })
+                                  Promise.all([updateSpaceStat, updateSpaceUserStat])
+                                      .then(() => resolve())
+                                      .catch((error) => resolve(error))
+                              })
                       )
                   )
                 : null
@@ -2187,14 +2207,21 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
         let include = null
         if (itemType === 'post') {
             model = Post
-            include = {
-                model: Space,
-                as: 'AllPostSpaces',
-                where: { state: 'active' },
-                required: false,
-                attributes: ['id', 'totalPostLikes'],
-                through: { where: { state: 'active' }, attributes: [] },
-            }
+            include = [
+                {
+                    model: User,
+                    as: 'Creator',
+                    attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
+                },
+                {
+                    model: Space,
+                    as: 'AllPostSpaces',
+                    where: { state: 'active' },
+                    required: false,
+                    attributes: ['id', 'totalPostLikes'],
+                    through: { where: { state: 'active' }, attributes: [] },
+                },
+            ]
         }
         if (itemType === 'comment') model = Comment
         if (itemType === 'link') model = Link
@@ -2210,14 +2237,27 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
             { where: { id: itemId }, silent: true }
         )
 
-        const updateSpaceLikes =
+        const updateSpaceStats =
             itemType === 'post'
                 ? Promise.all(
-                      item.AllPostSpaces.map((space) =>
-                          space.update(
-                              { totalPostLikes: space.totalPostLikes - 1 },
-                              { where: { id: space.id }, silent: true }
-                          )
+                      item.AllPostSpaces.map(
+                          (space) =>
+                              new Promise(async (resolve) => {
+                                  const updateSpaceStat = await Space.update(
+                                      { totalPostLikes: space.totalPostLikes - 1 },
+                                      { where: { id: space.id }, silent: true }
+                                  )
+                                  const spaceUserStat = await SpaceUserStat.findOne({
+                                      where: { spaceId: space.id, userId: item.Creator.id },
+                                      attributes: ['id', 'totalPostLikes'],
+                                  })
+                                  const updateSpaceUserStat = await spaceUserStat.update({
+                                      totalPostLikes: spaceUserStat.totalPostLikes - 1,
+                                  })
+                                  Promise.all([updateSpaceStat, updateSpaceUserStat])
+                                      .then(() => resolve())
+                                      .catch((error) => resolve(error))
+                              })
                       )
                   )
                 : null
@@ -2235,7 +2275,7 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
             }
         )
 
-        Promise.all([updateTotalLikes, updateSpaceLikes, removeReaction])
+        Promise.all([updateTotalLikes, updateSpaceStats, removeReaction])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
