@@ -1944,6 +1944,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                             spaceId: id,
                             state: 'active',
                         })
+                        // update stats
                         const space = await Space.findOne({
                             where: { id },
                             attributes: ['totalPostLikes', 'totalComments', 'totalPosts'],
@@ -1956,7 +1957,20 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                             },
                             { where: { id }, silent: true }
                         )
-                        Promise.all([createSpacePost, updateSpaceStats])
+                        const spaceUserStat = await SpaceUserStat.findOne({
+                            where: { spaceId: id, userId: post.Creator.id },
+                            attributes: ['id', 'totalPostLikes'],
+                        })
+                        const updateSpaceUserStat = spaceUserStat
+                            ? await spaceUserStat.update({
+                                  totalPostLikes: spaceUserStat.totalPostLikes + post.totalLikes,
+                              })
+                            : await SpaceUserStat.create({
+                                  spaceId: id,
+                                  userId: post.Creator.id,
+                                  totalPostLikes: post.totalLikes,
+                              })
+                        Promise.all([createSpacePost, updateSpaceStats, updateSpaceUserStat])
                             .then(() => resolve())
                             .catch((error) => resolve(error))
                     })
@@ -2000,6 +2014,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                                     spaceId: id,
                                     state: 'active',
                                 })
+                                // update stats
                                 const space = await Space.findOne({
                                     where: { id },
                                     attributes: ['totalPostLikes', 'totalComments', 'totalPosts'],
@@ -2012,7 +2027,25 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                                     },
                                     { where: { id }, silent: true }
                                 )
-                                Promise.all([createSpacePost, updateSpaceStats])
+                                const spaceUserStat = await SpaceUserStat.findOne({
+                                    where: { spaceId: id, userId: post.Creator.id },
+                                    attributes: ['id', 'totalPostLikes'],
+                                })
+                                const updateSpaceUserStat = spaceUserStat
+                                    ? await spaceUserStat.update({
+                                          totalPostLikes:
+                                              spaceUserStat.totalPostLikes + post.totalLikes,
+                                      })
+                                    : await SpaceUserStat.create({
+                                          spaceId: id,
+                                          userId: post.Creator.id,
+                                          totalPostLikes: post.totalLikes,
+                                      })
+                                Promise.all([
+                                    createSpacePost,
+                                    updateSpaceStats,
+                                    updateSpaceUserStat,
+                                ])
                                     .then(() => reso(id))
                                     .catch((error) => reso(error))
                             }

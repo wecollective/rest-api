@@ -654,6 +654,7 @@ router.post('/save-muted-users', authenticateToken, async (req, res) => {
     }
 })
 
+// todo: handle stat updates
 router.post('/delete-account', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
