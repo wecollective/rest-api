@@ -330,10 +330,7 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
     const totals = await Space.findOne({
         where: { id: 1 },
         attributes: [
-            [
-                sequelize.literal(`(SELECT COUNT(*) FROM Posts WHERE Posts.state = 'visible')`),
-                'totalPosts',
-            ],
+            'totalPosts',
             [
                 sequelize.literal(`(SELECT COUNT(*) FROM Spaces WHERE Spaces.state = 'active')`),
                 'totalSpaces',
@@ -372,10 +369,11 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
     const spaces = await Space.findAll({
         where: {
             state: 'active',
+            privacy: 'public',
             flagImagePath: { [Op.ne]: null },
         },
-        attributes: ['flagImagePath', ancestorAccess(accountId)],
-        having: { ['ancestorAccess']: 1 },
+        attributes: ['flagImagePath'], // ancestorAccess(accountId)
+        // having: { ['ancestorAccess']: 1 },
         order: [['createdAt', 'DESC']],
         limit: 3,
     })
