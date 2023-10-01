@@ -207,6 +207,11 @@ router.post('/account-notifications', authenticateToken, async (req, res) => {
                     as: 'relatedPost',
                     include: [
                         {
+                            model: User,
+                            as: 'Creator',
+                            attributes: ['name', 'flagImagePath'],
+                        },
+                        {
                             model: Space,
                             as: 'DirectSpaces',
                             required: false,

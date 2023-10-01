@@ -75,8 +75,6 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
-        // updateAllSpaceStats(res)
-        // updateAllSpaceUserStats(res)
     }
 })
 
