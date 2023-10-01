@@ -48,8 +48,6 @@ const {
     findPostThrough,
     findPostWhere,
     findPostInclude,
-    findSpaceSpaceAttributes,
-    findSpaceSpacesWhere,
     findSpaceSpacesInclude,
     spaceAccess,
     ancestorAccess,
@@ -770,12 +768,45 @@ router.get('/space-spaces', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { spaceId, timeRange, sortBy, sortOrder, depth, searchQuery, limit, offset } = req.query
 
+    // build where
+    const where = {
+        state: 'active',
+        createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
+        [Op.or]: [
+            { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+            { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+            { description: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+        ],
+    }
+    if (depth === 'All Contained Spaces') where['$SpaceAncestors.id$'] = spaceId
+    else where['$DirectParentSpaces.id$'] = spaceId
+
+    // build include
+    const state = depth === 'All Contained Spaces' ? { [Op.or]: ['open', 'closed'] } : 'open'
+    const include = {
+        model: Space,
+        as: depth === 'All Contained Spaces' ? 'SpaceAncestors' : 'DirectParentSpaces',
+        attributes: [],
+        through: { attributes: [], where: { state } },
+    }
+
     Space.findAll({
-        where: findSpaceSpacesWhere(spaceId, depth, timeRange, searchQuery),
+        where,
+        attributes: [
+            'id',
+            'handle',
+            'name',
+            'description',
+            'flagImagePath',
+            'coverImagePath',
+            'privacy',
+            'totalPostLikes',
+            'totalPosts',
+            'totalComments',
+            'totalFollowers',
+        ],
+        include,
         order: findSpaceOrder(sortBy, sortOrder),
-        attributes: findSpaceSpaceAttributes(accountId),
-        having: { ['ancestorAccess']: 1 },
-        include: findSpaceSpacesInclude(depth),
         limit: Number(limit) || null,
         offset: Number(offset),
         subQuery: false,

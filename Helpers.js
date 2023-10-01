@@ -918,38 +918,6 @@ function findCommentAttributes(model, accountId) {
     ]
 }
 
-function findSpaceSpaceAttributes(accountId) {
-    return [
-        'id',
-        'handle',
-        'name',
-        'description',
-        'flagImagePath',
-        'coverImagePath',
-        'privacy',
-        'totalPostLikes',
-        'totalPosts',
-        'totalComments',
-        'totalFollowers',
-        ancestorAccess(accountId),
-    ]
-}
-
-function findSpaceSpacesWhere(spaceId, depth, timeRange, searchQuery) {
-    const where = {
-        state: 'active',
-        createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
-        [Op.or]: [
-            { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            { description: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-        ],
-    }
-    if (depth === 'All Contained Spaces') where['$SpaceAncestors.id$'] = spaceId
-    else where['$DirectParentSpaces.id$'] = spaceId
-    return where
-}
-
 function findSpaceSpacesInclude(depth) {
     const fullDepth = depth === 'All Contained Spaces'
     const state = fullDepth ? { [Op.or]: ['open', 'closed'] } : 'open'
@@ -1132,9 +1100,7 @@ module.exports = {
     findPostWhere,
     findPostInclude,
     findCommentAttributes,
-    findSpaceSpaceAttributes,
     totalSpaceResults,
-    findSpaceSpacesWhere,
     findSpaceSpacesInclude,
     spaceAccess,
     ancestorAccess,
