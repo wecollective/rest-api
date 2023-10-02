@@ -44,6 +44,9 @@ module.exports = {
             passwordResetToken: {
                 type: Sequelize.TEXT,
             },
+            gcId: {
+                type: Sequelize.STRING,
+            },
             state: {
                 type: Sequelize.STRING,
             },

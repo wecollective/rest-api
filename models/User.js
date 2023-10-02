@@ -20,42 +20,17 @@ module.exports = (sequelize, DataTypes) => {
             emailToken: DataTypes.TEXT,
             accountVerified: DataTypes.BOOLEAN,
             passwordResetToken: DataTypes.TEXT,
+            gcId: DataTypes.STRING,
             state: DataTypes.STRING,
         },
         {}
     )
     User.associate = function (models) {
-        User.hasMany(models.Post, {
-            foreignKey: 'creatorId',
-            // as: 'createdPosts'
-        })
-
-        User.hasMany(models.Comment, {
-            foreignKey: 'creatorId',
-            //as: 'createdComments'
-        })
-
-        User.hasMany(models.Reaction, {
-            foreignKey: 'creatorId',
-        })
-
-        User.hasMany(models.Link, {
-            foreignKey: 'creatorId',
-            //as: 'createdComments'
-        })
-
-        User.hasMany(models.Notification, {
-            foreignKey: 'ownerId',
-        })
-
-        // User.hasMany(models.GlassBead, {
-        //     foreignKey: 'userId',
-        //     // as: 'user'
-        // })
-
-        // User.hasMany(models.GlassBeadGameComment, {
-        //     foreignKey: 'userId',
-        // })
+        User.hasMany(models.Post, { foreignKey: 'creatorId' })
+        User.hasMany(models.Comment, { foreignKey: 'creatorId' })
+        User.hasMany(models.Reaction, { foreignKey: 'creatorId' })
+        User.hasMany(models.Link, { foreignKey: 'creatorId' })
+        User.hasMany(models.Notification, { foreignKey: 'ownerId' })
 
         User.belongsToMany(models.Space, {
             through: models.SpaceUser,
@@ -95,23 +70,16 @@ module.exports = (sequelize, DataTypes) => {
             otherKey: 'userBId',
         })
 
-        // User.belongsToMany(models.Prism, {
-        //     through: models.PrismUser,
-        //     //as: 'ModeratedSpaces',
-        //     foreignKey: 'userId',
-        // })
-
         User.belongsToMany(models.Event, {
             through: models.UserEvent,
-            // as: 'UserEvent',
             foreignKey: 'userId',
         })
 
-        // Stream relationship
         User.hasMany(models.Stream, {
             as: 'Streams',
             foreignKey: 'ownerId',
         })
+
         User.belongsToMany(models.Stream, {
             through: models.StreamSource,
             as: 'StreamSourceUser',
