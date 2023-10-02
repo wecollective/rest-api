@@ -1,18 +1,19 @@
 require('dotenv').config()
-const devApi = process.env.NODE_ENV === 'dev'
-const devApp = process.env.APP_ENV === 'dev'
+const { NODE_ENV, APP_ENV } = process.env
+const apiEnv = NODE_ENV.toUpperCase()
+const appEnv = APP_ENV.toUpperCase()
 
 module.exports = {
-    username: process.env[devApi ? 'DEV_DB_USER' : 'PROD_DB_USER'],
-    password: process.env[devApi ? 'DEV_DB_PASSWORD' : 'PROD_DB_PASSWORD'],
-    database: process.env[devApi ? 'DEV_DB_NAME' : 'PROD_DB_NAME'],
-    host: process.env[devApi ? 'DEV_DB_HOST' : 'PROD_DB_HOST'],
-    port: process.env[devApi ? 'DEV_DB_PORT' : 'PROD_DB_PORT'],
+    // database connection
+    username: process.env[`${apiEnv}_DB_USER`],
+    password: process.env[`${apiEnv}_DB_PASSWORD`],
+    database: process.env[`${apiEnv}_DB_NAME`],
+    host: process.env[`${apiEnv}_DB_HOST`],
+    port: process.env[`${apiEnv}_DB_PORT`],
     dialect: 'mysql',
-
-    appURL: process.env[devApp ? 'DEV_APP_URL' : 'PROD_APP_URL'],
-    appURL2: devApp ? null : process.env.PROD_APP_URL2,
-    apiUrl: process.env[devApi ? 'DEV_API_URL' : 'PROD_API_URL'],
-    recaptchaSecretKey:
-        process.env[devApp ? 'RECAPTCHA_SECRET_KEY_DEV' : 'RECAPTCHA_SECRET_KEY_PROD'],
+    // urls and keys
+    appURL: process.env[`${appEnv}_APP_URL`],
+    appURL2: process.env[`${appEnv}_APP_URL2`],
+    apiUrl: process.env[`${apiEnv}_API_URL`],
+    recaptchaSecretKey: process.env[`RECAPTCHA_SECRET_KEY_${appEnv}`],
 }
