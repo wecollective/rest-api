@@ -903,24 +903,19 @@ router.get('/space-events', authenticateToken, (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
-// todo: further cleanup still required
-router.get('/space-map-data', authenticateToken, async (req, res) => {
-    // currently used in both getSpaceMapData and getSpaceMapChildren in SpaceContext
+router.post('/space-map-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    // todo: use post request and req.body instead?
-    const { spaceId, lens, sortBy, sortOrder, timeRange, depth, searchQuery, offset, isParent } =
-        req.query
-
+    const { spaceId, params, offset, isParent } = req.body
+    const { lens, sortBy, sortOrder, timeRange, depth, searchQuery } = params
     // three scenarios: 'full-tree', 'children-of-parent', 'children-of-child'
     // + getting full tree inlcuding parent (offset = 0)
     // + expanding children of parent (isParent: true, offset > 0)
     // + expanding children of child (isParent: false, offset > 0)
     let state = 'full-tree'
-    if (+offset > 0) state = isParent === 'true' ? 'children-of-parent' : 'children-of-child'
+    if (offset > 0) state = isParent ? 'children-of-parent' : 'children-of-child'
     // isParent determines whether expanding first generation or later generations
     // offset determins if grabing children or whole tree
-    console.log('!!!!!!! state: ', state)
-    console.log('!!!!!!! req.query: ', req.query)
+    console.log(888, 'state: ', state)
     const generationLimits =
         lens === 'Tree' ? [7, 3, 3, 3] : [200, 100, 100, 100, 100, 100, 100, 100] // space limits per generation (length of array determines max depth)
 
@@ -934,7 +929,7 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
         let attributes = ['id', 'createdAt']
         if (type === 'child' || state === 'full-tree') attributes.push(...fullAttributes)
         if (type === 'parent' && state !== 'children-of-child') {
-            attributes.push(totalSpaceResults(depth, timeRange, searchQuery))
+            attributes.push(totalSpaceResults(depth, timeRange, searchQuery || ''))
         } else attributes.push(totalSpaceChildren)
         return attributes
     }
@@ -1059,7 +1054,7 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
             const { totalResults, totalChildren } = parent.dataValues
             const results =
                 generation === 0 && state !== 'children-of-child' ? totalResults : totalChildren
-            const remainingSpaces = results - children.length - (generation === 0 ? +offset : 0)
+            const remainingSpaces = results - children.length - (generation === 0 ? offset : 0)
 
             if (remainingSpaces) {
                 children.splice(-1, 1)
