@@ -89,6 +89,7 @@ router.get('/user-data', authenticateToken, async (req, res) => {
             'bio',
             'flagImagePath',
             'coverImagePath',
+            'gcId',
             'createdAt',
             totalUserPosts,
             isFollowingUser(accountId),

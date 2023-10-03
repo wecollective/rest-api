@@ -805,6 +805,7 @@ function findPostThrough(depth) {
 }
 
 function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers) {
+    const query = searchQuery || ''
     const where = {
         state: 'visible',
         createdAt: { [Op.between]: [startDate, Date.now()] },
@@ -817,11 +818,10 @@ function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers) {
     if (location === 'user') where.creatorId = id
     if (searchQuery) {
         where[Op.or] = [
-            { text: { [Op.like]: `%${searchQuery}%` } },
-            { title: { [Op.like]: `%${searchQuery}%` } },
-            { '$GlassBeadGame.topic$': { [Op.like]: `%${searchQuery}%` } },
-            // { '$Urls.title$': { [Op.like]: `%${searchQuery}%` } },
-            // { '$Urls.description$': { [Op.like]: `%${searchQuery}%` } },
+            { text: { [Op.like]: `%${query}%` } },
+            { title: { [Op.like]: `%${query}%` } },
+            // todo: use post title for GBG topics
+            { '$GlassBeadGame.topic$': { [Op.like]: `%${query}%` } },
         ]
     }
     return where

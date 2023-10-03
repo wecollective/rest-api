@@ -598,19 +598,8 @@ router.get('/space-about', async (req, res) => {
 router.post('/space-posts', authenticateToken, async (req, res) => {
     // todo: potentially merge with user posts: get('/posts')
     const accountId = req.user ? req.user.id : null
-    const {
-        spaceId,
-        timeRange,
-        type,
-        sortBy,
-        sortOrder,
-        depth,
-        searchQuery,
-        limit,
-        offset,
-        mutedUsers,
-    } = req.body
-
+    const { spaceId, limit, offset, params, mutedUsers } = req.body
+    const { timeRange, type, sortBy, sortOrder, depth, searchQuery } = params
     const startDate = findStartDate(timeRange)
     const postType = findPostType(type)
     const order = findPostOrder(sortBy, sortOrder)
@@ -619,6 +608,29 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 
+    // todo: try getting space first then .getSpacePosts function to replace double query
+    // warning: causes extreme cpu utilisation on db for some reason
+    // const space = await Space.findOne({ where: { id: spaceId }, attributes: ['id'] })
+    // const posts = await space.getSpacePosts({
+    //     where,
+    //     order,
+    //     attributes: fullAttributes,
+    //     limit: Number(limit),
+    //     offset: Number(offset),
+    //     include: [
+    //         {
+    //             model: Space,
+    //             as: 'AllPostSpaces',
+    //             attributes: ['id'],
+    //             through,
+    //         },
+    //         ...findPostInclude(accountId),
+    //     ],
+    //     subQuery: false,
+    // })
+
+    // res.status(200).json(posts)
+
     // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
     // Intial query used to find correct posts with pagination and sorting applied.
     // Second query used to return all related data and models.
@@ -626,8 +638,8 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
     const emptyPosts = await Post.findAll({
         where,
         order,
-        limit: Number(limit),
-        offset: Number(offset),
+        limit,
+        offset,
         subQuery: false,
         attributes: initialAttributes,
         include: [
@@ -1033,6 +1045,7 @@ router.get('/space-map-data', authenticateToken, async (req, res) => {
 
     async function traverseTree(parent, generation, includeParent) {
         return new Promise(async (resolve) => {
+            // todo: try using findAndCountAll instead of totalResults / totalChildren to increase query speed
             const children = await Space.findAll({
                 where: findWhere(parent.dataValues.id, generation),
                 subQuery: false,
