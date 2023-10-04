@@ -679,13 +679,24 @@ function totalLikesReceivedInSpace(spaceId) {
     ]
 }
 
-function totalSpaceResults(depth, timeRange, searchQuery) {
-    const startDate = createSQLDate(findStartDate(timeRange))
-    const endDate = createSQLDate(new Date())
-
-    return depth === 'All Contained Spaces'
-        ? [
-              sequelize.literal(`(
+function totalSpaceResults(filters) {
+    if (!filters) {
+        return [
+            sequelize.literal(`(
+                SELECT COUNT(*)
+                FROM SpaceParents
+                WHERE SpaceParents.spaceAId = Space.id
+                AND SpaceParents.state = 'open'
+            )`),
+            'totalResults',
+        ]
+    } else {
+        const { depth, timeRange, search } = filters
+        const startDate = createSQLDate(findStartDate(timeRange))
+        const endDate = createSQLDate(new Date())
+        return depth === 'All Contained Spaces'
+            ? [
+                  sequelize.literal(`(
                     SELECT COUNT(*)
                     FROM Spaces s
                     WHERE s.id != Space.id
@@ -698,15 +709,15 @@ function totalSpaceResults(depth, timeRange, searchQuery) {
                         WHERE SpaceAncestors.spaceAId = Space.id
                         AND (SpaceAncestors.state = 'open' OR SpaceAncestors.state = 'closed')
                     ) AND (
-                        s.handle LIKE '%${searchQuery}%'
-                        OR s.name LIKE '%${searchQuery}%'
-                        OR s.description LIKE '%${searchQuery}%'
+                        s.handle LIKE '%${search}%'
+                        OR s.name LIKE '%${search}%'
+                        OR s.description LIKE '%${search}%'
                     ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
                 )`),
-              'totalResults',
-          ]
-        : [
-              sequelize.literal(`(
+                  'totalResults',
+              ]
+            : [
+                  sequelize.literal(`(
                     SELECT COUNT(*)
                     FROM Spaces s
                     WHERE s.state = 'active'
@@ -717,13 +728,14 @@ function totalSpaceResults(depth, timeRange, searchQuery) {
                         ON SpaceParents.spaceAId = Space.id
                         WHERE SpaceParents.state = 'open'
                     ) AND (
-                        s.handle LIKE '%${searchQuery}%'
-                        OR s.name LIKE '%${searchQuery}%'
-                        OR s.description LIKE '%${searchQuery}%'
+                        s.handle LIKE '%${search}%'
+                        OR s.name LIKE '%${search}%'
+                        OR s.description LIKE '%${search}%'
                     ) AND s.createdAt BETWEEN '${startDate}' AND '${endDate}'
                 )`),
-              'totalResults',
-          ]
+                  'totalResults',
+              ]
+    }
 }
 
 // user literals

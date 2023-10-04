@@ -26,18 +26,9 @@ const {
 } = require('../models')
 const {
     totalSpaceSpaces,
-    totalSpacePosts,
     totalSpaceChildren,
-    totalSpaceUsers,
-    totalSpaceFollowers,
-    totalSpaceComments,
-    totalSpaceReactions,
-    totalSpaceLikes,
-    totalSpaceRatings,
     totalUserPosts,
     totalUserComments,
-    totalUsers,
-    totalLikesReceivedInSpace,
     findStartDate,
     findPostOrder,
     findSpaceOrder,
@@ -48,13 +39,11 @@ const {
     findPostThrough,
     findPostWhere,
     findPostInclude,
-    findSpaceSpacesInclude,
     spaceAccess,
     ancestorAccess,
     postAccess,
     isModerator,
     isFollowingSpace,
-    createSQLDate,
     totalSpaceResults,
 } = require('../Helpers')
 
@@ -904,86 +893,37 @@ router.get('/space-events', authenticateToken, (req, res) => {
 })
 
 router.post('/space-map-data', authenticateToken, async (req, res) => {
+    // 3 scenarios: 'full-tree' (includes root and parents), 'children-of-root' (includes filters) : 'children-of-child' (no filters)
     const accountId = req.user ? req.user.id : null
-    const { spaceId, params, offset, isParent } = req.body
+    const { scenario, spaceId, params, offset } = req.body
     const { lens, sortBy, sortOrder, timeRange, depth, searchQuery } = params
-    // three scenarios: 'full-tree', 'children-of-parent', 'children-of-child'
-    // + getting full tree inlcuding parent (offset = 0)
-    // + expanding children of parent (isParent: true, offset > 0)
-    // + expanding children of child (isParent: false, offset > 0)
-    let state = 'full-tree'
-    if (offset > 0) state = isParent ? 'children-of-parent' : 'children-of-child'
-    // isParent determines whether expanding first generation or later generations
-    // offset determins if grabing children or whole tree
-    console.log(888, 'state: ', state)
-    const generationLimits =
-        lens === 'Tree' ? [7, 3, 3, 3] : [200, 100, 100, 100, 100, 100, 100, 100] // space limits per generation (length of array determines max depth)
-
-    const fullAttributes = ['name', 'handle', 'flagImagePath', 'privacy', spaceAccess(accountId)]
-    if (sortBy === 'Followers') fullAttributes.push('totalFollowers')
-    if (sortBy === 'Posts') fullAttributes.push('totalPosts')
-    if (sortBy === 'Comments') fullAttributes.push('totalComments')
-    if (sortBy === 'Likes') fullAttributes.push('totalPostLikes')
-
-    function findAttributes(type) {
-        let attributes = ['id', 'createdAt']
-        if (type === 'child' || state === 'full-tree') attributes.push(...fullAttributes)
-        if (type === 'parent' && state !== 'children-of-child') {
-            attributes.push(totalSpaceResults(depth, timeRange, searchQuery || ''))
-        } else attributes.push(totalSpaceChildren)
-        return attributes
+    const search = searchQuery || ''
+    // number of space to inlcude per generation (length of array determines max depth)
+    const generationLimits = {
+        Tree: [12], // [7, 3, 3, 3],
+        Circles: [200, 100, 100, 100, 100, 100, 100, 100],
     }
 
-    // failed attempt at merging parent and child include functions
-    // function findInclude(type, generation) {
-    //     let include = []
-    //     // child all spaces: generation === 0 && state !== 'children-of-child' && depth === 'All Contained Spaces'
-    //     const includeChildAncestors =
-    //         type === 'child' &&
-    //         generation === 0 &&
-    //         state !== 'children-of-child' &&
-    //         depth === 'All Contained Spaces'
-    //     const includeAncestors =
-    //         (type === 'parent' && state !== 'children-of-child') || includeChildAncestors
-
-    //     if (includeAncestors) {
-    //         include.push({
-    //             model: Space,
-    //             as: 'SpaceAncestors',
-    //             attributes: [],
-    //             through: {
-    //                 attributes: [],
-    //                 where: { state: { [Op.or]: ['open', 'closed'] } },
-    //             },
-    //         })
-    //     }
-
-    //     const includeDirectParents =
-    //         (type === 'parent' && state === 'full-tree') ||
-    //         (type === 'child' && !includeChildAncestors)
-    //     if (includeDirectParents) {
-    //         include.push({
-    //             model: Space,
-    //             as: 'DirectParentSpaces',
-    //             attributes: ['id', 'name', 'handle', 'flagImagePath'],
-    //             through: { attributes: [], where: { state: 'open' } },
-    //         })
-    //     }
-    // }
-
-    function findParentInclude() {
-        let include = []
-        if (state === 'full-tree') {
-            include.push({
+    async function findRoot() {
+        // calculate root attributes
+        const rootAttributes = ['id']
+        if (scenario === 'full-tree') rootAttributes.push('handle', 'name', 'flagImagePath')
+        if (scenario === 'children-of-child') rootAttributes.push(totalSpaceResults())
+        else rootAttributes.push(totalSpaceResults({ depth, timeRange, search }))
+        // calculate root include
+        const rootInclude = []
+        if (scenario === 'full-tree') {
+            // include direct parents if full tree
+            rootInclude.push({
                 model: Space,
                 as: 'DirectParentSpaces',
                 attributes: ['id', 'name', 'handle', 'flagImagePath'],
                 through: { attributes: [], where: { state: 'open' } },
             })
         }
-        if (state !== 'children-of-child') {
-            // required for spaceResults
-            include.push({
+        if (scenario !== 'children-of-child') {
+            // space ancestors required for totalSpaceResults when filters applied
+            rootInclude.push({
                 model: Space,
                 as: 'SpaceAncestors',
                 attributes: [],
@@ -993,13 +933,39 @@ router.post('/space-map-data', authenticateToken, async (req, res) => {
                 },
             })
         }
-        return include
+        // get root space
+        const rootSpace = await Space.findOne({
+            where: { id: spaceId },
+            attributes: rootAttributes,
+            include: rootInclude,
+        })
+        // add uuids to root space and parents
+        rootSpace.setDataValue('uuid', uuidv4())
+        if (rootSpace.DirectParentSpaces)
+            rootSpace.DirectParentSpaces.forEach((s) => s.setDataValue('uuid', uuidv4()))
+        return rootSpace
     }
+
+    const root = await findRoot()
+
+    const childAttributes = [
+        'id',
+        'handle',
+        'name',
+        'flagImagePath',
+        'privacy',
+        totalSpaceResults(),
+        spaceAccess(accountId),
+    ]
+    if (sortBy === 'Likes') childAttributes.push('totalPostLikes')
+    if (sortBy === 'Posts') childAttributes.push('totalPosts')
+    if (sortBy === 'Comments') childAttributes.push('totalComments')
+    if (sortBy === 'Followers') childAttributes.push('totalFollowers')
+    if (sortBy === 'Date Created') childAttributes.push('createdAt')
 
     function findChildInclude(generation) {
         const allSpaces =
-            generation === 0 && state !== 'children-of-child' && depth === 'All Contained Spaces'
-        // if first generation, not expanding child, and depth = all contained
+            generation === 0 && scenario !== 'children-of-child' && depth === 'All Contained Spaces'
         return {
             model: Space,
             as: allSpaces ? 'SpaceAncestors' : 'DirectParentSpaces',
@@ -1011,87 +977,70 @@ router.post('/space-map-data', authenticateToken, async (req, res) => {
         }
     }
 
-    function findWhere(parentId, generation) {
-        // 'full-tree', 'children-of-parent', 'children-of-child'
+    function findChildWhere(parentId, generation) {
         const where = { state: 'active' }
-        if (generation > 0 || state === 'children-of-child')
-            where['$DirectParentSpaces.id$'] = parentId
+        const skipFilters = generation > 0 || scenario === 'children-of-child'
+        if (skipFilters) where['$DirectParentSpaces.id$'] = parentId
         else {
             if (depth === 'All Contained Spaces') where['$SpaceAncestors.id$'] = parentId
             else where['$DirectParentSpaces.id$'] = parentId
             where.createdAt = { [Op.between]: [findStartDate(timeRange), Date.now()] }
             where[Op.or] = [
-                { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { description: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { handle: { [Op.like]: `%${search}%` } },
+                { name: { [Op.like]: `%${search}%` } },
+                { description: { [Op.like]: `%${search}%` } },
             ]
         }
         return where
     }
 
-    const parentSpace = await Space.findOne({
-        where: { id: spaceId },
-        attributes: findAttributes('parent'),
-        include: findParentInclude(), // findInclude('parent', 0)
-    })
-    parentSpace.setDataValue('uuid', uuidv4())
-    if (parentSpace.DirectParentSpaces)
-        parentSpace.DirectParentSpaces.forEach((s) => s.setDataValue('uuid', uuidv4()))
-
     async function traverseTree(parent, generation, includeParent) {
-        return new Promise(async (resolve) => {
-            // todo: try using findAndCountAll instead of totalResults / totalChildren to increase query speed
+        return new Promise(async (resolve1) => {
             const children = await Space.findAll({
-                where: findWhere(parent.dataValues.id, generation),
-                subQuery: false,
-                attributes: findAttributes('child'),
-                include: findChildInclude(generation), // findInclude('child', generation)
-                limit: generationLimits[generation],
-                offset: generation === 0 ? +offset : 0,
+                where: findChildWhere(parent.id, generation),
+                attributes: childAttributes,
+                include: findChildInclude(generation),
+                limit: generationLimits[lens][generation],
+                offset: generation === 0 ? offset : 0,
                 order: findSpaceOrder(sortBy, sortOrder),
+                subQuery: false,
             })
-
-            const { totalResults, totalChildren } = parent.dataValues
-            const results =
-                generation === 0 && state !== 'children-of-child' ? totalResults : totalChildren
-            const remainingSpaces = results - children.length - (generation === 0 ? offset : 0)
-
-            if (remainingSpaces) {
+            const { totalResults } = parent.dataValues
+            const remainingSpaces = totalResults - children.length - (generation === 0 ? offset : 0)
+            if (!remainingSpaces) parent.setDataValue('children', children)
+            else {
                 children.splice(-1, 1)
                 const expander = {
                     expander: true,
-                    // todo: try using space id and remaining spaces instead of uuid so consistent through transitions
-                    id: uuidv4(),
-                    uuid: uuidv4(), // `${parent.id}-${remainingSpaces}`,
+                    id: `${parent.id}-${remainingSpaces}`,
+                    uuid: uuidv4(),
                     name: `${remainingSpaces + 1} more spaces`,
                 }
                 parent.setDataValue('children', [...children, expander])
-            } else {
-                parent.setDataValue('children', children)
             }
-
             Promise.all(
                 parent.dataValues.children.map(
                     (child) =>
-                        new Promise((reso) => {
-                            if (child.expander === true) reso()
+                        new Promise((resolve2) => {
+                            if (child.expander === true) resolve2()
                             else {
                                 child.setDataValue('uuid', uuidv4())
-                                const { totalResults, totalChildren, privacy, spaceAccess } =
-                                    child.dataValues
-                                const results = totalResults || totalChildren
-                                const accessDenied =
-                                    privacy === 'private' && spaceAccess !== 'active'
-                                // if max depth reached, no grandchildren, or access denied: resolve
-                                if (!generationLimits[generation + 1] || !results || accessDenied) {
+                                const { totalResults, privacy, spaceAccess } = child.dataValues
+                                const noAccess = privacy === 'private' && spaceAccess !== 'active'
+                                // if max depth reached, no grandchildren, or no access: resolve
+                                if (
+                                    !generationLimits[lens][generation + 1] ||
+                                    !totalResults ||
+                                    noAccess
+                                ) {
                                     child.setDataValue('children', [])
-                                    reso()
+                                    resolve2()
                                 } else {
                                     // recursively re-run tree traveral of child
                                     traverseTree(child, generation + 1, false).then(
                                         (grandChildren) => {
                                             child.setDataValue('children', grandChildren)
-                                            reso()
+                                            resolve2()
                                         }
                                     )
                                 }
@@ -1100,14 +1049,14 @@ router.post('/space-map-data', authenticateToken, async (req, res) => {
                 )
             )
                 .then(() => {
-                    if (includeParent) resolve(parent)
-                    else resolve(parent.dataValues.children)
+                    if (includeParent) resolve1(parent)
+                    else resolve1(parent.dataValues.children)
                 })
-                .catch((error) => resolve(error))
+                .catch((error) => resolve1(error))
         })
     }
 
-    traverseTree(parentSpace, 0, state === 'full-tree')
+    traverseTree(root, 0, scenario === 'full-tree')
         .then((data) => res.status(200).json(data))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
