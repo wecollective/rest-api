@@ -768,15 +768,16 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
 router.get('/space-spaces', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { spaceId, timeRange, sortBy, sortOrder, depth, searchQuery, limit, offset } = req.query
+    const search = searchQuery || ''
 
     // build where
     const where = {
         state: 'active',
         createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
         [Op.or]: [
-            { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-            { description: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+            { handle: { [Op.like]: `%${search}%` } },
+            { name: { [Op.like]: `%${search}%` } },
+            { description: { [Op.like]: `%${search}%` } },
         ],
     }
     if (depth === 'All Contained Spaces') where['$SpaceAncestors.id$'] = spaceId
@@ -810,6 +811,7 @@ router.get('/space-spaces', authenticateToken, (req, res) => {
         order: findSpaceOrder(sortBy, sortOrder),
         limit: Number(limit) || null,
         offset: Number(offset),
+        group: ['id'],
         subQuery: false,
     })
         .then((spaces) => res.status(200).json(spaces))
@@ -898,19 +900,19 @@ router.post('/space-map-data', authenticateToken, async (req, res) => {
     const { scenario, spaceId, params, offset } = req.body
     const { lens, sortBy, sortOrder, timeRange, depth, searchQuery } = params
     const search = searchQuery || ''
-    // number of space to inlcude per generation (length of array determines max depth)
     const generationLimits = {
+        // number of space to inlcude per generation (length of array determines max depth)
         Tree: [12], // [7, 3, 3, 3],
         Circles: [200, 100, 100, 100, 100, 100, 100, 100],
     }
 
     async function findRoot() {
-        // calculate root attributes
+        // calculate attributes
         const rootAttributes = ['id']
         if (scenario === 'full-tree') rootAttributes.push('handle', 'name', 'flagImagePath')
         if (scenario === 'children-of-child') rootAttributes.push(totalSpaceResults())
         else rootAttributes.push(totalSpaceResults({ depth, timeRange, search }))
-        // calculate root include
+        // calculate include
         const rootInclude = []
         if (scenario === 'full-tree') {
             // include direct parents if full tree
@@ -1003,6 +1005,7 @@ router.post('/space-map-data', authenticateToken, async (req, res) => {
                 limit: generationLimits[lens][generation],
                 offset: generation === 0 ? offset : 0,
                 order: findSpaceOrder(sortBy, sortOrder),
+                group: ['id'],
                 subQuery: false,
             })
             const { totalResults } = parent.dataValues
