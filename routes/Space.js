@@ -909,7 +909,8 @@ router.post('/space-map-data', authenticateToken, async (req, res) => {
     async function findRoot() {
         // calculate attributes
         const rootAttributes = ['id']
-        if (scenario === 'full-tree') rootAttributes.push('handle', 'name', 'flagImagePath')
+        if (lens === 'Tree') rootAttributes.push('flagImagePath')
+        if (scenario === 'full-tree') rootAttributes.push('handle', 'name')
         if (scenario === 'children-of-child') rootAttributes.push(totalSpaceResults())
         else rootAttributes.push(totalSpaceResults({ depth, timeRange, search }))
         // calculate include
@@ -954,11 +955,11 @@ router.post('/space-map-data', authenticateToken, async (req, res) => {
         'id',
         'handle',
         'name',
-        'flagImagePath',
         'privacy',
         totalSpaceResults(),
         spaceAccess(accountId),
     ]
+    if (lens === 'Tree') childAttributes.push('flagImagePath')
     if (sortBy === 'Likes') childAttributes.push('totalPostLikes')
     if (sortBy === 'Posts') childAttributes.push('totalPosts')
     if (sortBy === 'Comments') childAttributes.push('totalComments')
@@ -1068,7 +1069,13 @@ router.get('/space-map-space-data', async (req, res) => {
     const { spaceId } = req.query
     const space = await Space.findOne({
         where: { id: spaceId },
-        attributes: ['description', 'totalFollowers', 'totalPosts', 'totalComments'],
+        attributes: [
+            'description',
+            'flagImagePath',
+            'totalFollowers',
+            'totalPosts',
+            'totalComments',
+        ],
     })
     res.status(200).json(space)
 })
