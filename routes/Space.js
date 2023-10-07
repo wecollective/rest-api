@@ -462,6 +462,23 @@ router.get('/space-data', authenticateToken, async (req, res) => {
     }
 })
 
+router.get('/space-modal-data', async (req, res) => {
+    const { spaceId } = req.query
+    const space = await Space.findOne({
+        where: { id: spaceId },
+        attributes: [
+            'description',
+            'coverImagePath',
+            'totalPostLikes',
+            'totalPosts',
+            'totalComments',
+            'totalFollowers',
+        ],
+    })
+    if (space) res.status(200).json(space)
+    else res.status(404).json({ message: 'Space not found' })
+})
+
 router.post('/nav-list-spaces', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { spaceId, offset, includeParents } = req.body
