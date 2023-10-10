@@ -7,10 +7,10 @@ module.exports = {
         return queryInterface.sequelize.transaction((t) => {
             return Promise.all([
                 queryInterface.addColumn(
-                    'Users',
-                    'gcId',
+                    'Posts',
+                    'searchableText',
                     {
-                        type: Sequelize.DataTypes.STRING,
+                        type: Sequelize.DataTypes.TEXT,
                     },
                     { transaction: t }
                 ),
@@ -22,7 +22,7 @@ module.exports = {
         return queryInterface.sequelize.transaction((t) => {
             return Promise.all([
                 // include reverse transations here to enable undo: `npx sequelize-cli db:migrate:undo:all`
-                queryInterface.removeColumn('Users', 'gcId', { transaction: t }),
+                queryInterface.removeColumn('Posts', 'searchableText', { transaction: t }),
             ])
         })
     },

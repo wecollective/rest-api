@@ -13,6 +13,7 @@ module.exports = (sequelize, DataTypes) => {
             creatorId: DataTypes.INTEGER,
             title: DataTypes.TEXT,
             text: DataTypes.TEXT,
+            searchableText: DataTypes.TEXT,
             color: DataTypes.STRING,
             watermark: DataTypes.BOOLEAN,
             totalLikes: DataTypes.INTEGER,

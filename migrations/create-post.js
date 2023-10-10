@@ -23,6 +23,9 @@ module.exports = {
             text: {
                 type: Sequelize.TEXT,
             },
+            searchableText: {
+                type: Sequelize.TEXT,
+            },
             color: {
                 type: Sequelize.STRING,
             },
