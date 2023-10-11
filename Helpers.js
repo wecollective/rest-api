@@ -832,8 +832,6 @@ function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers) {
         where[Op.or] = [
             { text: { [Op.like]: `%${query}%` } },
             { title: { [Op.like]: `%${query}%` } },
-            // todo: use post title for GBG topics
-            { '$GlassBeadGame.topic$': { [Op.like]: `%${query}%` } },
         ]
     }
     return where

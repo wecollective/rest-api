@@ -236,7 +236,7 @@ router.post('/account-notifications', authenticateToken, async (req, res) => {
                         },
                         {
                             model: GlassBeadGame,
-                            attributes: ['topic', 'topicImage', 'state'],
+                            attributes: ['topicImage', 'state'],
                             required: false,
                         },
                         {

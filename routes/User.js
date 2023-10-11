@@ -135,13 +135,6 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
         offset: Number(offset),
         attributes: initialAttributes,
         having: ownAccount ? null : { ['access']: 1 },
-        include: [
-            {
-                model: GlassBeadGame,
-                required: false,
-                attributes: ['topic'],
-            },
-        ],
     })
 
     const postsWithData = await Post.findAll({

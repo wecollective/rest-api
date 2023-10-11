@@ -75,6 +75,40 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
+
+        // // 1. add glass-bead-game topics to titles
+        // const posts = await Post.findAll({
+        //     where: { type: 'glass-bead-game' },
+        //     attributes: ['id', 'title', 'text'],
+        //     include: { model: GlassBeadGame, attributes: ['id', 'topic'] },
+        // })
+        // Promise.all(
+        //     posts.map(
+        //         (post) =>
+        //             new Promise(async (resolve) => {
+        //                 const topic = post.GlassBeadGame ? post.GlassBeadGame.topic : null
+        //                 if (!topic) resolve()
+        //                 else {
+        //                     const updatePost = await Post.update(
+        //                         { title: topic },
+        //                         { where: { id: post.id }, silent: true }
+        //                     )
+        //                     const updateGBG = await GlassBeadGame.update(
+        //                         { topic: null },
+        //                         { where: { id: post.GlassBeadGame.id }, silent: true }
+        //                     )
+        //                     Promise.all([updatePost, updateGBG])
+        //                         .then(() => resolve())
+        //                         .catch((error) => resolve(error))
+        //                 }
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(200).json(error))
+
+        // // 2. create searchable text field
+        // // Post.findAll({ attributes: ['id', 'title', 'text'] })
     }
 })
 
@@ -623,7 +657,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 pollType,
                 pollAnswersLocked,
                 pollAnswers,
-                topic,
                 topicGroup,
                 topicImageUrl,
                 gbgSettings,
@@ -863,7 +896,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               postId: post.id,
                               state: 'active',
                               locked: false,
-                              topic,
                               topicGroup,
                               topicImage: topicImageUpload
                                   ? topicImageUpload.location
@@ -3287,19 +3319,6 @@ router.post('/save-glass-bead-game', async (req, res) => {
     Promise.all([updateLinks, updateGame])
         .then(() => res.status(200).send({ message: 'Game saved' }))
         .catch((error) => res.status(500).json({ error }))
-
-    // GlassBeadGame.update({ locked: true }, { where: { id: gameId, locked: false } }).then(() => {
-    //     beads.forEach((bead) => {
-    //         GlassBead.create({
-    //             gameId,
-    //             index: bead.index,
-    //             userId: bead.user.id,
-    //             beadUrl: bead.beadUrl,
-    //             state: 'visible',
-    //         })
-    //     })
-    //     res.status(200).send({ message: 'Game saved' })
-    // })
 })
 
 router.post('/glass-bead-game-comment', (req, res) => {
@@ -3359,10 +3378,14 @@ router.post('/save-glass-bead-game-settings', async (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
-router.post('/save-gbg-topic', (req, res) => {
-    const { gameId, newTopic } = req.body
-
-    GlassBeadGame.update({ topic: newTopic, topicGroup: null }, { where: { id: gameId } })
+router.post('/save-gbg-topic', async (req, res) => {
+    const { postId, gameId, newTopic } = req.body
+    const updatePost = await Post.update(
+        { title: newTopic },
+        { where: { id: postId }, silent: true }
+    )
+    const updateGame = await GlassBeadGame.update({ topicGroup: null }, { where: { id: gameId } })
+    Promise.all([updatePost, updateGame])
         .then(() => res.status(200).send({ message: 'Success' }))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })

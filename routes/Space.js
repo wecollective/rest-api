@@ -655,18 +655,6 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
                 attributes: [],
                 through,
             },
-            // removed for now because unable to use 1 to many includes (used with URL) for search queries with subQuery: false and separate: true
-            // {
-            //     model: Url,
-            //     required: false,
-            //     attributes: ['title', 'description'],
-            //     separate: true,
-            // },
-            {
-                model: GlassBeadGame,
-                required: false,
-                attributes: ['topic'],
-            },
         ],
     })
 
@@ -708,19 +696,12 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
         where,
         order,
         attributes: initialAttributes,
-        include: [
-            {
-                model: Space,
-                as: 'AllPostSpaces',
-                attributes: [],
-                through,
-            },
-            {
-                model: GlassBeadGame,
-                required: false,
-                attributes: ['topic'],
-            },
-        ],
+        include: {
+            model: Space,
+            as: 'AllPostSpaces',
+            attributes: [],
+            through,
+        },
     })
 
     // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
@@ -734,19 +715,12 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
         offset,
         subQuery: false,
         attributes: initialAttributes,
-        include: [
-            {
-                model: Space,
-                as: 'AllPostSpaces',
-                attributes: [],
-                through,
-            },
-            {
-                model: GlassBeadGame,
-                required: false,
-                attributes: ['topic', 'topicGroup'],
-            },
-        ],
+        include: {
+            model: Space,
+            as: 'AllPostSpaces',
+            attributes: [],
+            through,
+        },
     })
 
     const postsWithData = await Post.findAll({
@@ -903,7 +877,7 @@ router.get('/space-events', authenticateToken, (req, res) => {
             {
                 model: GlassBeadGame,
                 // required: false,
-                attributes: ['topic', 'topicGroup', 'topicImage'],
+                attributes: ['topicGroup', 'topicImage'],
             },
         ],
     })
