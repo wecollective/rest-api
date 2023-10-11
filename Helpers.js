@@ -828,12 +828,7 @@ function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers) {
         if (mutedUsers.length) where[Op.not] = { creatorId: mutedUsers }
     }
     if (location === 'user') where.creatorId = id
-    if (searchQuery) {
-        where[Op.or] = [
-            { text: { [Op.like]: `%${query}%` } },
-            { title: { [Op.like]: `%${query}%` } },
-        ]
-    }
+    if (searchQuery) where.searchableText = { [Op.like]: `%${query}%` }
     return where
 }
 

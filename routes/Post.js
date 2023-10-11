@@ -107,10 +107,45 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(200).json(error))
 
-        // // 2. create searchable text field
-        // // Post.findAll({ attributes: ['id', 'title', 'text'] })
+        // // // 2. create searchable text field
+        // const posts = await Post.findAll({
+        //     attributes: ['id', 'title', 'text'],
+        //     order: [['id', 'ASC']],
+        //     include: [
+        //         {
+        //             model: Url,
+        //             where: { state: 'active' },
+        //             attributes: ['url', 'title', 'description', 'domain'],
+        //             required: false,
+        //         },
+        //     ],
+        //     subQuery: false,
+        // })
+        // res.status(200).json(posts)
     }
 })
+
+// let testIndex2 = 0
+// router.post('/test2', async (req, res) => {
+//     if (testIndex2 > 0) {
+//         console.log('second attempt')
+//         res.send('second attempt')
+//     } else {
+//         console.log('first attempt')
+//         testIndex2 += 1
+//         const posts = req.body
+//         Promise.all(
+//             posts.map((post) =>
+//                 Post.update(
+//                     { searchableText: post.searchableText },
+//                     { where: { id: post.id }, silent: true }
+//                 )
+//             )
+//         )
+//             .then(() => res.status(200).json({ message: 'Success' }))
+//             .catch((error) => res.status(200).json(error))
+//     }
+// })
 
 // GET
 router.get('/post-data', authenticateToken, async (req, res) => {
@@ -664,9 +699,12 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 sourcePostId,
                 sourceCreatorId,
                 cardFrontText,
+                cardFrontSearchableText,
                 cardBackText,
+                cardBackSearchableText,
                 cardFrontWatermark,
                 cardBackWatermark,
+                searchableText,
                 sourceType,
                 sourceId,
                 linkDescription,
@@ -678,6 +716,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 creatorId: accountId,
                 title: title || null,
                 text: text || null,
+                searchableText,
                 lastActivity: new Date(),
             })
 
@@ -992,6 +1031,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                               creatorId: accountId,
                                               color: bead.color || null,
                                               text: bead.text || null,
+                                              searchableText: bead.searchableText,
                                               lastActivity: new Date(),
                                           })
 
@@ -1217,6 +1257,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               type: 'card-front',
                               creatorId: accountId,
                               text: cardFrontText || null,
+                              searchableText: cardFrontSearchableText,
                               watermark: cardFrontWatermark,
                               lastActivity: new Date(),
                           })
@@ -1225,6 +1266,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               type: 'card-back',
                               creatorId: accountId,
                               text: cardBackText || null,
+                              searchableText: cardBackSearchableText,
                               watermark: cardBackWatermark,
                               lastActivity: new Date(),
                           })
@@ -1400,7 +1442,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
 
 router.post('/update-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { postId, title, text, mentions, urls } = req.body
+    const { postId, title, text, searchableText, mentions, urls } = req.body
     const post = await Post.findOne({
         where: { id: postId },
         attributes: ['id', 'type'],
@@ -1423,7 +1465,7 @@ router.post('/update-post', authenticateToken, async (req, res) => {
         if (post.type === 'url' && urls.filter((u) => u.removed).length > 0) postType = 'text'
 
         const updatePost = await Post.update(
-            { type: postType, title: title || null, text: text || null },
+            { type: postType, title: title || null, text: text || null, searchableText },
             { where: { id: postId, creatorId: accountId } }
         )
 
@@ -1533,6 +1575,7 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                 mentions,
                 type,
                 text,
+                searchableText,
                 color,
                 Audios,
                 Urls,
@@ -1545,6 +1588,7 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                 creatorId: accountId,
                 color: color || null,
                 text: text || null,
+                searchableText,
                 lastActivity: new Date(),
             })
 

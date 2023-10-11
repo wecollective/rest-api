@@ -876,7 +876,6 @@ router.get('/space-events', authenticateToken, (req, res) => {
             },
             {
                 model: GlassBeadGame,
-                // required: false,
                 attributes: ['topicGroup', 'topicImage'],
             },
         ],
