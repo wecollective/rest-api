@@ -2184,7 +2184,7 @@ router.post('/send-parent-space-request', authenticateToken, async (req, res) =>
                             seen: false,
                         })
 
-                        const sendEmail = mode.emailsDisabled
+                        const sendEmail = mod.emailsDisabled
                             ? null
                             : await sgMail.send({
                                   to: mod.email,
