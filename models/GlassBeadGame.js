@@ -11,7 +11,6 @@ module.exports = (sequelize, DataTypes) => {
             postId: DataTypes.INTEGER,
             state: DataTypes.STRING,
             locked: DataTypes.BOOLEAN,
-            topic: DataTypes.STRING,
             topicGroup: DataTypes.STRING,
             topicImage: DataTypes.STRING,
             synchronous: DataTypes.BOOLEAN,

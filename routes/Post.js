@@ -75,77 +75,8 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
-
-        // // 1. add glass-bead-game topics to titles
-        // const posts = await Post.findAll({
-        //     where: { type: 'glass-bead-game' },
-        //     attributes: ['id', 'title', 'text'],
-        //     include: { model: GlassBeadGame, attributes: ['id', 'topic'] },
-        // })
-        // Promise.all(
-        //     posts.map(
-        //         (post) =>
-        //             new Promise(async (resolve) => {
-        //                 const topic = post.GlassBeadGame ? post.GlassBeadGame.topic : null
-        //                 if (!topic) resolve()
-        //                 else {
-        //                     const updatePost = await Post.update(
-        //                         { title: topic },
-        //                         { where: { id: post.id }, silent: true }
-        //                     )
-        //                     const updateGBG = await GlassBeadGame.update(
-        //                         { topic: null },
-        //                         { where: { id: post.GlassBeadGame.id }, silent: true }
-        //                     )
-        //                     Promise.all([updatePost, updateGBG])
-        //                         .then(() => resolve())
-        //                         .catch((error) => resolve(error))
-        //                 }
-        //             })
-        //     )
-        // )
-        //     .then(() => res.status(200).json({ message: 'Success' }))
-        //     .catch((error) => res.status(200).json(error))
-
-        // // // 2. create searchable text field
-        // const posts = await Post.findAll({
-        //     attributes: ['id', 'title', 'text'],
-        //     order: [['id', 'ASC']],
-        //     include: [
-        //         {
-        //             model: Url,
-        //             where: { state: 'active' },
-        //             attributes: ['url', 'title', 'description', 'domain'],
-        //             required: false,
-        //         },
-        //     ],
-        //     subQuery: false,
-        // })
-        // res.status(200).json(posts)
     }
 })
-
-// let testIndex2 = 0
-// router.post('/test2', async (req, res) => {
-//     if (testIndex2 > 0) {
-//         console.log('second attempt')
-//         res.send('second attempt')
-//     } else {
-//         console.log('first attempt')
-//         testIndex2 += 1
-//         const posts = req.body
-//         Promise.all(
-//             posts.map((post) =>
-//                 Post.update(
-//                     { searchableText: post.searchableText },
-//                     { where: { id: post.id }, silent: true }
-//                 )
-//             )
-//         )
-//             .then(() => res.status(200).json({ message: 'Success' }))
-//             .catch((error) => res.status(200).json(error))
-//     }
-// })
 
 // GET
 router.get('/post-data', authenticateToken, async (req, res) => {

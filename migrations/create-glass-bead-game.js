@@ -17,9 +17,6 @@ module.exports = {
             locked: {
                 type: Sequelize.BOOLEAN,
             },
-            topic: {
-                type: Sequelize.STRING,
-            },
             topicGroup: {
                 type: Sequelize.STRING,
             },
