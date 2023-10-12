@@ -481,7 +481,7 @@ router.get('/space-modal-data', async (req, res) => {
 
 router.post('/nav-list-spaces', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { spaceId, offset, includeParents } = req.body
+    const { spaceId, offset, includeParents, includeChildren } = req.body
     const order = [
         ['totalPostLikes', 'DESC'],
         ['createdAt', 'DESC'],
@@ -511,20 +511,22 @@ router.post('/nav-list-spaces', authenticateToken, async (req, res) => {
           })
         : null
 
-    const children = await Space.findAndCountAll({
-        where: { '$DirectParentSpaces.id$': spaceId, state: 'active' },
-        attributes: [...baseAttributes, 'privacy', spaceAccess(accountId)],
-        order,
-        offset: +offset,
-        limit: 10,
-        subQuery: false,
-        include: {
-            model: Space,
-            as: 'DirectParentSpaces',
-            attributes: ['id'],
-            through: { attributes: [], where: { state: 'open' } },
-        },
-    })
+    const children = includeChildren
+        ? await Space.findAndCountAll({
+              where: { '$DirectParentSpaces.id$': spaceId, state: 'active' },
+              attributes: [...baseAttributes, 'privacy', spaceAccess(accountId)],
+              order,
+              offset: +offset,
+              limit: 10,
+              subQuery: false,
+              include: {
+                  model: Space,
+                  as: 'DirectParentSpaces',
+                  attributes: ['id'],
+                  through: { attributes: [], where: { state: 'open' } },
+              },
+          })
+        : { rows: [], count: 0 }
 
     res.status(200).json({ parents, children: children.rows, totalChildren: children.count })
 })
