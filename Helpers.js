@@ -247,18 +247,6 @@ function sourcePostId() {
     ]
 }
 
-// temporary solution until GBG posts title field used instead of topic
-function GBGTopic() {
-    return [
-        sequelize.literal(`(
-            SELECT GlassBeadGames.topic
-            FROM GlassBeadGames
-            WHERE GlassBeadGames.postId = Post.id
-        )`),
-        'topic',
-    ]
-}
-
 function accountLike(itemType, model, accountId) {
     return [
         sequelize.literal(`(
@@ -951,7 +939,6 @@ async function getLinkedItem(type, id) {
             'createdAt',
             'updatedAt',
             'lastActivity',
-            GBGTopic(),
         ]
     }
     if (type === 'comment') {
@@ -983,7 +970,7 @@ async function getFullLinkedItem(type, id, accountId) {
     let include = null
     if (type === 'post') {
         model = Post
-        attributes = [sourcePostId(), GBGTopic(), ...findFullPostAttributes('Post', accountId)]
+        attributes = [sourcePostId(), ...findFullPostAttributes('Post', accountId)]
         include = findPostInclude(accountId)
     }
     if (type === 'comment') {
@@ -1118,7 +1105,6 @@ module.exports = {
     convertAndUploadAudio,
     uploadBeadFile,
     sourcePostId,
-    GBGTopic,
     restrictedAncestors,
     getLinkedItem,
     getFullLinkedItem,
