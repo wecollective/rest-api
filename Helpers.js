@@ -151,7 +151,7 @@ function findStartDate(timeRange) {
     let startDate = new Date()
     let offset = Date.now()
     if (timeRange === 'Last Hour') offset = 60 * 60 * 1000
-    if (timeRange === 'Last 24 Hours') offset = 24 * 60 * 60 * 1000
+    if (timeRange === 'Today') offset = 24 * 60 * 60 * 1000
     if (timeRange === 'Last Week') offset = 24 * 60 * 60 * 1000 * 7
     if (timeRange === 'Last Month') offset = 24 * 60 * 60 * 1000 * 30
     if (timeRange === 'Last Year') offset = 24 * 60 * 60 * 1000 * 365
@@ -178,6 +178,30 @@ function findPostOrder(sortBy, sortOrder) {
         ]
     return [
         [`total${sortBy}`, direction],
+        ['createdAt', 'DESC'],
+        ['id', 'ASC'],
+    ]
+}
+
+function findPostOrderNew(filter, sortBy) {
+    if (filter === 'Active')
+        return [
+            ['lastActivity', 'DESC'],
+            ['id', 'ASC'],
+        ]
+    if (filter === 'New')
+        return [
+            ['createdAt', 'DESC'],
+            ['id', 'ASC'],
+        ]
+    if (sortBy === 'Signal')
+        return [
+            ['totalRatings', 'DESC'],
+            ['createdAt', 'DESC'],
+            ['id', 'ASC'],
+        ]
+    return [
+        [`total${sortBy}`, 'DESC'],
         ['createdAt', 'DESC'],
         ['id', 'ASC'],
     ]
@@ -804,6 +828,11 @@ function findPostThrough(depth) {
     return { where: { state: 'active', relationship }, attributes: [] }
 }
 
+function findPostThroughNew(depth) {
+    const relationship = depth === 'Deep' ? { [Op.or]: ['direct', 'indirect'] } : 'direct'
+    return { where: { state: 'active', relationship }, attributes: [] }
+}
+
 function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers) {
     const query = searchQuery || ''
     const where = {
@@ -1081,6 +1110,7 @@ module.exports = {
     totalUserComments,
     findStartDate,
     findPostOrder,
+    findPostOrderNew,
     findSpaceOrder,
     findUserOrder,
     findPostType,
@@ -1089,6 +1119,7 @@ module.exports = {
     findInitialPostAttributesWithAccess,
     findFullPostAttributes,
     findPostThrough,
+    findPostThroughNew,
     findPostWhere,
     findPostInclude,
     findCommentAttributes,

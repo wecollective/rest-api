@@ -31,12 +31,14 @@ const {
     totalUserComments,
     findStartDate,
     findPostOrder,
+    findPostOrderNew,
     findSpaceOrder,
     findUserOrder,
     findPostType,
     findInitialPostAttributes,
     findFullPostAttributes,
     findPostThrough,
+    findPostThroughNew,
     findPostWhere,
     findPostInclude,
     spaceAccess,
@@ -607,11 +609,12 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
     // todo: potentially merge with user posts: get('/posts')
     const accountId = req.user ? req.user.id : null
     const { spaceId, limit, offset, params, mutedUsers } = req.body
-    const { timeRange, type, sortBy, sortOrder, depth, searchQuery } = params
+    const { filter, type, sortBy, timeRange, depth, searchQuery } = params
     const startDate = findStartDate(timeRange)
     const postType = findPostType(type)
-    const order = findPostOrder(sortBy, sortOrder)
-    const through = findPostThrough(depth)
+    // todo: replace findPostOrderNew & findPostThroughNew when updated globally
+    const order = findPostOrderNew(filter, sortBy)
+    const through = findPostThroughNew(depth)
     const where = findPostWhere('space', spaceId, startDate, postType, searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
@@ -674,10 +677,10 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const {
         spaceId,
-        timeRange,
+        filter,
         type,
         sortBy,
-        sortOrder,
+        timeRange,
         depth,
         searchQuery,
         limit,
@@ -687,30 +690,19 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
 
     const startDate = findStartDate(timeRange)
     const postType = findPostType(type)
-    const order = findPostOrder(sortBy, sortOrder)
-    const through = findPostThrough(depth)
+    // const order = findPostOrder(sortBy, sortOrder)
+    // const through = findPostThrough(depth)
+    const order = findPostOrderNew(filter, sortBy)
+    const through = findPostThroughNew(depth)
     const where = findPostWhere('space', spaceId, startDate, postType, searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
-
-    const totalMatchingPosts = await Post.count({
-        subQuery: false,
-        where,
-        order,
-        attributes: initialAttributes,
-        include: {
-            model: Space,
-            as: 'AllPostSpaces',
-            attributes: [],
-            through,
-        },
-    })
 
     // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
     // Intial query used to find correct posts with pagination and sorting applied.
     // Second query used to return all related data and models.
     // todo: more testing to see if more effecient approaches available
-    const emptyPosts = await Post.findAll({
+    const emptyPosts = await Post.findAndCountAll({
         where,
         order,
         limit,
@@ -726,7 +718,7 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
     })
 
     const postsWithData = await Post.findAll({
-        where: { id: emptyPosts.map((post) => post.id) },
+        where: { id: emptyPosts.rows.map((post) => post.id) },
         attributes: fullAttributes,
         order,
         include: [
@@ -755,7 +747,7 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
         required: false,
     })
 
-    res.status(200).json({ totalMatchingPosts, posts: postsWithData })
+    res.status(200).json({ totalMatchingPosts: emptyPosts.count, posts: postsWithData })
 })
 
 router.get('/space-spaces', authenticateToken, (req, res) => {
