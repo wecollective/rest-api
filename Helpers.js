@@ -150,11 +150,11 @@ function createSQLDate(date) {
 function findStartDate(timeRange) {
     let startDate = new Date()
     let offset = Date.now()
-    if (timeRange === 'Last Hour') offset = 60 * 60 * 1000
+    if (timeRange === 'This Hour') offset = 60 * 60 * 1000
     if (timeRange === 'Today') offset = 24 * 60 * 60 * 1000
-    if (timeRange === 'Last Week') offset = 24 * 60 * 60 * 1000 * 7
-    if (timeRange === 'Last Month') offset = 24 * 60 * 60 * 1000 * 30
-    if (timeRange === 'Last Year') offset = 24 * 60 * 60 * 1000 * 365
+    if (timeRange === 'This Week') offset = 24 * 60 * 60 * 1000 * 7
+    if (timeRange === 'This Month') offset = 24 * 60 * 60 * 1000 * 30
+    if (timeRange === 'This Year') offset = 24 * 60 * 60 * 1000 * 365
     return startDate.setTime(startDate.getTime() - offset)
 }
 
