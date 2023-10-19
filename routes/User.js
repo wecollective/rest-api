@@ -103,7 +103,7 @@ router.get('/user-modal-data', async (req, res) => {
     const { userId } = req.query
     const user = await User.findOne({
         where: { id: userId },
-        attributes: ['bio', 'coverImagePath', totalUserPosts, totalUserComments],
+        attributes: ['bio', totalUserPosts, totalUserComments],
     })
     if (user) res.status(200).json(user)
     else res.status(404).json({ message: 'User not found' })

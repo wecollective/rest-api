@@ -493,6 +493,7 @@ router.post('/nav-list-spaces', authenticateToken, async (req, res) => {
         'handle',
         'name',
         'flagImagePath',
+        'coverImagePath',
         'totalPostLikes',
         totalSpaceChildren,
     ]
@@ -577,7 +578,7 @@ router.get('/top-contributors', async (req, res) => {
         limit: 10,
         include: {
             model: User,
-            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            attributes: ['id', 'handle', 'name', 'flagImagePath', 'coverImagePath'],
         },
     })
 

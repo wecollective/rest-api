@@ -854,14 +854,14 @@ function findPostInclude(accountId) {
         {
             model: User,
             as: 'Creator',
-            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            attributes: ['id', 'handle', 'name', 'flagImagePath', 'coverImagePath'],
         },
         {
             model: Space,
             as: 'DirectSpaces',
             // where: { [Op.not]: { id: 1 } },
             required: false,
-            attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
+            attributes: ['id', 'handle', 'name', 'flagImagePath', 'coverImagePath', 'state'],
             through: { where: { relationship: 'direct', type: 'post' }, attributes: [] },
         },
         {
