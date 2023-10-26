@@ -654,14 +654,12 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
         offset,
         subQuery: false,
         attributes: initialAttributes,
-        include: [
-            {
-                model: Space,
-                as: 'AllPostSpaces',
-                attributes: [],
-                through,
-            },
-        ],
+        include: {
+            model: Space,
+            as: 'AllPostSpaces',
+            attributes: [],
+            through,
+        },
     })
 
     const postsWithData = await Post.findAll({

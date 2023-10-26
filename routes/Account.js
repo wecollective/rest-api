@@ -26,6 +26,7 @@ const {
     GlassBeadGame,
     Url,
     Image,
+    ToyBoxItem,
 } = require('../models')
 const {
     totalSpaceFollowers,
@@ -1016,6 +1017,31 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                 res.status(200).json({ message: 'Game already cancelled' })
             }
         })
+    }
+})
+
+router.post('/add-toybox-item', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { row, index, itemType, itemId } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        // increment items in row from the new items index up
+        // 0,1,2,3,4,5 --> 0,1,(6),2,3,4,5
+        const incrementIndexes = await ToyBoxItem.increment('index', {
+            where: { userId: accountId, row, state: 'active', index: { [Op.gte]: index } },
+        })
+        // add the new item
+        const addItem = await ToyBoxItem.create({
+            userId: accountId,
+            row,
+            index,
+            itemType,
+            itemId,
+            state: 'active',
+        })
+        Promise.all([incrementIndexes, addItem])
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 

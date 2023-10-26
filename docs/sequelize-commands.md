@@ -40,7 +40,7 @@
 
 ### Generate table
 
--   ‘id’, ‘createdAt’, and ‘updatedAt’ attributes generated automatically by Sequelize
+-   ‘id’, ‘createdAt’, and ‘updatedAt’ attributes generated automatically by sequelize
 -   string: max 255 characters
 -   text: unlimited characters
 
