@@ -993,6 +993,32 @@ async function getLinkedItem(type, id) {
     return null
 }
 
+async function getToyboxItem(type, id) {
+    let model
+    let attributes = []
+    if (['post', 'bead'].includes(type)) {
+        model = Post
+        attributes = ['id', 'type', 'title', 'text']
+    }
+    if (type === 'comment') {
+        model = Comment
+        attributes = ['id', 'text']
+    }
+    if (type === 'user') {
+        model = User
+        attributes = ['id', 'handle', 'flagImagePath', 'coverImagePath']
+    }
+    if (type === 'space') {
+        model = Space
+        attributes = ['id', 'handle', 'flagImagePath', 'coverImagePath']
+    }
+    const item = await model.findOne({
+        where: { id, state: { [Op.or]: ['visible', 'active'] } },
+        attributes,
+    })
+    return { type, data: item }
+}
+
 async function getFullLinkedItem(type, id, accountId) {
     let model
     let attributes = []
@@ -1139,6 +1165,7 @@ module.exports = {
     restrictedAncestors,
     getLinkedItem,
     getFullLinkedItem,
+    getToyboxItem,
     accountLike,
     accountMuted,
     // database operations
