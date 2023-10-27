@@ -1114,4 +1114,32 @@ router.post('/move-toybox-item', authenticateToken, async (req, res) => {
     }
 })
 
+router.post('/delete-toybox-item', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { row, index } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        // delete old item
+        const deleteItem = await ToyBoxItem.update(
+            { state: 'removed' },
+            {
+                where: {
+                    userId: accountId,
+                    row,
+                    index,
+                    state: 'active',
+                },
+            }
+        )
+        // decrement items > deleted items position (3-5)
+        // 0,1,[2],3,4,5 --> 0,1,3,4,5
+        const deccrementIndexes = await ToyBoxItem.decrement('index', {
+            where: { userId: accountId, row, state: 'active', index: { [Op.gte]: index } },
+        })
+        Promise.all([deccrementIndexes, deleteItem])
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
 module.exports = router
