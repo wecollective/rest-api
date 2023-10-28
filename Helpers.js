@@ -995,10 +995,30 @@ async function getLinkedItem(type, id) {
 
 async function getToyboxItem(type, id) {
     let model
+    let include = []
     let attributes = []
     if (['post', 'bead'].includes(type)) {
         model = Post
         attributes = ['id', 'type', 'title', 'text']
+        include = [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['flagImagePath'],
+            },
+            {
+                model: Image,
+                attributes: ['url'],
+                limit: 1,
+            },
+            {
+                model: Url,
+                where: { state: 'active' },
+                required: false,
+                attributes: ['image'],
+                limit: 1,
+            },
+        ]
     }
     if (type === 'comment') {
         model = Comment
@@ -1015,6 +1035,7 @@ async function getToyboxItem(type, id) {
     const item = await model.findOne({
         where: { id, state: { [Op.or]: ['visible', 'active'] } },
         attributes,
+        include,
     })
     return { type, data: item }
 }
