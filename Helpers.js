@@ -999,12 +999,12 @@ async function getToyboxItem(type, id) {
     let attributes = []
     if (['post', 'bead'].includes(type)) {
         model = Post
-        attributes = ['id', 'type', 'title', 'text']
+        attributes = ['id', 'type', 'title', 'text', 'totalLikes', 'totalComments', 'totalLinks']
         include = [
             {
                 model: User,
                 as: 'Creator',
-                attributes: ['flagImagePath'],
+                attributes: ['name', 'flagImagePath'],
             },
             {
                 model: Image,
@@ -1015,7 +1015,7 @@ async function getToyboxItem(type, id) {
                 model: Url,
                 where: { state: 'active' },
                 required: false,
-                attributes: ['image'],
+                attributes: ['image', 'title', 'description', 'domain'],
                 limit: 1,
             },
         ]
@@ -1023,6 +1023,11 @@ async function getToyboxItem(type, id) {
     if (type === 'comment') {
         model = Comment
         attributes = ['id', 'text']
+        include = {
+            model: User,
+            as: 'Creator',
+            attributes: ['flagImagePath'],
+        }
     }
     if (type === 'user') {
         model = User
