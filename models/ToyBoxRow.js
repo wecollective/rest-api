@@ -1,7 +1,7 @@
 'use strict'
 module.exports = (sequelize, DataTypes) => {
-    const ToyBoxItem = sequelize.define(
-        'ToyBoxItem',
+    const ToyBoxRow = sequelize.define(
+        'ToyBoxRow',
         {
             id: {
                 primaryKey: true,
@@ -9,16 +9,14 @@ module.exports = (sequelize, DataTypes) => {
                 autoIncrement: true,
             },
             userId: DataTypes.INTEGER,
-            rowId: DataTypes.INTEGER,
             index: DataTypes.INTEGER,
-            itemType: DataTypes.STRING,
-            itemId: DataTypes.INTEGER,
-            state: DataTypes.STRING,
+            name: DataTypes.TEXT,
+            image: DataTypes.TEXT,
         },
         {}
     )
-    ToyBoxItem.associate = function (models) {
+    ToyBoxRow.associate = function (models) {
         // associations can be defined here
     }
-    return ToyBoxItem
+    return ToyBoxRow
 }

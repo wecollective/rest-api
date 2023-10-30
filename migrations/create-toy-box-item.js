@@ -11,7 +11,7 @@ module.exports = {
             userId: {
                 type: Sequelize.INTEGER,
             },
-            row: {
+            rowId: {
                 type: Sequelize.INTEGER,
             },
             index: {
