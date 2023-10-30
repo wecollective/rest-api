@@ -26,6 +26,7 @@ const {
     GlassBeadGame,
     Url,
     Image,
+    ToyBoxRow,
     ToyBoxItem,
 } = require('../models')
 const {
@@ -69,42 +70,58 @@ router.get('/account-data', authenticateToken, async (req, res) => {
     }
 })
 
-router.get('/toybar-data', authenticateToken, async (req, res) => {
+// router.get('/toybar-data', authenticateToken, async (req, res) => {
+//     const accountId = req.user ? req.user.id : null
+//     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+//     else {
+//         const user = await User.findOne({
+//             where: { id: accountId },
+//             include: {
+//                 model: Stream,
+//                 as: 'Streams',
+//                 where: { state: 'active' },
+//                 attributes: ['id', 'name', 'image'],
+//                 required: false,
+//             },
+//         })
+//         const spaces = await user.getFollowedSpaces({
+//             where: { state: 'active' },
+//             through: { where: { relationship: 'follower', state: 'active' } },
+//             attributes: ['id', 'handle', 'name', 'flagImagePath'],
+//             limit: 10,
+//         })
+//         const users = await user.getFollowedUsers({
+//             where: { state: 'active' },
+//             through: { where: { relationship: 'follower', state: 'active' } },
+//             attributes: ['id', 'handle', 'name', 'flagImagePath'],
+//             limit: 10,
+//         })
+//         res.json({ streams: user.Streams, spaces, users })
+//     }
+// })
+
+router.get('/toybox-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const items = await ToyBoxItem.findAll({
-            where: { userId: accountId, row: 0, state: 'active' },
-            attributes: ['itemType', 'itemId'],
-            order: [['index', 'ASC']],
+        const { rowIndex } = req.query
+        const row = await ToyBoxRow.findOne({
+            where: { userId: accountId, index: +rowIndex },
+            attributes: ['id', 'index', 'name', 'image'],
+            include: {
+                model: ToyBoxItem,
+                as: 'ToyBoxItems',
+                where: { state: 'active' },
+                attributes: ['index', 'itemType', 'itemId'],
+                order: [['index', 'ASC']],
+            },
+            order: [[{ model: ToyBoxItem, as: 'ToyBoxItems' }, 'index', 'ASC']],
         })
-        const toyboxItems = await Promise.all(items.map((i) => getToyboxItem(i.itemType, i.itemId)))
-        res.json(toyboxItems)
-
-        // old toybar data
-        // const user = await User.findOne({
-        //     where: { id: accountId },
-        //     include: {
-        //         model: Stream,
-        //         as: 'Streams',
-        //         where: { state: 'active' },
-        //         attributes: ['id', 'name', 'image'],
-        //         required: false,
-        //     },
-        // })
-        // const spaces = await user.getFollowedSpaces({
-        //     where: { state: 'active' },
-        //     through: { where: { relationship: 'follower', state: 'active' } },
-        //     attributes: ['id', 'handle', 'name', 'flagImagePath'],
-        //     limit: 10,
-        // })
-        // const users = await user.getFollowedUsers({
-        //     where: { state: 'active' },
-        //     through: { where: { relationship: 'follower', state: 'active' } },
-        //     attributes: ['id', 'handle', 'name', 'flagImagePath'],
-        //     limit: 10,
-        // })
-        // res.json({ streams: user.Streams, spaces, users })
+        const items = row
+            ? await Promise.all(row.ToyBoxItems.map((i) => getToyboxItem(i.itemType, i.itemId)))
+            : []
+        // if no row, return empty object with row index from query
+        res.json({ row: row || { index: +rowIndex }, items })
     }
 })
 
@@ -1032,65 +1049,79 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
 
 router.post('/add-toybox-item', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { row, index, itemType, itemId } = req.body
+    const { rowId, rowIndex, itemIndex, itemType, itemId } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        // increment items > new item position (2-5)
-        // 0,1,2,3,4,5 --> 0,1,[6],2,3,4,5
-        const incrementIndexes = await ToyBoxItem.increment('index', {
-            where: { userId: accountId, row, state: 'active', index: { [Op.gte]: index } },
-        })
+        // if existing row: increment items > new item index
+        // 0,1,2,3,4,5 --> 0,1,[6],2,3,4,5 (2-5)
+        const incrementIndexes = rowId
+            ? await ToyBoxItem.increment('index', {
+                  where: {
+                      userId: accountId,
+                      rowId,
+                      state: 'active',
+                      index: { [Op.gte]: itemIndex },
+                  },
+              })
+            : null
+        // otherwise create new row
+        const newRow = rowId
+            ? null
+            : await ToyBoxRow.create({
+                  userId: accountId,
+                  index: rowIndex,
+              })
         // add the new item
         const addItem = await ToyBoxItem.create({
             userId: accountId,
-            row,
-            index,
+            rowId: rowId || newRow.id,
+            index: itemIndex,
             itemType,
             itemId,
             state: 'active',
         })
         Promise.all([incrementIndexes, addItem])
-            .then(() => res.status(200).json({ message: 'Success' }))
+            .then(() => res.status(200).json({ newRow }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
 router.post('/move-toybox-item', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { row, oldIndex, newIndex } = req.body
+    const { rowId, oldIndex, newIndex } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        // store moved item to adjust after index updates
+        // store moved item to reposition after index updates
         const movedItem = await ToyBoxItem.findOne({
             where: {
                 userId: accountId,
-                row,
+                rowId,
                 state: 'active',
                 index: oldIndex,
             },
             attributes: ['id'],
         })
-        // if new position before old position: increment items >= new position && < old position (2-3)
-        // move left 4 --> 2: 0,1,2,3,[4],5 --> 0,1,[4],2,3,5
+        // if new position before old position: increment items >= new position && < old position
+        // move left 4 --> 2 = 0,1,2,3,[4],5 --> 0,1,[4],2,3,5 (2-3)
         const incrementIndexes =
             newIndex < oldIndex
                 ? await ToyBoxItem.increment('index', {
                       where: {
                           userId: accountId,
-                          row,
+                          rowId,
                           state: 'active',
                           index: { [Op.between]: [newIndex, oldIndex] },
                       },
                   })
                 : null
-        // if new position after old position: decrement items > old position && <= new position (3-4)
-        // move right: 2 --> 4: 0,1,[2],3,4,5 --> 0,1,3,4,[2],5
+        // if new position after old position: decrement items > old position && <= new position
+        // move right: 2 --> 4 = 0,1,[2],3,4,5 --> 0,1,3,4,[2],5 (3-4)
         const decrementIndexes =
             newIndex > oldIndex
                 ? await ToyBoxItem.decrement('index', {
                       where: {
                           userId: accountId,
-                          row,
+                          rowId,
                           state: 'active',
                           index: { [Op.between]: [oldIndex + 1, newIndex] },
                       },
@@ -1102,7 +1133,7 @@ router.post('/move-toybox-item', authenticateToken, async (req, res) => {
             {
                 where: {
                     userId: accountId,
-                    row,
+                    rowId,
                     state: 'active',
                     index: oldIndex,
                 },
@@ -1116,7 +1147,7 @@ router.post('/move-toybox-item', authenticateToken, async (req, res) => {
 
 router.post('/delete-toybox-item', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { row, index } = req.body
+    const { rowId, index } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         // delete old item
@@ -1125,7 +1156,7 @@ router.post('/delete-toybox-item', authenticateToken, async (req, res) => {
             {
                 where: {
                     userId: accountId,
-                    row,
+                    rowId,
                     index,
                     state: 'active',
                 },
@@ -1134,7 +1165,7 @@ router.post('/delete-toybox-item', authenticateToken, async (req, res) => {
         // decrement items > deleted items position (3-5)
         // 0,1,[2],3,4,5 --> 0,1,3,4,5
         const deccrementIndexes = await ToyBoxItem.decrement('index', {
-            where: { userId: accountId, row, state: 'active', index: { [Op.gte]: index } },
+            where: { userId: accountId, rowId, state: 'active', index: { [Op.gte]: index } },
         })
         Promise.all([deccrementIndexes, deleteItem])
             .then(() => res.status(200).json({ message: 'Success' }))

@@ -16,7 +16,10 @@ module.exports = (sequelize, DataTypes) => {
         {}
     )
     ToyBoxRow.associate = function (models) {
-        // associations can be defined here
+        ToyBoxRow.hasMany(models.ToyBoxItem, {
+            as: 'ToyBoxItems',
+            foreignKey: 'rowId',
+        })
     }
     return ToyBoxRow
 }
