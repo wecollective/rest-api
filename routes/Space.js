@@ -1680,14 +1680,10 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
                           spaceId,
                           userId: accountId,
                       })
-                      const space = await Space.findOne({
+                      const updateSpaceStats = await Space.increment('totalFollowers', {
                           where: { id: spaceId },
-                          attributes: ['totalFollowers'],
+                          silent: true,
                       })
-                      const updateSpaceStats = await Space.update(
-                          { totalFollowers: space.totalFollowers + 1 },
-                          { where: { id: spaceId }, silent: true }
-                      )
                       Promise.all([createSpaceUser, updateSpaceStats])
                           .then(() => resolve())
                           .catch((error) => resolve(error))
@@ -1851,14 +1847,10 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
                           spaceId,
                           userId,
                       })
-                      const space = await Space.findOne({
+                      const updateSpaceStats = await Space.increment('totalFollowers', {
                           where: { id: spaceId },
-                          attributes: ['totalFollowers'],
+                          silent: true,
                       })
-                      const updateSpaceStats = await Space.update(
-                          { totalFollowers: space.totalFollowers + 1 },
-                          { where: { id: spaceId }, silent: true }
-                      )
                       Promise.all([createSpaceUser, updateSpaceStats])
                           .then(() => resolve())
                           .catch((error) => resolve(error))
@@ -1960,14 +1952,10 @@ router.post('/accept-space-invite-link', authenticateToken, async (req, res) => 
                     relationship: 'follower',
                     state: 'active',
                 })
-                const space = await Space.findOne({
+                const updateSpaceStats = await Space.increment('totalFollowers', {
                     where: { id: spaceId },
-                    attributes: ['totalFollowers'],
+                    silent: true,
                 })
-                const updateSpaceStats = await Space.update(
-                    { totalFollowers: space.totalFollowers + 1 },
-                    { where: { id: spaceId }, silent: true }
-                )
                 Promise.all([createSpaceUser, updateSpaceStats])
                     .then(() => resolve())
                     .catch((error) => resolve(error))
@@ -2096,10 +2084,6 @@ router.post('/toggle-follow-space', authenticateToken, async (req, res) => {
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const space = await Space.findOne({
-            where: { id: spaceId },
-            attributes: ['totalFollowers'],
-        })
         const updateState = isFollowing
             ? new Promise(async (resolve) => {
                   const updateSpaceUser = await SpaceUser.update(
@@ -2113,10 +2097,10 @@ router.post('/toggle-follow-space', authenticateToken, async (req, res) => {
                           },
                       }
                   )
-                  const updateSpaceStats = await Space.update(
-                      { totalFollowers: space.totalFollowers - 1 },
-                      { where: { id: spaceId }, silent: true }
-                  )
+                  const updateSpaceStats = await Space.decrement('totalFollowers', {
+                      where: { id: spaceId },
+                      silent: true,
+                  })
                   Promise.all([updateSpaceUser, updateSpaceStats])
                       .then(() => resolve())
                       .catch((error) => resolve(error))
@@ -2128,10 +2112,10 @@ router.post('/toggle-follow-space', authenticateToken, async (req, res) => {
                       relationship: 'follower',
                       state: 'active',
                   })
-                  const updateSpaceStats = await Space.update(
-                      { totalFollowers: space.totalFollowers + 1 },
-                      { where: { id: spaceId }, silent: true }
-                  )
+                  const updateSpaceStats = await Space.increment('totalFollowers', {
+                      where: { id: spaceId },
+                      silent: true,
+                  })
                   Promise.all([updateSpaceUser, updateSpaceStats])
                       .then(() => resolve())
                       .catch((error) => resolve(error))

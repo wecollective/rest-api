@@ -663,14 +663,10 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                 spaceId,
                                 state: 'active',
                             })
-                            const space = await Space.findOne({
+                            const updateTotalPosts = await Space.increment('totalPosts', {
                                 where: { id: spaceId },
-                                attributes: ['totalPosts'],
+                                silent: true,
                             })
-                            const updateTotalPosts = await Space.update(
-                                { totalPosts: space.totalPosts + 1 },
-                                { where: { id: spaceId }, silent: true }
-                            )
                             Promise.all([createSpacePost, updateTotalPosts])
                                 .then(() => resolve())
                                 .catch((error) => resolve(error))
@@ -682,14 +678,12 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 const spaces = await Space.findAll({
                     where: { id: spaceIds, state: 'active' },
                     attributes: ['id'],
-                    include: [
-                        {
-                            model: Space,
-                            as: 'SpaceAncestors',
-                            attributes: ['id'],
-                            through: { where: { state: 'open' }, attributes: [] },
-                        },
-                    ],
+                    include: {
+                        model: Space,
+                        as: 'SpaceAncestors',
+                        attributes: ['id'],
+                        through: { where: { state: 'open' }, attributes: [] },
+                    },
                 })
                 // gather ancestor ids
                 const ids = []
@@ -710,14 +704,10 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                     spaceId: id,
                                     state: 'active',
                                 })
-                                const space = await Space.findOne({
+                                const updateTotalPosts = await Space.increment('totalPosts', {
                                     where: { id },
-                                    attributes: ['totalPosts'],
+                                    silent: true,
                                 })
-                                const updateTotalPosts = await Space.update(
-                                    { totalPosts: space.totalPosts + 1 },
-                                    { where: { id }, silent: true }
-                                )
                                 Promise.all([createSpacePost, updateTotalPosts])
                                     .then((data) => resolve2(data[0]))
                                     .catch((error) => resolve2(error))
@@ -1267,10 +1257,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
             const createLink = sourceId
                 ? await new Promise(async (resolve) => {
                       // todo: handle other source types when needed
-                      const source = await Post.findOne({
-                          where: { id: sourceId },
-                          attributes: ['id', 'totalLinks'],
-                      })
                       const createNewLink = await Link.create({
                           state: 'visible',
                           type: `${sourceType}-post`,
@@ -1282,10 +1268,10 @@ router.post('/create-post', authenticateToken, (req, res) => {
                           totalComments: 0,
                           totalRatings: 0,
                       })
-                      const updateSourceLinks = await source.update(
-                          { totalLinks: source.totalLinks + 1 },
-                          { where: { id: sourceId }, silent: true }
-                      )
+                      const updateSourceLinks = await Post.increment('totalLinks', {
+                          where: { id: sourceId },
+                          silent: true,
+                      })
                       const updateTargetLinks = await post.update(
                           { totalLinks: 1 },
                           { where: { id: post.id }, silent: true }
@@ -1950,32 +1936,38 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                             state: 'active',
                         })
                         // update stats
-                        const space = await Space.findOne({
-                            where: { id },
-                            attributes: ['totalPostLikes', 'totalComments', 'totalPosts'],
+                        const space = await Space.findOne({ where: { id }, attributes: ['id'] })
+                        const incrementTotalPostLikes = await space.increment('totalPostLikes', {
+                            by: post.totalLikes,
+                            silent: true,
                         })
-                        const updateSpaceStats = await Space.update(
-                            {
-                                totalPostLikes: space.totalPostLikes + post.totalLikes,
-                                totalComments: space.totalComments + post.totalComments,
-                                totalPosts: space.totalPosts + 1,
-                            },
-                            { where: { id }, silent: true }
-                        )
+                        const incrementTotalComments = await space.increment('totalComments', {
+                            by: post.totalComments,
+                            silent: true,
+                        })
+                        const incrementTotalPosts = await space.increment('totalPosts', {
+                            silent: true,
+                        })
                         const spaceUserStat = await SpaceUserStat.findOne({
                             where: { spaceId: id, userId: post.Creator.id },
-                            attributes: ['id', 'totalPostLikes'],
+                            attributes: ['id'],
                         })
                         const updateSpaceUserStat = spaceUserStat
-                            ? await spaceUserStat.update({
-                                  totalPostLikes: spaceUserStat.totalPostLikes + post.totalLikes,
+                            ? await spaceUserStat.increment('totalPostLikes', {
+                                  by: post.totalLikes,
                               })
                             : await SpaceUserStat.create({
                                   spaceId: id,
                                   userId: post.Creator.id,
                                   totalPostLikes: post.totalLikes,
                               })
-                        Promise.all([createSpacePost, updateSpaceStats, updateSpaceUserStat])
+                        Promise.all([
+                            createSpacePost,
+                            incrementTotalPostLikes,
+                            incrementTotalComments,
+                            incrementTotalPosts,
+                            updateSpaceUserStat,
+                        ])
                             .then(() => resolve())
                             .catch((error) => resolve(error))
                     })
@@ -2103,7 +2095,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                 model: Space,
                 as: 'AllPostSpaces',
                 where: { state: 'active' },
-                attributes: ['id', 'totalPostLikes'],
+                attributes: ['id'],
                 through: { where: { state: 'active' }, attributes: [] },
                 required: false,
             })
@@ -2113,14 +2105,13 @@ router.post('/add-like', authenticateToken, async (req, res) => {
 
         const item = await model.findOne({
             where: { id: itemId },
-            attributes: ['totalLikes'],
+            attributes: ['id'],
             include,
         })
 
-        const updateTotalLikes = model.update(
-            { totalLikes: item.totalLikes + 1 },
-            { where: { id: itemId }, silent: true }
-        )
+        const updateTotalLikes = item.increment('totalLikes', {
+            silent: true,
+        })
 
         const updateSpaceStats =
             itemType === 'post'
@@ -2128,18 +2119,15 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                       item.AllPostSpaces.map(
                           (space) =>
                               new Promise(async (resolve) => {
-                                  const updateSpaceStat = await Space.update(
-                                      { totalPostLikes: space.totalPostLikes + 1 },
-                                      { where: { id: space.id }, silent: true }
-                                  )
+                                  const updateSpaceStat = await space.increment('totalPostLikes', {
+                                      silent: true,
+                                  })
                                   const spaceUserStat = await SpaceUserStat.findOne({
                                       where: { spaceId: space.id, userId: item.Creator.id },
-                                      attributes: ['id', 'totalPostLikes'],
+                                      attributes: ['id'],
                                   })
                                   const updateSpaceUserStat = spaceUserStat
-                                      ? await spaceUserStat.update({
-                                            totalPostLikes: spaceUserStat.totalPostLikes + 1,
-                                        })
+                                      ? await spaceUserStat.increment('totalPostLikes')
                                       : await SpaceUserStat.create({
                                             spaceId: space.id,
                                             userId: item.Creator.id,
@@ -2266,14 +2254,11 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
 
         const item = await model.findOne({
             where: { id: itemId },
-            attributes: ['totalLikes'],
+            attributes: ['id'],
             include,
         })
 
-        const updateTotalLikes = await model.update(
-            { totalLikes: item.totalLikes - 1 },
-            { where: { id: itemId }, silent: true }
-        )
+        const updateTotalLikes = await item.decrement('totalLikes', { silent: true })
 
         const updateSpaceStats =
             itemType === 'post'
@@ -2281,17 +2266,13 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
                       item.AllPostSpaces.map(
                           (space) =>
                               new Promise(async (resolve) => {
-                                  const updateSpaceStat = await Space.update(
-                                      { totalPostLikes: space.totalPostLikes - 1 },
-                                      { where: { id: space.id }, silent: true }
+                                  const updateSpaceStat = await space.decrement('totalPostLikes', {
+                                      silent: true,
+                                  })
+                                  const updateSpaceUserStat = await SpaceUserStat.decrement(
+                                      'totalPostLikes',
+                                      { where: { spaceId: space.id, userId: item.Creator.id } }
                                   )
-                                  const spaceUserStat = await SpaceUserStat.findOne({
-                                      where: { spaceId: space.id, userId: item.Creator.id },
-                                      attributes: ['id', 'totalPostLikes'],
-                                  })
-                                  const updateSpaceUserStat = await spaceUserStat.update({
-                                      totalPostLikes: spaceUserStat.totalPostLikes - 1,
-                                  })
                                   Promise.all([updateSpaceStat, updateSpaceUserStat])
                                       .then(() => resolve())
                                       .catch((error) => resolve(error))
@@ -2332,7 +2313,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
 
         const item = await model.findOne({
             where: { id: itemId },
-            attributes: ['totalRatings'],
+            attributes: ['id'],
             include: {
                 model: User,
                 as: 'Creator',
@@ -2340,10 +2321,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
             },
         })
 
-        const updateTotalRatings = await model.update(
-            { totalRatings: item.totalRatings + 1 },
-            { where: { id: itemId }, silent: true }
-        )
+        const updateTotalRatings = await item.increment('totalRatings', { silent: true })
 
         const createReaction = await Reaction.create({
             type: 'rating',
@@ -2421,16 +2399,6 @@ router.post('/remove-rating', authenticateToken, async (req, res) => {
         if (itemType === 'post') model = Post
         if (itemType === 'comment') model = Comment
 
-        const item = await model.findOne({
-            where: { id: itemId },
-            attributes: ['totalRatings'],
-        })
-
-        const updateTotalRatings = await model.update(
-            { totalRatings: item.totalRatings - 1 },
-            { where: { id: itemId }, silent: true }
-        )
-
         const removeReaction = await Reaction.update(
             { state: 'removed' },
             {
@@ -2444,7 +2412,12 @@ router.post('/remove-rating', authenticateToken, async (req, res) => {
             }
         )
 
-        Promise.all([updateTotalRatings, removeReaction])
+        const updateTotalRatings = await model.decrement('totalRatings', {
+            where: { id: itemId },
+            silent: true,
+        })
+
+        Promise.all([removeReaction, updateTotalRatings])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
@@ -2471,11 +2444,11 @@ router.post('/add-link', authenticateToken, async (req, res) => {
         }
         if (type === 'post') {
             model = Post
-            attributes = ['id', 'totalLinks']
+            attributes = ['id']
             include = creator
         } else if (type === 'comment') {
             model = Comment
-            attributes = ['id', 'totalLinks', 'itemId']
+            attributes = ['id', 'itemId']
             include = creator
         } else if (type === 'user') {
             model = User
@@ -2510,17 +2483,11 @@ router.post('/add-link', authenticateToken, async (req, res) => {
         // removed for users and spaces for now
         const updateSourceTotalLinks = ['user', 'space'].includes(sourceType)
             ? null
-            : await source.update(
-                  { totalLinks: source.totalLinks + 1 },
-                  { where: { id: sourceId }, silent: true }
-              )
+            : await source.increment('totalLinks', { silent: true })
 
         const updateTargetTotalLinks = ['user', 'space'].includes(targetType)
             ? null
-            : await target.update(
-                  { totalLinks: target.totalLinks + 1 },
-                  { where: { id: targetId }, silent: true }
-              )
+            : await target.increment('totalLinks', { silent: true })
 
         async function notifyOwners(item, type, location) {
             // skip notification if linked item is link creators
@@ -2617,7 +2584,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: decrement link tally of connected items
+// todo: handle users and spaces, decrement link tally of connected items
 router.post('/delete-link', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { linkId } = req.body
@@ -2642,25 +2609,15 @@ router.post('/delete-link', authenticateToken, async (req, res) => {
             if (targetType === 'post') targetModel = Post
             if (targetType === 'comment') targetModel = Comment
 
-            const source = await sourceModel.findOne({
+            const updateSourceTotalLinks = await sourceModel.decrement('totalLinks', {
                 where: { id: link.itemAId },
-                attributes: ['totalLinks'],
+                silent: true,
             })
 
-            const target = await targetModel.findOne({
+            const updateTargetTotalLinks = await targetModel.decrement('totalLinks', {
                 where: { id: link.itemBId },
-                attributes: ['totalLinks'],
+                silent: true,
             })
-
-            const updateSourceTotalLinks = await sourceModel.update(
-                { totalLinks: source.totalLinks - 1 },
-                { where: { id: link.itemAId }, silent: true }
-            )
-
-            const updateTargetTotalLinks = await targetModel.update(
-                { totalLinks: target.totalLinks - 1 },
-                { where: { id: link.itemBId }, silent: true }
-            )
 
             const removeLink = await Link.update({ state: 'deleted' }, { where: { id: linkId } })
 
@@ -2683,7 +2640,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
 
         const post = await Post.findOne({
             where: { id: postId },
-            attributes: ['totalComments'],
+            attributes: ['id'],
             include: [
                 {
                     model: User,
@@ -2702,24 +2659,21 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                     as: 'AllPostSpaces',
                     where: { state: 'active' },
                     required: false,
-                    attributes: ['id', 'totalComments'],
+                    attributes: ['id'],
                     through: { where: { state: 'active' }, attributes: [] },
                 },
             ],
         })
 
-        const updateLastPostActivity = await Post.update(
-            { lastActivity: new Date(), totalComments: post.totalComments + 1 },
-            { where: { id: postId }, silent: true }
+        const incrementTotalComments = await post.increment('totalComments', { silent: true })
+
+        const updateLastPostActivity = await post.update(
+            { lastActivity: new Date() },
+            { silent: true }
         )
 
         const updateSpaceStats = await Promise.all(
-            post.AllPostSpaces.map((space) =>
-                Space.update(
-                    { totalComments: space.totalComments + 1 },
-                    { where: { id: space.id }, silent: true }
-                )
-            )
+            post.AllPostSpaces.map((space) => space.increment('totalComments', { silent: true }))
         )
 
         const comment = commentId
@@ -2966,6 +2920,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
         )
 
         Promise.all([
+            incrementTotalComments,
             updateLastPostActivity,
             updateSpaceStats,
             notifyPostCreator,
@@ -3073,29 +3028,21 @@ router.post('/delete-comment', authenticateToken, async (req, res) => {
     else {
         const post = await Post.findOne({
             where: { id: postId },
-            attributes: ['totalComments'],
+            attributes: ['id'],
             include: {
                 model: Space,
                 as: 'AllPostSpaces',
                 where: { state: 'active' },
                 required: false,
-                attributes: ['id', 'totalComments'],
+                attributes: ['id'],
                 through: { where: { state: 'active' }, attributes: [] },
             },
         })
 
-        const updateTotalComments = await Post.update(
-            { totalComments: post.totalComments - 1 },
-            { where: { id: postId }, silent: true }
-        )
+        const updateTotalComments = await post.decrement('totalComments', { silent: true })
 
         const updateSpaceStats = await Promise.all(
-            post.AllPostSpaces.map((space) =>
-                Space.update(
-                    { totalComments: space.totalComments - 1 },
-                    { where: { id: space.id }, silent: true }
-                )
-            )
+            post.AllPostSpaces.map((space) => space.decrement('totalComments', { silent: true }))
         )
 
         const removeComment = await Comment.update(
