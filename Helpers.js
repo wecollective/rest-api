@@ -62,7 +62,8 @@ function noMulterErrors(error, res) {
 }
 
 function multerParams(type, accountId) {
-    // types: 'image-file', 'audio-file', 'audio-blob', 'glass-bead-game'
+    // types: 'image-file', 'audio-file', 'audio-blob', 'glass-bead-game' (also: 'stream-image', 'toybox-row-image')
+    // todo: set up new account bucket for stream and toybox images
     const isAudio = type.includes('audio')
     const limit = isAudio ? audioMBLimit : imageMBLimit
     const params = { limits: { fileSize: limit * 1024 * 1024 } }

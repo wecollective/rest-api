@@ -106,7 +106,7 @@ router.get('/toybox-data', authenticateToken, async (req, res) => {
     else {
         const { rowIndex } = req.query
         const row = await ToyBoxRow.findOne({
-            where: { userId: accountId, index: +rowIndex },
+            where: { userId: accountId, index: +rowIndex, state: 'active' },
             attributes: ['id', 'index', 'name', 'image'],
             include: {
                 model: ToyBoxItem,
@@ -1070,6 +1070,7 @@ router.post('/add-toybox-item', authenticateToken, async (req, res) => {
             : await ToyBoxRow.create({
                   userId: accountId,
                   index: rowIndex,
+                  state: 'active',
               })
         // add the new item
         const addItem = await ToyBoxItem.create({
@@ -1170,6 +1171,36 @@ router.post('/delete-toybox-item', authenticateToken, async (req, res) => {
         Promise.all([deccrementIndexes, deleteItem])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/edit-toybox-row', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        multer(multerParams('toybox-row-image', accountId)).single('file')(
+            req,
+            res,
+            async (error) => {
+                const { file, body } = req
+                if (noMulterErrors(error, res)) {
+                    const { rowId, rowIndex, name } = JSON.parse(body.data)
+                    const data = { name }
+                    if (file) data.image = file.location
+                    if (rowId) {
+                        // update row
+                        ToyBoxRow.update(data, { where: { id: rowId } })
+                            .then(() => res.status(200).json({ message: 'Success' }))
+                            .catch((error) => res.status(500).json({ message: 'Error', error }))
+                    } else {
+                        // create new row
+                        ToyBoxRow.create({ ...data, index: rowIndex, state: 'active' })
+                            .then((newRow) => res.status(200).json({ newRow }))
+                            .catch((error) => res.status(500).json({ message: 'Error', error }))
+                    }
+                }
+            }
+        )
     }
 })
 
