@@ -1000,7 +1000,16 @@ async function getToyboxItem(type, id) {
     let attributes = []
     if (['post', 'bead'].includes(type)) {
         model = Post
-        attributes = ['id', 'type', 'title', 'text', 'totalLikes', 'totalComments', 'totalLinks']
+        attributes = [
+            'id',
+            'type',
+            'title',
+            'text',
+            'color',
+            'totalLikes',
+            'totalComments',
+            'totalLinks',
+        ]
         include = [
             {
                 model: User,
@@ -1019,6 +1028,31 @@ async function getToyboxItem(type, id) {
                 attributes: ['image', 'title', 'description', 'domain'],
                 limit: 1,
             },
+            {
+                model: Audio,
+                required: false,
+                attributes: ['url'],
+                limit: 1,
+            },
+            {
+                model: Post,
+                as: 'CardSides',
+                attributes: ['id'],
+                through: {
+                    where: { type: 'card-post', state: ['visible', 'account-deleted'] },
+                    attributes: [],
+                },
+                include: {
+                    model: Image,
+                    attributes: ['url'],
+                    required: false,
+                },
+                required: false,
+            },
+            {
+                model: Event,
+                attributes: ['startTime', 'endTime'],
+            },
         ]
     }
     if (type === 'comment') {
@@ -1032,11 +1066,31 @@ async function getToyboxItem(type, id) {
     }
     if (type === 'user') {
         model = User
-        attributes = ['id', 'handle', 'flagImagePath', 'coverImagePath']
+        attributes = [
+            'id',
+            'handle',
+            'name',
+            'flagImagePath',
+            'coverImagePath',
+            'bio',
+            totalUserPosts,
+            totalUserComments,
+        ]
     }
     if (type === 'space') {
         model = Space
-        attributes = ['id', 'handle', 'flagImagePath', 'coverImagePath']
+        attributes = [
+            'id',
+            'handle',
+            'name',
+            'flagImagePath',
+            'coverImagePath',
+            'description',
+            'totalPosts',
+            'totalComments',
+            'totalPostLikes',
+            'totalFollowers',
+        ]
     }
     const item = await model.findOne({
         where: { id, state: { [Op.or]: ['visible', 'active'] } },
