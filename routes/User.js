@@ -20,11 +20,12 @@ const {
     totalUserPosts,
     totalUserComments,
 } = require('../Helpers')
-const { Space, User, Post, GlassBeadGame, UserUser } = require('../models')
+const { Space, User, Post, UserUser } = require('../models')
 
 // GET
-router.get('/all-users', (req, res) => {
-    const { timeRange, sortBy, sortOrder, searchQuery, limit, offset } = req.query
+router.post('/all-users', (req, res) => {
+    const { limit, offset, params } = req.body
+    const { filter, timeRange, sortBy, searchQuery } = params
 
     function findFirstAttributes() {
         let firstAttributes = ['id']
@@ -34,8 +35,9 @@ router.get('/all-users', (req, res) => {
     }
 
     let startDate = findStartDate(timeRange)
-    let order = findUserOrder(sortBy, sortOrder)
+    let order = findUserOrder(filter, sortBy)
     let firstAttributes = findFirstAttributes()
+    const search = searchQuery || ''
 
     User.findAll({
         where: {
@@ -43,14 +45,14 @@ router.get('/all-users', (req, res) => {
             emailVerified: true,
             createdAt: { [Op.between]: [startDate, Date.now()] },
             [Op.or]: [
-                { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { bio: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { handle: { [Op.like]: `%${search}%` } },
+                { name: { [Op.like]: `%${search}%` } },
+                { bio: { [Op.like]: `%${search}%` } },
             ],
         },
         order,
-        limit: Number(limit),
-        offset: Number(offset),
+        limit,
+        offset,
         attributes: firstAttributes,
         subQuery: false,
     })
@@ -69,10 +71,7 @@ router.get('/all-users', (req, res) => {
                     totalUserComments,
                 ],
                 order,
-                // include: []
-            }).then((data) => {
-                res.json(data)
-            })
+            }).then((data) => res.json(data))
         })
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
@@ -109,15 +108,15 @@ router.get('/user-modal-data', async (req, res) => {
     else res.status(404).json({ message: 'User not found' })
 })
 
-router.get('/user-posts', authenticateToken, async (req, res) => {
+router.post('/user-posts', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { userId, timeRange, postType, sortBy, sortOrder, searchQuery, limit, offset } = req.query
-
+    const { userId, limit, offset, params } = req.body
+    const { filter, timeRange, type, sortBy, searchQuery } = params
     const ownAccount = accountId === +userId
     const startDate = findStartDate(timeRange)
-    const type = findPostType(postType)
-    const order = findPostOrder(sortBy, sortOrder)
-    const where = findPostWhere('user', userId, startDate, type, searchQuery, [])
+    const postType = findPostType(type)
+    const order = findPostOrder(filter, sortBy)
+    const where = findPostWhere('user', userId, startDate, postType, searchQuery, [])
     const initialAttributes = ownAccount
         ? findInitialPostAttributes(sortBy, accountId)
         : findInitialPostAttributesWithAccess(sortBy, accountId)
@@ -131,8 +130,8 @@ router.get('/user-posts', authenticateToken, async (req, res) => {
         subQuery: false,
         where,
         order,
-        limit: Number(limit),
-        offset: Number(offset),
+        limit,
+        offset,
         attributes: initialAttributes,
         having: ownAccount ? null : { ['access']: 1 },
     })

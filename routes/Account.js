@@ -371,10 +371,10 @@ router.post('/stream-posts', authenticateToken, async (req, res) => {
     const {
         type,
         id,
+        filter,
         timeRange,
         postType,
         sortBy,
-        sortOrder,
         depth,
         searchQuery,
         offset,
@@ -418,7 +418,7 @@ router.post('/stream-posts', authenticateToken, async (req, res) => {
         }
         if (streamFound || type !== 'custom') {
             // set up post options
-            const order = findPostOrder(sortBy, sortOrder)
+            const order = findPostOrder(filter, sortBy)
             const include = spaces.length
                 ? {
                       model: Space,
@@ -577,7 +577,7 @@ router.post('/liked-posts', authenticateToken, async (req, res) => {
         const likes = await Reaction.findAll({
             where: { creatorId: accountId, type: 'like', itemType: 'post', state: 'active' },
             attributes: ['itemId'],
-            order: findPostOrder('Date Created', 'Descending'),
+            order: findPostOrder('New', 'Date Created'),
             subQuery: false,
             limit: 10,
             offset,

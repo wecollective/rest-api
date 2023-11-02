@@ -32,14 +32,12 @@ const {
     totalUserComments,
     findStartDate,
     findPostOrder,
-    findPostOrderNew,
     findSpaceOrder,
     findUserOrder,
     findPostType,
     findInitialPostAttributes,
     findFullPostAttributes,
     findPostThrough,
-    findPostThroughNew,
     findPostWhere,
     findPostInclude,
     spaceAccess,
@@ -618,9 +616,8 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
     const { filter, type, sortBy, timeRange, depth, searchQuery } = params
     const startDate = findStartDate(timeRange)
     const postType = findPostType(type)
-    // todo: replace findPostOrderNew & findPostThroughNew when updated globally
-    const order = findPostOrderNew(filter, sortBy)
-    const through = findPostThroughNew(depth)
+    const order = findPostOrder(filter, sortBy)
+    const through = findPostThrough(depth)
     const where = findPostWhere('space', spaceId, startDate, postType, searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
@@ -694,10 +691,8 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
 
     const startDate = findStartDate(timeRange)
     const postType = findPostType(type)
-    // const order = findPostOrder(sortBy, sortOrder)
-    // const through = findPostThrough(depth)
-    const order = findPostOrderNew(filter, sortBy)
-    const through = findPostThroughNew(depth)
+    const order = findPostOrder(filter, sortBy)
+    const through = findPostThrough(depth)
     const where = findPostWhere('space', spaceId, startDate, postType, searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
@@ -754,9 +749,10 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
     res.status(200).json({ totalMatchingPosts: emptyPosts.count, posts: postsWithData })
 })
 
-router.get('/space-spaces', authenticateToken, (req, res) => {
+router.post('/space-spaces', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { spaceId, timeRange, sortBy, sortOrder, depth, searchQuery, limit, offset } = req.query
+    const { spaceId, limit, offset, params } = req.body
+    const { filter, sortBy, timeRange, depth, searchQuery } = params
     const search = searchQuery || ''
 
     // build where
@@ -769,14 +765,14 @@ router.get('/space-spaces', authenticateToken, (req, res) => {
             { description: { [Op.like]: `%${search}%` } },
         ],
     }
-    if (depth === 'All Contained Spaces') where['$SpaceAncestors.id$'] = spaceId
+    if (depth === 'Deep') where['$SpaceAncestors.id$'] = spaceId
     else where['$DirectParentSpaces.id$'] = spaceId
 
     // build include
-    const state = depth === 'All Contained Spaces' ? { [Op.or]: ['open', 'closed'] } : 'open'
+    const state = depth === 'Deep' ? { [Op.or]: ['open', 'closed'] } : 'open'
     const include = {
         model: Space,
-        as: depth === 'All Contained Spaces' ? 'SpaceAncestors' : 'DirectParentSpaces',
+        as: depth === 'Deep' ? 'SpaceAncestors' : 'DirectParentSpaces',
         attributes: [],
         through: { attributes: [], where: { state } },
     }
@@ -797,9 +793,9 @@ router.get('/space-spaces', authenticateToken, (req, res) => {
             'totalFollowers',
         ],
         include,
-        order: findSpaceOrder(sortBy, sortOrder),
-        limit: Number(limit) || null,
-        offset: Number(offset),
+        order: findSpaceOrder(filter, sortBy),
+        limit,
+        offset,
         group: ['id'],
         subQuery: false,
     })
@@ -807,9 +803,12 @@ router.get('/space-spaces', authenticateToken, (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
-router.get('/space-people', authenticateToken, (req, res) => {
+router.post('/space-people', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { spaceId, timeRange, sortBy, sortOrder, searchQuery, limit, offset } = req.query
+    const { spaceId, limit, offset, params } = req.body
+    const { filter, timeRange, sortBy, searchQuery } = params
+    const order = findUserOrder(filter, sortBy)
+    const search = searchQuery || ''
 
     User.findAll({
         where: {
@@ -818,14 +817,14 @@ router.get('/space-people', authenticateToken, (req, res) => {
             // emailVerified: true,
             createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
             [Op.or]: [
-                { handle: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { name: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
-                { bio: { [Op.like]: `%${searchQuery ? searchQuery : ''}%` } },
+                { handle: { [Op.like]: `%${search}%` } },
+                { name: { [Op.like]: `%${search}%` } },
+                { bio: { [Op.like]: `%${search}%` } },
             ],
         },
-        order: findUserOrder(sortBy, sortOrder),
-        limit: Number(limit),
-        offset: Number(offset),
+        order,
+        limit,
+        offset,
         attributes: findUserFirstAttributes(sortBy),
         subQuery: false,
         include: {
@@ -838,7 +837,7 @@ router.get('/space-people', authenticateToken, (req, res) => {
         .then((users) => {
             User.findAll({
                 where: { id: users.map((user) => user.id) },
-                order: findUserOrder(sortBy, sortOrder),
+                order,
                 attributes: userAttributes,
             }).then((data) => res.status(200).json(data))
         })
@@ -886,7 +885,7 @@ router.post('/space-map-data', authenticateToken, async (req, res) => {
     // 3 scenarios: 'full-tree' (includes root and parents), 'children-of-root' (includes filters) : 'children-of-child' (no filters)
     const accountId = req.user ? req.user.id : null
     const { scenario, spaceId, params, offset } = req.body
-    const { lens, sortBy, sortOrder, timeRange, depth, searchQuery } = params
+    const { lens, filter, sortBy, timeRange, depth, searchQuery } = params
     const search = searchQuery || ''
     const generationLimits = {
         // number of space to inlcude per generation (length of array determines max depth)
@@ -948,15 +947,17 @@ router.post('/space-map-data', authenticateToken, async (req, res) => {
         spaceAccess(accountId),
     ]
     if (lens === 'Tree') childAttributes.push('flagImagePath')
-    if (sortBy === 'Likes') childAttributes.push('totalPostLikes')
-    if (sortBy === 'Posts') childAttributes.push('totalPosts')
-    if (sortBy === 'Comments') childAttributes.push('totalComments')
-    if (sortBy === 'Followers') childAttributes.push('totalFollowers')
-    if (sortBy === 'Date Created') childAttributes.push('createdAt')
+    if (filter === 'New') {
+        childAttributes.push('createdAt')
+    } else {
+        if (sortBy === 'Likes') childAttributes.push('totalPostLikes')
+        if (sortBy === 'Posts') childAttributes.push('totalPosts')
+        if (sortBy === 'Comments') childAttributes.push('totalComments')
+        if (sortBy === 'Followers') childAttributes.push('totalFollowers')
+    }
 
     function findChildInclude(generation) {
-        const allSpaces =
-            generation === 0 && scenario !== 'children-of-child' && depth === 'All Contained Spaces'
+        const allSpaces = generation === 0 && scenario !== 'children-of-child' && depth === 'Deep'
         return {
             model: Space,
             as: allSpaces ? 'SpaceAncestors' : 'DirectParentSpaces',
@@ -973,7 +974,7 @@ router.post('/space-map-data', authenticateToken, async (req, res) => {
         const skipFilters = generation > 0 || scenario === 'children-of-child'
         if (skipFilters) where['$DirectParentSpaces.id$'] = parentId
         else {
-            if (depth === 'All Contained Spaces') where['$SpaceAncestors.id$'] = parentId
+            if (depth === 'Deep') where['$SpaceAncestors.id$'] = parentId
             else where['$DirectParentSpaces.id$'] = parentId
             where.createdAt = { [Op.between]: [findStartDate(timeRange), Date.now()] }
             where[Op.or] = [
@@ -993,7 +994,7 @@ router.post('/space-map-data', authenticateToken, async (req, res) => {
                 include: findChildInclude(generation),
                 limit: generationLimits[lens][generation],
                 offset: generation === 0 ? offset : 0,
-                order: findSpaceOrder(sortBy, sortOrder),
+                order: findSpaceOrder(filter, sortBy),
                 group: ['id'],
                 subQuery: false,
             })

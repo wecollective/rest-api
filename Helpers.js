@@ -159,32 +159,7 @@ function findStartDate(timeRange) {
     return startDate.setTime(startDate.getTime() - offset)
 }
 
-function findPostOrder(sortBy, sortOrder) {
-    const direction = sortOrder === 'Ascending' ? 'ASC' : 'DESC'
-    if (sortBy === 'Date Created')
-        return [
-            ['createdAt', direction],
-            ['id', 'ASC'],
-        ]
-    if (sortBy === 'Recent Activity')
-        return [
-            ['lastActivity', direction],
-            ['id', 'ASC'],
-        ]
-    if (sortBy === 'Signal')
-        return [
-            ['totalRatings', direction],
-            ['createdAt', 'DESC'],
-            ['id', 'ASC'],
-        ]
-    return [
-        [`total${sortBy}`, direction],
-        ['createdAt', 'DESC'],
-        ['id', 'ASC'],
-    ]
-}
-
-function findPostOrderNew(filter, sortBy) {
+function findPostOrder(filter, sortBy) {
     if (filter === 'Active')
         return [
             ['lastActivity', 'DESC'],
@@ -208,35 +183,33 @@ function findPostOrderNew(filter, sortBy) {
     ]
 }
 
-function findSpaceOrder(sortBy, sortOrder) {
-    const direction = sortOrder === 'Ascending' ? 'ASC' : 'DESC'
-    if (sortBy === 'Date Created')
+function findSpaceOrder(filter, sortBy) {
+    if (filter === 'New')
         return [
-            ['createdAt', direction],
+            ['createdAt', 'DESC'],
             ['id', 'ASC'],
         ]
     if (sortBy === 'Likes')
         return [
-            ['totalPostLikes', direction],
+            ['totalPostLikes', 'DESC'],
             ['createdAt', 'DESC'],
             ['id', 'ASC'],
         ]
     return [
-        [`total${sortBy}`, direction],
+        [`total${sortBy}`, 'DESC'],
         ['createdAt', 'DESC'],
         ['id', 'ASC'],
     ]
 }
 
-function findUserOrder(sortBy, sortOrder) {
-    const direction = sortOrder === 'Ascending' ? 'ASC' : 'DESC'
-    if (sortBy === 'Date Created')
+function findUserOrder(filter, sortBy) {
+    if (filter === 'New')
         return [
-            ['createdAt', direction],
+            ['createdAt', 'DESC'],
             ['id', 'ASC'],
         ]
     return [
-        [`total${sortBy}`, direction],
+        [`total${sortBy}`, 'DESC'],
         ['createdAt', 'DESC'],
         ['id', 'ASC'],
     ]
@@ -707,7 +680,7 @@ function totalSpaceResults(filters) {
         const { depth, timeRange, search } = filters
         const startDate = createSQLDate(findStartDate(timeRange))
         const endDate = createSQLDate(new Date())
-        return depth === 'All Contained Spaces'
+        return depth === 'Deep'
             ? [
                   sequelize.literal(`(
                     SELECT COUNT(*)
@@ -824,12 +797,6 @@ function findFullPostAttributes(model, accountId) {
 }
 
 function findPostThrough(depth) {
-    const relationship =
-        depth === 'All Contained Posts' ? { [Op.or]: ['direct', 'indirect'] } : 'direct'
-    return { where: { state: 'active', relationship }, attributes: [] }
-}
-
-function findPostThroughNew(depth) {
     const relationship = depth === 'Deep' ? { [Op.or]: ['direct', 'indirect'] } : 'direct'
     return { where: { state: 'active', relationship }, attributes: [] }
 }
@@ -1217,7 +1184,6 @@ module.exports = {
     totalUserComments,
     findStartDate,
     findPostOrder,
-    findPostOrderNew,
     findSpaceOrder,
     findUserOrder,
     findPostType,
@@ -1226,7 +1192,6 @@ module.exports = {
     findInitialPostAttributesWithAccess,
     findFullPostAttributes,
     findPostThrough,
-    findPostThroughNew,
     findPostWhere,
     findPostInclude,
     findCommentAttributes,
