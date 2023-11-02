@@ -114,6 +114,7 @@ router.get('/toybox-data', authenticateToken, async (req, res) => {
                 where: { state: 'active' },
                 attributes: ['index', 'itemType', 'itemId'],
                 order: [['index', 'ASC']],
+                required: false,
             },
             order: [[{ model: ToyBoxItem, as: 'ToyBoxItems' }, 'index', 'ASC']],
         })
@@ -1194,7 +1195,12 @@ router.post('/edit-toybox-row', authenticateToken, async (req, res) => {
                             .catch((error) => res.status(500).json({ message: 'Error', error }))
                     } else {
                         // create new row
-                        ToyBoxRow.create({ ...data, index: rowIndex, state: 'active' })
+                        ToyBoxRow.create({
+                            ...data,
+                            userId: accountId,
+                            index: rowIndex,
+                            state: 'active',
+                        })
                             .then((newRow) => res.status(200).json({ newRow }))
                             .catch((error) => res.status(500).json({ message: 'Error', error }))
                     }
