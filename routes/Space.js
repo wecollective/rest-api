@@ -23,6 +23,7 @@ const {
     Image,
     Url,
     SpaceUserStat,
+    SpacePost,
 } = require('../models')
 const {
     totalSpaceSpaces,
@@ -492,9 +493,13 @@ router.post('/nav-list-spaces', authenticateToken, async (req, res) => {
         'id',
         'handle',
         'name',
+        'description',
         'flagImagePath',
         'coverImagePath',
         'totalPostLikes',
+        'totalComments',
+        'totalPosts',
+        'totalFollowers',
         totalSpaceChildren,
     ]
 
@@ -1271,7 +1276,7 @@ router.post('/post-space-privacy-check', async (req, res) => {
             }
             res.status(200).json(data)
         })
-        .catch((error) => res.status(500).json({ message: 'Error' }))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.get('/users-with-access', async (req, res) => {
@@ -2318,6 +2323,33 @@ router.post('/delete-space', authenticateToken, async (req, res) => {
             })
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
+})
+
+router.post('/check-drop', authenticateToken, async (req, res) => {
+    // for now, block if space is private or has private ancestor
+    // todo: full privacy check to test if allowed
+    const accountId = req.user ? req.user.id : null
+    const { sourceType, sourceId, targetType, targetId } = req.body
+    const target = await Space.findOne({
+        where: { id: targetId },
+        attributes: ['id', 'privacy'],
+        include: {
+            model: Space,
+            as: 'SpaceAncestors',
+            where: { state: 'active', privacy: 'private' },
+            required: false,
+            attributes: ['id'],
+            through: { attributes: [], where: { state: { [Op.or]: ['open', 'closed'] } } },
+        },
+    })
+    const alreadyInSpace = await SpacePost.findOne({
+        where: { postId: sourceId, spaceId: targetId, state: 'active' },
+    })
+    const blocked = target.privacy === 'private' || target.SpaceAncestors.length
+    let message = 'Allowed'
+    if (alreadyInSpace) message = 'Already in space'
+    else if (blocked) message = 'Blocked by privacy rules'
+    res.status(200).json({ message })
 })
 
 module.exports = router
