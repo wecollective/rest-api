@@ -965,7 +965,7 @@ async function getToyboxItem(type, id) {
     let model
     let include = []
     let attributes = []
-    if (['post', 'bead'].includes(type)) {
+    if (type === 'post') {
         model = Post
         attributes = [
             'id',
@@ -976,6 +976,7 @@ async function getToyboxItem(type, id) {
             'totalLikes',
             'totalComments',
             'totalLinks',
+            'state',
         ]
         include = [
             {
@@ -1024,7 +1025,7 @@ async function getToyboxItem(type, id) {
     }
     if (type === 'comment') {
         model = Comment
-        attributes = ['id', 'text']
+        attributes = ['id', 'text', 'state']
         include = {
             model: User,
             as: 'Creator',
@@ -1042,6 +1043,7 @@ async function getToyboxItem(type, id) {
             'bio',
             totalUserPosts,
             totalUserComments,
+            'state',
         ]
     }
     if (type === 'space') {
@@ -1057,10 +1059,11 @@ async function getToyboxItem(type, id) {
             'totalComments',
             'totalPostLikes',
             'totalFollowers',
+            'state',
         ]
     }
     const item = await model.findOne({
-        where: { id, state: { [Op.or]: ['visible', 'active'] } },
+        where: { id },
         attributes,
         include,
     })
