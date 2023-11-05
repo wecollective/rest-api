@@ -20,6 +20,18 @@ module.exports = {
             endTime: {
                 type: Sequelize.DATE,
             },
+            spaceId: {
+                type: Sequelize.INTEGER,
+            },
+            action: {
+                type: Sequelize.STRING,
+            },
+            threshold: {
+                type: Sequelize.INTEGER,
+            },
+            state: {
+                type: Sequelize.STRING,
+            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE,

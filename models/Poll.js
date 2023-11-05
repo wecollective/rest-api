@@ -8,6 +8,10 @@ module.exports = (sequelize, DataTypes) => {
             title: DataTypes.TEXT,
             answersLocked: DataTypes.BOOLEAN,
             endTime: DataTypes.DATE,
+            spaceId: DataTypes.INTEGER,
+            action: DataTypes.STRING,
+            threshold: DataTypes.INTEGER,
+            state: DataTypes.STRING,
         },
         {}
     )
