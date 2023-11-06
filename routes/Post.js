@@ -445,6 +445,7 @@ router.get('/poll-data', (req, res) => {
                     },
                 },
             ],
+            required: false,
         },
     })
         .then((pollData) => res.status(200).json(pollData))
@@ -623,6 +624,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 pollType,
                 pollAnswersLocked,
                 pollAnswers,
+                governance,
+                pollAction,
+                pollThreshold,
                 topicGroup,
                 topicImageUrl,
                 gbgSettings,
@@ -832,7 +836,19 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               postId: post.id,
                               type: pollType,
                               answersLocked: pollAnswersLocked,
-                              // endTime: inquiryEndTime || null,
+                              spaceId: governance ? spaceIds[0] : null,
+                              action: governance
+                                  ? pollAction === 'None'
+                                      ? null
+                                      : pollAction
+                                  : null,
+                              threshold: governance
+                                  ? pollAction === 'Create spaces'
+                                      ? pollThreshold
+                                      : null
+                                  : null,
+                              // state: null,
+                              // endTime: pollEndTime || null,
                           })
                           Promise.all(
                               pollAnswers.map((answer) =>

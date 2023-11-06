@@ -24,6 +24,7 @@ const {
     Url,
     SpaceUserStat,
     SpacePost,
+    Poll,
 } = require('../models')
 const {
     totalSpaceSpaces,
@@ -881,6 +882,20 @@ router.get('/space-events', authenticateToken, (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
+router.get('/space-governance-polls', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { spaceId } = req.query
+
+    const polls = await Poll.findAll({ where: { spaceId }, attributes: ['postId'] })
+    const posts = await Post.findAll({
+        where: { id: polls.map((poll) => poll.postId) },
+        attributes: findFullPostAttributes('Post', accountId),
+        include: findPostInclude(accountId),
+    })
+
+    res.status(200).json(posts)
+})
+
 router.post('/space-map-data', authenticateToken, async (req, res) => {
     // 3 scenarios: 'full-tree' (includes root and parents), 'children-of-root' (includes filters) : 'children-of-child' (no filters)
     const accountId = req.user ? req.user.id : null
@@ -1311,6 +1326,21 @@ router.get('/space-mods', async (req, res) => {
                 through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
             },
         ],
+    })
+        .then((space) => res.status(200).send(space.Moderators))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
+})
+
+router.get('/space-children', async (req, res) => {
+    const { spaceId } = req.query
+    Space.findAll({
+        where: { '$DirectParentSpaces.id$': spaceId, state: 'active' },
+        include: {
+            model: Space,
+            as: 'DirectParentSpaces',
+            attributes: ['id', 'handle', 'name'],
+            through: { attributes: [], where: { state: 'open' } },
+        },
     })
         .then((space) => res.status(200).send(space.Moderators))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
