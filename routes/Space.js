@@ -1335,14 +1335,21 @@ router.get('/space-children', async (req, res) => {
     const { spaceId } = req.query
     Space.findAll({
         where: { '$DirectParentSpaces.id$': spaceId, state: 'active' },
-        include: {
-            model: Space,
-            as: 'DirectParentSpaces',
-            attributes: ['id', 'handle', 'name'],
-            through: { attributes: [], where: { state: 'open' } },
-        },
+        include: [
+            {
+                model: Space,
+                as: 'DirectParentSpaces',
+                attributes: ['id', 'handle', 'name'],
+                through: { attributes: [], where: { state: 'open' } },
+            },
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['handle', 'flagImagePath'],
+            },
+        ],
     })
-        .then((space) => res.status(200).send(space.Moderators))
+        .then((spaces) => res.status(200).send(spaces))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
