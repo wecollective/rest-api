@@ -425,8 +425,8 @@ router.get('/poll-data', (req, res) => {
         attributes: ['id', 'type', 'answersLocked'],
         include: {
             model: PollAnswer,
-            attributes: ['id', 'text', 'createdAt'],
-            where: { state: 'active' },
+            attributes: ['id', 'text', 'state', 'createdAt'],
+            where: { state: { [Op.or]: ['active', 'done'] } },
             include: [
                 {
                     model: User,
@@ -854,9 +854,9 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               pollAnswers.map((answer) =>
                                   PollAnswer.create({
                                       pollId: newPoll.id,
-                                      creatorId: accountId,
+                                      creatorId: answer.Creator ? answer.Creator.id : accountId,
                                       text: answer.text,
-                                      state: 'active',
+                                      state: answer.state || 'active',
                                   })
                               )
                           ).then((answers) => resolve({ poll: newPoll, answers }))

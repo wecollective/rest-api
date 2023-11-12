@@ -885,14 +885,12 @@ router.get('/space-events', authenticateToken, (req, res) => {
 router.get('/space-governance-polls', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { spaceId } = req.query
-
     const polls = await Poll.findAll({ where: { spaceId }, attributes: ['postId'] })
     const posts = await Post.findAll({
-        where: { id: polls.map((poll) => poll.postId) },
+        where: { id: polls.map((poll) => poll.postId), state: 'visible' },
         attributes: findFullPostAttributes('Post', accountId),
         include: findPostInclude(accountId),
     })
-
     res.status(200).json(posts)
 })
 
@@ -1345,7 +1343,7 @@ router.get('/space-children', async (req, res) => {
             {
                 model: User,
                 as: 'Creator',
-                attributes: ['handle', 'flagImagePath'],
+                attributes: ['id', 'handle', 'flagImagePath'],
             },
         ],
     })
