@@ -1025,11 +1025,11 @@ async function getToyboxItem(type, id) {
     }
     if (type === 'comment') {
         model = Comment
-        attributes = ['id', 'text', 'state']
+        attributes = ['id', 'text', 'state', 'itemId']
         include = {
             model: User,
             as: 'Creator',
-            attributes: ['flagImagePath'],
+            attributes: ['name', 'flagImagePath'],
         }
     }
     if (type === 'user') {
