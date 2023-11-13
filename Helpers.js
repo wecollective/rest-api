@@ -322,9 +322,9 @@ function accountLink(itemType, model, accountId) {
 }
 
 function postAccess(accountId) {
+    // todo: 10x faster approach found & applied on user-posts route. Apply to post-data & space-events routes then remove function.
     // checks number of private spaces post is in = number of those spaces user has access to
     // reposts excluded so public posts can be reposted into private spaces without blocking access
-    // todo: find more efficient query
     return [
         sequelize.literal(`(
             (SELECT COUNT(*)

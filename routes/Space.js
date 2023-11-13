@@ -701,7 +701,6 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
     // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
     // Intial query used to find correct posts with pagination and sorting applied.
     // Second query used to return all related data and models.
-    // todo: more testing to see if more effecient approaches available
     const emptyPosts = await Post.findAndCountAll({
         where,
         order,
@@ -728,13 +727,11 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
                 attributes: ['id', 'description'],
                 where: { state: 'visible', type: 'post-post' },
                 required: false,
-                include: [
-                    {
-                        model: Post,
-                        as: 'OutgoingPost',
-                        attributes: ['id'],
-                    },
-                ],
+                include: {
+                    model: Post,
+                    as: 'OutgoingPost',
+                    attributes: ['id'],
+                },
             },
             {
                 model: Image,
@@ -747,7 +744,7 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
         required: false,
     })
 
-    res.status(200).json({ totalMatchingPosts: emptyPosts.count, posts: postsWithData })
+    res.status(200).json({ totalPosts: emptyPosts.count, posts: postsWithData })
 })
 
 router.post('/space-spaces', authenticateToken, (req, res) => {
