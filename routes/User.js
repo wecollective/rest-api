@@ -12,7 +12,6 @@ const {
     findUserOrder,
     findPostType,
     findInitialPostAttributes,
-    findInitialPostAttributesWithAccess,
     findFullPostAttributes,
     findPostWhere,
     findPostInclude,
@@ -20,7 +19,7 @@ const {
     totalUserPosts,
     totalUserComments,
 } = require('../Helpers')
-const { Space, User, Post, UserUser } = require('../models')
+const { Space, User, Post, UserUser, SpaceUser } = require('../models')
 
 // GET
 router.post('/all-users', (req, res) => {
@@ -113,19 +112,23 @@ router.post('/user-posts', authenticateToken, async (req, res) => {
     const { userId, limit, offset, params } = req.body
     const { filter, timeRange, type, sortBy, searchQuery } = params
     const ownAccount = accountId === +userId
+    const spaceAccessList = ownAccount
+        ? null
+        : await SpaceUser.findAll({
+              where: { userId: accountId, relationship: 'access', state: 'active' },
+              attributes: ['spaceId'],
+          })
+    const accessList = ownAccount ? null : spaceAccessList.map((s) => s.spaceId)
     const startDate = findStartDate(timeRange)
     const postType = findPostType(type)
     const order = findPostOrder(filter, sortBy)
-    const where = findPostWhere('user', userId, startDate, postType, searchQuery, [])
-    const initialAttributes = ownAccount
-        ? findInitialPostAttributes(sortBy, accountId)
-        : findInitialPostAttributesWithAccess(sortBy, accountId)
+    const where = findPostWhere('user', userId, startDate, postType, searchQuery, [], accessList)
+    const initialAttributes = findInitialPostAttributes(sortBy, accountId)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 
     // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
     // Intial query used to find correct posts with pagination and sorting applied.
     // Second query used to return all related data and models.
-    // todo: more testing to see if more effecient approaches available
     const emptyPosts = await Post.findAll({
         subQuery: false,
         where,
@@ -133,7 +136,16 @@ router.post('/user-posts', authenticateToken, async (req, res) => {
         limit,
         offset,
         attributes: initialAttributes,
-        having: ownAccount ? null : { ['access']: 1 },
+        include: ownAccount
+            ? null
+            : {
+                  model: Space,
+                  as: 'PrivateSpaces',
+                  where: { privacy: 'private' },
+                  attributes: ['id'],
+                  through: { attributes: [] },
+                  required: false,
+              },
     })
 
     const postsWithData = await Post.findAll({

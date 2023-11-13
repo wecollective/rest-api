@@ -53,6 +53,12 @@ module.exports = (sequelize, DataTypes) => {
 
         Post.belongsToMany(models.Space, {
             through: models.SpacePost,
+            as: 'PrivateSpaces',
+            foreignKey: 'postId',
+        })
+
+        Post.belongsToMany(models.Space, {
+            through: models.SpacePost,
             as: 'Reposts',
             foreignKey: 'postId',
         })

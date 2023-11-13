@@ -769,10 +769,6 @@ function findInitialPostAttributes(sortBy) {
     return attributes
 }
 
-function findInitialPostAttributesWithAccess(sortBy, accountId) {
-    return [...findInitialPostAttributes(sortBy), postAccess(accountId)]
-}
-
 function findFullPostAttributes(model, accountId) {
     return [
         'id',
@@ -801,7 +797,7 @@ function findPostThrough(depth) {
     return { where: { state: 'active', relationship }, attributes: [] }
 }
 
-function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers) {
+function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers, spaceAccessList) {
     const query = searchQuery || ''
     const where = {
         state: 'visible',
@@ -812,7 +808,15 @@ function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers) {
         where['$AllPostSpaces.id$'] = id
         if (mutedUsers.length) where[Op.not] = { creatorId: mutedUsers }
     }
-    if (location === 'user') where.creatorId = id
+    if (location === 'user') {
+        where.creatorId = id
+        if (spaceAccessList) {
+            where[Op.or] = [
+                { '$PrivateSpaces.id$': null },
+                { '$PrivateSpaces.id$': spaceAccessList },
+            ]
+        }
+    }
     if (searchQuery) where.searchableText = { [Op.like]: `%${query}%` }
     return where
 }
@@ -1192,7 +1196,6 @@ module.exports = {
     findPostType,
     postAccess,
     findInitialPostAttributes,
-    findInitialPostAttributesWithAccess,
     findFullPostAttributes,
     findPostThrough,
     findPostWhere,
