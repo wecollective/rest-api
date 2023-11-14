@@ -2510,15 +2510,15 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             if (type === 'space') isOwn = item.Moderators.find((u) => u.id === accountId)
             if (isOwn) return null
             // send out notifications and emails to recipients
-            let recipitents = []
-            if (['post', 'comment'].includes(type)) recipitents = [item.Creator]
-            if (type === 'user') recipitents = [item]
-            if (type === 'space') recipitents = [...item.Moderators]
+            let recipients = []
+            if (['post', 'comment'].includes(type)) recipients = [item.Creator]
+            if (type === 'user') recipients = [item]
+            if (type === 'space') recipients = [...item.Moderators]
             return Promise.all(
-                recipitents.map(
-                    async (recipitent) =>
+                recipients.map(
+                    async (recipient) =>
                         await new Promise(async (resolve) => {
-                            const { id, name, email } = recipitent
+                            const { id, name, email, emailsDisabled } = recipient
                             let postId = null
                             let commentId = null
                             let spaceAId = null
@@ -2539,8 +2539,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                                 commentId,
                             })
                             const skipEmail =
-                                recipient.emailsDisabled ||
-                                (await accountMuted(accountId, recipitent))
+                                emailsDisabled || (await accountMuted(accountId, recipient))
                             const url = `${config.appURL}/linkmap?item=${type}&id=${item.id}`
                             const sendEmail = skipEmail
                                 ? null
