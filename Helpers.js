@@ -5,15 +5,14 @@ const {
     User,
     Post,
     Comment,
-    Reaction,
     GlassBeadGame,
     Event,
-    Poll,
-    PollAnswer,
     Image,
     Url,
     Audio,
     SpaceUserStat,
+    SpaceParent,
+    SpaceAncestor,
 } = require('./models')
 
 var aws = require('aws-sdk')
@@ -1112,6 +1111,108 @@ async function getFullLinkedItem(type, id, accountId) {
     return null
 }
 
+// todo: turn into recursive function to handle privacy... (i.e private space within public child being attached to public parent)
+async function attachParentSpace(childId, parentId) {
+    // remove old parent relationship with root if present to reduce clutter
+    const removeRoot = await SpaceParent.update(
+        { state: 'closed' },
+        { where: { spaceAId: 1, spaceBId: childId, state: 'open' } }
+    )
+
+    const createNewParentRelationship = await SpaceParent.create({
+        spaceAId: parentId,
+        spaceBId: childId,
+        state: 'open',
+    })
+
+    // get the parent with all its ancestors
+    const parent = await Space.findOne({
+        where: { id: parentId },
+        attributes: ['id'],
+        include: {
+            model: Space,
+            as: 'SpaceAncestors',
+            where: { state: 'active' },
+            required: false,
+            attributes: ['id'],
+            through: { attributes: ['state'], where: { state: { [Op.or]: ['open', 'closed'] } } },
+        },
+    })
+
+    // get the child with all its decendents (including each of their ancestors)
+    const child = await Space.findOne({
+        where: { id: childId },
+        attributes: ['id', 'privacy'],
+        include: [
+            {
+                model: Space,
+                as: 'SpaceDescendents',
+                where: { state: 'active' },
+                required: false,
+                attributes: ['id'],
+                through: { attributes: [], where: { state: { [Op.or]: ['open', 'closed'] } } },
+                include: {
+                    model: Space,
+                    as: 'SpaceAncestors',
+                    where: { state: 'active' },
+                    required: false,
+                    attributes: ['id'],
+                    through: { attributes: [], where: { state: { [Op.or]: ['open', 'closed'] } } },
+                },
+            },
+            {
+                model: Space,
+                as: 'SpaceAncestors',
+                where: { state: 'active' },
+                required: false,
+                attributes: ['id'],
+                through: { attributes: [], where: { state: { [Op.or]: ['open', 'closed'] } } },
+            },
+        ],
+    })
+
+    const descendants = [child, ...child.SpaceDescendents]
+    const ancestors = [
+        // parent SpaceAncestor state determined by childs privacy
+        {
+            id: parent.id,
+            SpaceAncestor: { state: child.privacy === 'private' ? 'closed' : 'open' },
+        },
+        ...parent.SpaceAncestors,
+    ]
+
+    // loop through the descendents (includes child) and add any ancestors that aren't already present
+    const addAncestorsToDescendants = await Promise.all(
+        descendants.map((descendent) =>
+            Promise.all(
+                ancestors.map(
+                    (ancestor) =>
+                        new Promise((resolve) => {
+                            const match = descendent.SpaceAncestors.find(
+                                (a) => a.id === ancestor.id
+                            )
+                            if (match) resolve()
+                            else {
+                                SpaceAncestor.create({
+                                    spaceAId: ancestor.id,
+                                    spaceBId: descendent.id,
+                                    state:
+                                        child.privacy === 'private'
+                                            ? 'closed'
+                                            : ancestor.SpaceAncestor.state,
+                                })
+                                    .then(() => resolve())
+                                    .catch((error) => resolve(error))
+                            }
+                        })
+                )
+            )
+        )
+    )
+
+    return Promise.all([removeRoot, createNewParentRelationship, addAncestorsToDescendants])
+}
+
 // database operations
 async function updateAllSpaceStats(res) {
     // calculate and update all space stats
@@ -1220,6 +1321,7 @@ module.exports = {
     getToyboxItem,
     accountLike,
     accountMuted,
+    attachParentSpace,
     // database operations
     updateAllSpaceStats,
     updateAllSpaceUserStats,

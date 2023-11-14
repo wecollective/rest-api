@@ -28,15 +28,12 @@ const {
     getFullLinkedItem,
     accountLike,
     accountMuted,
-    updateAllSpaceStats,
-    updateAllSpaceUserStats,
+    attachParentSpace,
 } = require('../Helpers')
 const {
     Space,
     SpacePost,
     SpaceUser,
-    SpaceParent,
-    SpaceAncestor,
     SpaceUserStat,
     User,
     Post,
@@ -3128,17 +3125,29 @@ router.post('/respond-to-event', authenticateToken, async (req, res) => {
 router.post('/vote-on-poll', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { userName, userHandle, spaceId, postId, voteData } = req.body
-
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const post = await Post.findOne({
             where: { id: postId },
             attributes: [],
-            include: {
-                model: User,
-                as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath', 'email', 'emailsDisabled'],
-            },
+            include: [
+                {
+                    model: User,
+                    as: 'Creator',
+                    attributes: [
+                        'id',
+                        'handle',
+                        'name',
+                        'flagImagePath',
+                        'email',
+                        'emailsDisabled',
+                    ],
+                },
+                {
+                    model: Poll,
+                    attributes: ['type', 'action', 'threshold', 'spaceId'],
+                },
+            ],
         })
 
         const removeOldReactions = await Reaction.update(
@@ -3160,6 +3169,84 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
                 })
             )
         )
+
+        const { type, action, threshold } = post.Poll
+        const executeAction = action
+            ? Promise.all(
+                  voteData.map(
+                      (answer) =>
+                          new Promise(async (resolve1) => {
+                              const pollAnswer = await PollAnswer.findOne({
+                                  where: { id: answer.id },
+                                  attributes: ['id', 'text', 'state'],
+                                  include: {
+                                      model: Reaction,
+                                      where: { type: 'vote', state: 'active' },
+                                      required: false,
+                                      attributes: ['value'],
+                                  },
+                              })
+                              const { text, state, Reactions } = pollAnswer
+                              let totalVotes
+                              if (type === 'weighted-choice')
+                                  totalVotes =
+                                      Reactions.map((r) => +r.value).reduce((a, b) => a + b, 0) /
+                                      100
+                              else totalVotes = Reactions.length
+                              const createSpace =
+                                  action === 'Create spaces' &&
+                                  state !== 'done' &&
+                                  totalVotes >= threshold
+                                      ? new Promise(async (resolve2) => {
+                                            const markAnswerDone = await pollAnswer.update({
+                                                state: 'done',
+                                            })
+                                            const newSpace = await Space.create({
+                                                creatorId: post.Creator.id,
+                                                handle: uuidv4().substring(0, 15),
+                                                name: text,
+                                                description: null,
+                                                state: 'active',
+                                                privacy: 'public',
+                                                totalPostLikes: 0,
+                                                totalPosts: 0,
+                                                totalComments: 0,
+                                                totalFollowers: 1,
+                                            })
+                                            const createModRelationship = SpaceUser.create({
+                                                relationship: 'moderator',
+                                                state: 'active',
+                                                spaceId: newSpace.id,
+                                                userId: post.Creator.id,
+                                            })
+                                            const createFollowerRelationship = SpaceUser.create({
+                                                relationship: 'follower',
+                                                state: 'active',
+                                                spaceId: newSpace.id,
+                                                userId: post.Creator.id,
+                                            })
+                                            const attachToParent = await attachParentSpace(
+                                                newSpace.id,
+                                                post.Poll.spaceId
+                                            )
+                                            Promise.all([
+                                                markAnswerDone,
+                                                createModRelationship,
+                                                createFollowerRelationship,
+                                                attachToParent,
+                                            ])
+                                                .then(() => resolve2())
+                                                .catch((error) => resolve2(error))
+                                        })
+                                      : null
+
+                              Promise.all([createSpace])
+                                  .then(() => resolve1())
+                                  .catch((error) => resolve1(error))
+                          })
+                  )
+              )
+            : null
 
         const skipNotification = post.Creator.id === accountId
         const skipEmail = skipNotification || post.Creator.emailsDisabled
@@ -3206,6 +3293,7 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
         Promise.all([
             removeOldReactions,
             createNewReactions,
+            executeAction,
             createNotification,
             sendEmail,
             updateLastPostActivity,
