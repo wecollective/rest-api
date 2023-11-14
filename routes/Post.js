@@ -3325,7 +3325,7 @@ router.post('/remove-poll-answer', authenticateToken, async (req, res) => {
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        PollAnswer.update({ state: 'removed' }, { where: { id, creatorId: accountId } })
+        PollAnswer.update({ state: 'removed' }, { where: { id } })
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ error }))
     }
