@@ -3331,6 +3331,17 @@ router.post('/remove-poll-answer', authenticateToken, async (req, res) => {
     }
 })
 
+router.post('/toggle-poll-answer-done', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { answerId, newState } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        PollAnswer.update({ state: newState }, { where: { id: answerId } })
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ error }))
+    }
+})
+
 // todo: add authenticateToken to all endpoints below
 router.post('/save-glass-bead-game', async (req, res) => {
     const { postId } = req.body
