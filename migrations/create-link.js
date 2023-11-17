@@ -8,28 +8,38 @@ module.exports = {
                 primaryKey: true,
                 type: Sequelize.INTEGER,
             },
-            state: {
-                type: Sequelize.STRING,
-            },
             creatorId: {
                 type: Sequelize.INTEGER,
             },
-            type: {
+            // type: {
+            //     type: Sequelize.STRING,
+            // },
+            itemAType: {
                 type: Sequelize.STRING,
             },
-            index: {
-                type: Sequelize.INTEGER,
-            },
-            relationship: {
+            itemBType: {
                 type: Sequelize.STRING,
-            },
-            description: {
-                type: Sequelize.TEXT,
             },
             itemAId: {
                 type: Sequelize.INTEGER,
             },
             itemBId: {
+                type: Sequelize.INTEGER,
+            },
+            relationship: {
+                type: Sequelize.STRING,
+            },
+            role: {
+                type: Sequelize.STRING,
+            },
+            description: {
+                type: Sequelize.TEXT,
+            },
+            state: {
+                type: Sequelize.STRING,
+            },
+            // todo: remove index when ordered by date
+            index: {
                 type: Sequelize.INTEGER,
             },
             totalLikes: {

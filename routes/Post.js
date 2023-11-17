@@ -72,6 +72,39 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
+
+        // link table updates
+        const links = await Link.findAll({ attributes: ['id', 'type', 'relationship', 'state'] })
+        Promise.all(
+            links.map(
+                (link) =>
+                    new Promise((resolve) => {
+                        const update = {}
+                        if (link.relationship === 'source') update.role = 'prompt'
+                        if (link.state === 'visible') update.state = 'active'
+                        if (link.state === 'hidden') update.state = 'deleted'
+                        const types = link.type.split('-')
+                        update.itemAType = types[0]
+                        update.itemBType = types[1]
+                        if (link.type === 'gbg-post') {
+                            update.itemAType = 'post'
+                            update.itemBType = 'bead'
+                            update.relationship = 'root'
+                        } else if (link.type === 'card-post') {
+                            update.itemAType = 'post'
+                            update.itemBType = 'card-face'
+                            update.relationship = 'root'
+                        } else {
+                            update.relationship = 'link'
+                        }
+                        link.update(update, { silent: true })
+                            .then(() => resolve())
+                            .catch((error) => resolve(error))
+                    })
+            )
+        )
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json(error))
     }
 })
 

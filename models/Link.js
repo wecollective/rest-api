@@ -10,15 +10,18 @@ module.exports = (sequelize, DataTypes) => {
             },
             state: DataTypes.STRING,
             creatorId: DataTypes.INTEGER,
-            type: DataTypes.STRING,
-            index: DataTypes.INTEGER,
+            type: DataTypes.STRING, // todo: remove
+            itemAType: DataTypes.STRING,
+            itemBType: DataTypes.STRING,
+            itemAId: DataTypes.INTEGER,
+            itemBId: DataTypes.INTEGER,
+            index: DataTypes.INTEGER, // todo: remove
             relationship: DataTypes.STRING,
+            role: DataTypes.STRING,
             description: DataTypes.TEXT,
             totalLikes: DataTypes.INTEGER,
             totalComments: DataTypes.INTEGER,
             totalRatings: DataTypes.INTEGER,
-            itemAId: DataTypes.INTEGER,
-            itemBId: DataTypes.INTEGER,
         },
         {}
     )
