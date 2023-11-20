@@ -11,10 +11,13 @@ module.exports = {
             creatorId: {
                 type: Sequelize.INTEGER,
             },
-            type: {
-                type: Sequelize.STRING,
-            },
-            itemId: {
+            // type: {
+            //     type: Sequelize.STRING,
+            // },
+            // itemId: {
+            //     type: Sequelize.INTEGER,
+            // },
+            postId: {
                 type: Sequelize.INTEGER,
             },
             index: {

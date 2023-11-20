@@ -71,9 +71,9 @@ module.exports = {
             backgroundVideoStartTime: {
                 type: Sequelize.STRING,
             },
-            oldGameId: {
-                type: Sequelize.INTEGER,
-            },
+            // oldGameId: {
+            //     type: Sequelize.INTEGER,
+            // },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE,

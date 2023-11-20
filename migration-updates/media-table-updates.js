@@ -5,7 +5,15 @@
 module.exports = {
     up: (queryInterface, Sequelize) => {
         return queryInterface.sequelize.transaction((t) => {
-            return Promise.all([queryInterface.removeColumn('Links', 'type', { transaction: t })])
+            return Promise.all([
+                queryInterface.removeColumn('Urls', 'type', { transaction: t }),
+                queryInterface.renameColumn('Urls', 'itemId', 'postId'),
+                queryInterface.removeColumn('Images', 'type', { transaction: t }),
+                queryInterface.renameColumn('Images', 'itemId', 'postId'),
+                queryInterface.removeColumn('Audios', 'type', { transaction: t }),
+                queryInterface.renameColumn('Audios', 'itemId', 'postId'),
+                queryInterface.removeColumn('GlassBeadGames', 'oldGameId', { transaction: t }),
+            ])
         })
     },
 

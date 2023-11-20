@@ -29,7 +29,7 @@ module.exports = (sequelize, DataTypes) => {
             backgroundImage: DataTypes.STRING,
             backgroundVideo: DataTypes.STRING,
             backgroundVideoStartTime: DataTypes.STRING,
-            oldGameId: DataTypes.INTEGER,
+            // oldGameId: DataTypes.INTEGER,
         },
         {}
     )

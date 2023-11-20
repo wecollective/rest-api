@@ -8,10 +8,13 @@ module.exports = {
                 primaryKey: true,
                 type: Sequelize.INTEGER,
             },
-            type: {
-                type: Sequelize.STRING,
-            },
-            itemId: {
+            // type: {
+            //     type: Sequelize.STRING,
+            // },
+            // itemId: {
+            //     type: Sequelize.INTEGER,
+            // },
+            postId: {
                 type: Sequelize.INTEGER,
             },
             state: {
