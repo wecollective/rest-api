@@ -73,38 +73,154 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
-        // link table updates
-        const links = await Link.findAll({ attributes: ['id', 'type', 'relationship', 'state'] })
-        Promise.all(
-            links.map(
-                (link) =>
-                    new Promise((resolve) => {
-                        const update = {}
-                        if (link.relationship === 'source') update.role = 'prompt'
-                        if (link.state === 'visible') update.state = 'active'
-                        if (link.state === 'hidden') update.state = 'deleted'
-                        const types = link.type.split('-')
-                        update.itemAType = types[0]
-                        update.itemBType = types[1]
-                        if (link.type === 'gbg-post') {
-                            update.itemAType = 'post'
-                            update.itemBType = 'bead'
-                            update.relationship = 'root'
-                        } else if (link.type === 'card-post') {
-                            update.itemAType = 'post'
-                            update.itemBType = 'card-face'
-                            update.relationship = 'root'
-                        } else {
-                            update.relationship = 'link'
-                        }
-                        link.update(update, { silent: true })
-                            .then(() => resolve())
-                            .catch((error) => resolve(error))
-                    })
-            )
-        )
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json(error))
+        // // link table updates
+        // const links = await Link.findAll({ attributes: ['id', 'type', 'relationship', 'state'] })
+        // Promise.all(
+        //     links.map(
+        //         (link) =>
+        //             new Promise((resolve) => {
+        //                 const update = {}
+        //                 if (link.relationship === 'source') update.role = 'prompt'
+        //                 if (link.state === 'visible') update.state = 'active'
+        //                 if (link.state === 'hidden') update.state = 'deleted'
+        //                 const types = link.type.split('-')
+        //                 update.itemAType = types[0]
+        //                 update.itemBType = types[1]
+        //                 if (link.type === 'gbg-post') {
+        //                     update.itemAType = 'post'
+        //                     update.itemBType = 'bead'
+        //                     update.relationship = 'root'
+        //                 } else if (link.type === 'card-post') {
+        //                     update.itemAType = 'post'
+        //                     update.itemBType = 'card-face'
+        //                     update.relationship = 'root'
+        //                 } else {
+        //                     update.relationship = 'link'
+        //                 }
+        //                 link.update(update, { silent: true })
+        //                     .then(() => resolve())
+        //                     .catch((error) => resolve(error))
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // // link table card face index updates
+        // const posts = await Post.findAll({
+        //     where: { type: { [Op.or]: ['card-back', 'card-front'] } },
+        //     attributes: ['id', 'type'],
+        // })
+        // Promise.all(
+        //     posts.map(
+        //         (post) =>
+        //             new Promise(async (resolve) => {
+        //                 const link = await Link.findOne({
+        //                     where: { type: 'card-post', itemBId: post.id },
+        //                     attributes: ['id'],
+        //                 })
+        //                 const index = post.type === 'card-front' ? 0 : 1
+        //                 link.update({ index }, { silent: true })
+        //                     .then(() => resolve())
+        //                     .catch((error) => resolve(error))
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // // post table state updates (needs to be run twice to cover all data??)
+        // const posts = await Post.findAll({
+        //     where: { state: { [Op.or]: ['hidden', 'dormant', 'broken', 'visible'] } },
+        //     attributes: ['id', 'state'],
+        // })
+        // Promise.all(
+        //     posts.map(
+        //         (post) =>
+        //             new Promise((resolve) => {
+        //                 const update = {}
+        //                 if (['hidden', 'dormant', 'broken'].includes(post.state))
+        //                     update.state = 'deleted'
+        //                 else update.state = 'active'
+        //                 post.update(update, { silent: true })
+        //                     .then(() => resolve())
+        //                     .catch((error) => resolve(error))
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // // post table media type updates
+        // const posts = await Post.findAll({
+        //     attributes: ['id', 'text', 'title', 'type'],
+        //     include: [
+        //         {
+        //             model: Url,
+        //             where: { state: 'active' },
+        //             attributes: ['id'],
+        //             required: false,
+        //         },
+        //         {
+        //             model: Image,
+        //             attributes: ['id'],
+        //             required: false,
+        //         },
+        //         {
+        //             model: Audio,
+        //             attributes: ['id'],
+        //             required: false,
+        //         },
+        //         {
+        //             model: Event,
+        //             attributes: ['id'],
+        //             required: false,
+        //         },
+        //         {
+        //             model: Poll,
+        //             attributes: ['id'],
+        //             required: false,
+        //         },
+        //         { model: GlassBeadGame, attributes: ['id'], required: false },
+        //         {
+        //             model: Post,
+        //             as: 'CardSides',
+        //             attributes: ['id'],
+        //             through: { where: { type: 'card-post' } },
+        //             required: false,
+        //         },
+        //     ],
+        // })
+
+        // Promise.all(
+        //     posts.map(
+        //         (post) =>
+        //             new Promise((resolve) => {
+        //                 // find media types
+        //                 const mediaTypes = []
+        //                 if (post.text || post.title) mediaTypes.push('text')
+        //                 if (post.Urls.length > 0) mediaTypes.push('url')
+        //                 if (post.Images.length > 0) mediaTypes.push('image')
+        //                 if (post.Audios.length > 0) mediaTypes.push('audio')
+        //                 if (post.CardSides.length > 0) mediaTypes.push('card')
+        //                 if (post.Event) mediaTypes.push('event')
+        //                 if (post.Poll) mediaTypes.push('poll')
+        //                 if (post.GlassBeadGame) mediaTypes.push('glass-bead-game')
+        //                 if (post.type === 'prism') mediaTypes.push('prism')
+        //                 let mergedMediaTypes = mediaTypes.join(',')
+        //                 if (mergedMediaTypes === '') mergedMediaTypes = post.type
+        //                 // find post type
+        //                 let type = 'post'
+        //                 if (post.type.includes('gbg') || post.type === 'glass-bead') type = 'bead'
+        //                 if (post.type.includes('card-')) type = 'card-face'
+        //                 post.update({ type, mediaTypes: mergedMediaTypes }, { silent: true })
+        //                     .then(() => resolve())
+        //                     .catch((error) => resolve(error))
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
     }
 })
 
