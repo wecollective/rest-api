@@ -15,7 +15,7 @@ module.exports = (sequelize, DataTypes) => {
             itemBType: DataTypes.STRING,
             itemAId: DataTypes.INTEGER,
             itemBId: DataTypes.INTEGER,
-            index: DataTypes.INTEGER, // todo: remove
+            index: DataTypes.INTEGER,
             relationship: DataTypes.STRING,
             role: DataTypes.STRING,
             description: DataTypes.TEXT,

@@ -221,6 +221,73 @@ router.get('/test', async (req, res) => {
         // )
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
+
+        // // test indexing on gbg posts
+        // const posts = await Post.findAll({
+        //     where: { mediaTypes: { [Op.like]: `%glass-bead-game%` } },
+        //     attributes: ['id'],
+        //     include: {
+        //         model: Post,
+        //         as: 'Beads',
+        //         attributes: ['id'],
+        //         through: {
+        //             where: { type: 'gbg-post', state: 'active' }, // state: ['visible', 'account-deleted']
+        //             attributes: ['index', 'relationship', 'state'],
+        //         },
+        //     },
+        // })
+        // const postsWithBeadIndexes = posts
+        //     .filter((post) => post.Beads.length)
+        //     .map((post) => {
+        //         return post.Beads.map((bead) => bead.Link.index).sort((a, b) => a - b)
+        //         // return {
+        //         //     id: post.id,
+        //         //     beadIndexes: post.Beads.map((bead) => bead.Link.index).sort((a, b) => a - b),
+        //         // }
+        //     })
+        // res.status(200).json(postsWithBeadIndexes)
+
+        // // fix indexes on gbg links
+        // const posts = await Post.findAll({
+        //     where: { mediaTypes: { [Op.like]: `%glass-bead-game%` } },
+        //     attributes: ['id'],
+        //     include: {
+        //         model: Post,
+        //         as: 'Beads',
+        //         attributes: ['id'],
+        //         through: {
+        //             where: { type: 'gbg-post' },
+        //             attributes: ['id', 'index', 'role'],
+        //         },
+        //     },
+        // })
+        // Promise.all(
+        //     posts
+        //         .filter((post) => post.Beads.length)
+        //         .map(
+        //             (post) =>
+        //                 new Promise(async (resolve) => {
+        //                     const sortedBeads = post.Beads.filter(
+        //                         (bead) => bead.Link.role !== 'prompt'
+        //                     ).sort((a, b) => a.Link.index - b.Link.index)
+        //                     if (sortedBeads[0].Link.index === 0) resolve()
+        //                     else {
+        //                         Promise.all(
+        //                             sortedBeads.map((bead) =>
+        //                                 Link.decrement('index', {
+        //                                     where: { id: bead.Link.id },
+        //                                     silent: true,
+        //                                 })
+        //                             )
+        //                         )
+        //                             .then(() => resolve())
+        //                             .catch((error) => resolve(error))
+        //                     }
+        //                 })
+        //         )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
     }
 })
 
