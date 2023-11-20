@@ -8,14 +8,14 @@ module.exports = {
                 primaryKey: true,
                 type: Sequelize.INTEGER,
             },
+            creatorId: {
+                type: Sequelize.INTEGER,
+            },
             type: {
                 type: Sequelize.STRING,
             },
-            state: {
+            mediaTypes: {
                 type: Sequelize.STRING,
-            },
-            creatorId: {
-                type: Sequelize.INTEGER,
             },
             title: {
                 type: Sequelize.TEXT,
@@ -31,6 +31,9 @@ module.exports = {
             },
             watermark: {
                 type: Sequelize.BOOLEAN,
+            },
+            state: {
+                type: Sequelize.STRING,
             },
             totalLikes: {
                 type: Sequelize.INTEGER,
