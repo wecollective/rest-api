@@ -120,9 +120,9 @@ router.post('/user-posts', authenticateToken, async (req, res) => {
           })
     const accessList = ownAccount ? null : spaceAccessList.map((s) => s.spaceId)
     const startDate = findStartDate(timeRange)
-    const postType = findPostType(type)
+    // const postType = findPostType(type)
     const order = findPostOrder(filter, sortBy)
-    const where = findPostWhere('user', userId, startDate, postType, searchQuery, [], accessList)
+    const where = findPostWhere('user', userId, startDate, type, searchQuery, [], accessList)
     const initialAttributes = findInitialPostAttributes(sortBy, accountId)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 

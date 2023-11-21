@@ -14,9 +14,7 @@ module.exports = (sequelize, DataTypes) => {
         {}
     )
     Image.associate = function (models) {
-        Image.belongsTo(models.Post, {
-            foreignKey: 'itemId',
-        })
+        Image.belongsTo(models.Post)
         // Image.belongsTo(models.User, {
         //     foreignKey: 'creatorId',
         //     as: 'Creator',

@@ -515,10 +515,10 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
     const { spaceId, limit, offset, params, mutedUsers } = req.body
     const { filter, type, sortBy, timeRange, depth, searchQuery } = params
     const startDate = findStartDate(timeRange)
-    const postType = findPostType(type)
+    // const postType = findPostType(type)
     const order = findPostOrder(filter, sortBy)
     const through = findPostThrough(depth)
-    const where = findPostWhere('space', spaceId, startDate, postType, searchQuery, mutedUsers)
+    const where = findPostWhere('space', spaceId, startDate, type, searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 
@@ -590,10 +590,10 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
     } = req.body
 
     const startDate = findStartDate(timeRange)
-    const postType = findPostType(type)
+    // const postType = findPostType(type)
     const order = findPostOrder(filter, sortBy)
     const through = findPostThrough(depth)
-    const where = findPostWhere('space', spaceId, startDate, postType, searchQuery, mutedUsers)
+    const where = findPostWhere('space', spaceId, startDate, type, searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 

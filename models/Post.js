@@ -112,17 +112,19 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'itemId',
         })
 
+        // updated from itemId to postId (20-11-2023)
         Post.hasMany(models.Url, {
-            foreignKey: 'itemId',
+            foreignKey: 'postId',
         })
 
         Post.hasMany(models.Image, {
-            foreignKey: 'itemId',
+            foreignKey: 'postId',
         })
 
         Post.hasMany(models.Audio, {
-            foreignKey: 'itemId',
+            foreignKey: 'postId',
         })
+        //
 
         Post.hasOne(models.Event, {
             foreignKey: 'postId',

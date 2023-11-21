@@ -772,6 +772,7 @@ function findFullPostAttributes(model, accountId) {
     return [
         'id',
         'type',
+        'mediaTypes',
         'state',
         'title',
         'text',
@@ -799,9 +800,15 @@ function findPostThrough(depth) {
 function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers, spaceAccessList) {
     const query = searchQuery || ''
     const where = {
-        state: 'visible',
+        // state: 'visible',
+        state: 'active',
         createdAt: { [Op.between]: [startDate, Date.now()] },
-        type,
+        // mediaTypes: { [Op.like]: `%${type}%` },
+        // type,
+    }
+    if (type !== 'All Types') {
+        const formattedType = type.replace(/\s+/g, '-').toLowerCase()
+        where.mediaTypes = { [Op.like]: `%${formattedType}%` }
     }
     if (location === 'space') {
         where['$AllPostSpaces.id$'] = id
@@ -880,8 +887,8 @@ function findPostInclude(accountId) {
             as: 'CardSides',
             attributes: [...findFullPostAttributes('CardSides', accountId), 'watermark'],
             through: {
-                where: { type: 'card-post', state: ['visible', 'account-deleted'] },
-                attributes: ['state'],
+                where: { itemBType: 'card-face', state: ['active', 'account-deleted'] },
+                attributes: ['state', 'index'],
             },
             include: {
                 model: Image,

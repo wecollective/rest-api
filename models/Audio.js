@@ -18,9 +18,7 @@ module.exports = (sequelize, DataTypes) => {
     )
     Audio.associate = function (models) {
         // associations can be defined here
-        Audio.belongsTo(models.Post, {
-            foreignKey: 'itemId',
-        })
+        Audio.belongsTo(models.Post)
     }
     return Audio
 }

@@ -191,7 +191,7 @@ router.get('/test', async (req, res) => {
         //         },
         //     ],
         // })
-
+        // test before applying updates (as media tables updated)
         // Promise.all(
         //     posts.map(
         //         (post) =>
@@ -296,7 +296,7 @@ router.get('/post-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.query
     const post = await Post.findOne({
-        where: { id: postId, state: 'visible' },
+        where: { id: postId, state: 'active' },
         include: findPostInclude(accountId),
         attributes: [
             postAccess(accountId),
@@ -672,8 +672,7 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
     const beads = await post.getBeads({
         attributes: [...findFullPostAttributes('Post', accountId), 'color'],
         through: {
-            // todo: handle account deleted as well (visible used to hide drafts)
-            where: { type: 'gbg-post', state: ['visible', 'account-deleted'] },
+            where: { itemBType: 'bead', state: ['active', 'account-deleted'] },
             attributes: ['index', 'relationship', 'state'],
         },
         include: [

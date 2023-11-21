@@ -430,9 +430,11 @@ router.post('/stream-posts', authenticateToken, async (req, res) => {
                 : null
             const where = {
                 state: 'visible',
-                type: findPostType(postType),
+                // type: findPostType(postType),
                 createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
             }
+            if (postType !== 'All Types')
+                where.mediaTypes = { [Op.like]: `%${postType.replace(/\s+/g, '-').toLowerCase()}%` }
             if (mutedUsers.length) where[Op.not] = { creatorId: mutedUsers }
             if (spaces.length && users.length) {
                 where[Op.or] = [

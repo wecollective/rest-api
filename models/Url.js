@@ -21,9 +21,7 @@ module.exports = (sequelize, DataTypes) => {
         {}
     )
     Url.associate = function (models) {
-        Url.belongsTo(models.Post, {
-            foreignKey: 'itemId',
-        })
+        Url.belongsTo(models.Post)
     }
     return Url
 }
