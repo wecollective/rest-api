@@ -288,6 +288,190 @@ router.get('/test', async (req, res) => {
         // )
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
+
+        // // embed urls, images, audio in posts
+        const posts = await Post.findAll({
+            attributes: ['id', 'type', 'createdAt'],
+            include: [
+                {
+                    model: User,
+                    as: 'Creator',
+                    attributes: ['id'],
+                },
+                {
+                    model: Url,
+                    where: { state: 'active' },
+                    attributes: ['id'],
+                    required: false,
+                },
+                {
+                    model: Image,
+                    attributes: ['id', 'index', 'caption'],
+                    required: false,
+                },
+                {
+                    model: Audio,
+                    attributes: ['id'],
+                    required: false,
+                },
+            ],
+        })
+        const filteredPosts = posts.filter(
+            (post) => post.Urls.length || post.Images.length || post.Audios.length
+        )
+
+        Promise.all(
+            filteredPosts.map(
+                (post) =>
+                    new Promise(async (resolve1) => {
+                        const handleUrls = await Promise.all(
+                            post.Urls.map(
+                                (url) =>
+                                    new Promise(async (resolve2) => {
+                                        // create new post
+                                        const newPost = await Post.create(
+                                            {
+                                                ...defaultPostValues,
+                                                type: 'url',
+                                                mediaTypes: 'url',
+                                                creatorId: post.Creator.id,
+                                                createdAt: post.createdAt,
+                                                updatedAt: post.createdAt,
+                                                lastActivity: post.createdAt,
+                                            },
+                                            { silent: true }
+                                        )
+                                        // update media item to link to new post
+                                        const updateMedia = await Url.update(
+                                            { postId: newPost.id },
+                                            { where: { id: url.id }, silent: true }
+                                        )
+                                        // link new post to parent post
+                                        const createLink = await Link.create(
+                                            {
+                                                creatorId: post.Creator.id,
+                                                itemAType: post.type,
+                                                itemBType: 'url',
+                                                itemAId: post.id,
+                                                itemBId: newPost.id,
+                                                relationship: 'root',
+                                                state: 'active',
+                                                totalLikes: 0,
+                                                totalComments: 0,
+                                                totalRatings: 0,
+                                                createdAt: post.createdAt,
+                                                updatedAt: post.createdAt,
+                                            },
+                                            { silent: true }
+                                        )
+                                        Promise.all([updateMedia, createLink])
+                                            .then(() => resolve2())
+                                            .catch((error) => resolve2(error))
+                                    })
+                            )
+                        )
+                        const handleImages = await Promise.all(
+                            post.Images.map(
+                                (image) =>
+                                    new Promise(async (resolve2) => {
+                                        // create new post
+                                        const newPost = await Post.create(
+                                            {
+                                                ...defaultPostValues,
+                                                type: 'image',
+                                                mediaTypes: 'image',
+                                                text: image.caption,
+                                                creatorId: post.Creator.id,
+                                                createdAt: post.createdAt,
+                                                updatedAt: post.createdAt,
+                                                lastActivity: post.createdAt,
+                                            },
+                                            { silent: true }
+                                        )
+                                        // update media item to link to new post
+                                        const updateMedia = await Image.update(
+                                            { postId: newPost.id },
+                                            { where: { id: image.id }, silent: true }
+                                        )
+                                        // link new post to parent post
+                                        const createLink = await Link.create(
+                                            {
+                                                creatorId: post.Creator.id,
+                                                itemAType: post.type,
+                                                itemBType: 'image',
+                                                itemAId: post.id,
+                                                itemBId: newPost.id,
+                                                relationship: 'root',
+                                                index: image.index,
+                                                state: 'active',
+                                                totalLikes: 0,
+                                                totalComments: 0,
+                                                totalRatings: 0,
+                                                createdAt: post.createdAt,
+                                                updatedAt: post.createdAt,
+                                            },
+                                            { silent: true }
+                                        )
+                                        Promise.all([updateMedia, createLink])
+                                            .then(() => resolve2())
+                                            .catch((error) => resolve2(error))
+                                    })
+                            )
+                        )
+                        const handleAudios = await Promise.all(
+                            post.Audios.map(
+                                (audio) =>
+                                    new Promise(async (resolve2) => {
+                                        // create new post
+                                        const newPost = await Post.create(
+                                            {
+                                                ...defaultPostValues,
+                                                type: 'audio',
+                                                mediaTypes: 'audio',
+                                                creatorId: post.Creator.id,
+                                                createdAt: post.createdAt,
+                                                updatedAt: post.createdAt,
+                                                lastActivity: post.createdAt,
+                                            },
+                                            { silent: true }
+                                        )
+                                        // update media item to link to new post
+                                        const updateMedia = await Audio.update(
+                                            { postId: newPost.id },
+                                            { where: { id: audio.id }, silent: true }
+                                        )
+                                        // link new post to parent post
+                                        const createLink = await Link.create(
+                                            {
+                                                creatorId: post.Creator.id,
+                                                itemAType: post.type,
+                                                itemBType: 'audio',
+                                                itemAId: post.id,
+                                                itemBId: newPost.id,
+                                                relationship: 'root',
+                                                state: 'active',
+                                                totalLikes: 0,
+                                                totalComments: 0,
+                                                totalRatings: 0,
+                                                createdAt: post.createdAt,
+                                                updatedAt: post.createdAt,
+                                            },
+                                            { silent: true }
+                                        )
+                                        Promise.all([updateMedia, createLink])
+                                            .then(() => resolve2())
+                                            .catch((error) => resolve2(error))
+                                    })
+                            )
+                        )
+                        Promise.all([handleUrls, handleImages, handleAudios])
+                            .then(() => resolve1())
+                            .catch((error) => resolve1(error))
+                    })
+            )
+        )
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json(error))
     }
 })
 

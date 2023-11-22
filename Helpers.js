@@ -32,7 +32,7 @@ ffmpeg.setFfmpegPath(ffmpegPath)
 const imageMBLimit = 10
 const audioMBLimit = 30
 const defaultPostValues = {
-    state: 'visible',
+    state: 'active',
     watermark: false,
     totalLikes: 0,
     totalComments: 0,

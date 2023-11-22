@@ -9,7 +9,7 @@ module.exports = (sequelize, DataTypes) => {
                 autoIncrement: true,
             },
             creatorId: DataTypes.INTEGER,
-            type: DataTypes.STRING,
+            type: DataTypes.STRING, // post, bead, card-face, image, url, audio, (comment, poll-answer)
             mediaTypes: DataTypes.STRING,
             title: DataTypes.TEXT,
             text: DataTypes.TEXT,
