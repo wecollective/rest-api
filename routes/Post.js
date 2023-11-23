@@ -1030,11 +1030,30 @@ router.get('/post-images', async (req, res) => {
         include: [
             {
                 model: Image,
-                attributes: ['id', 'index', 'url'],
+                attributes: ['id', 'url'],
             },
         ],
     })
     res.status(200).json(imageBlocks)
+})
+
+router.get('/post-audio', async (req, res) => {
+    const { postId } = req.query
+    const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
+    const audioBlocks = await post.getBlocks({
+        attributes: ['id', 'text'],
+        through: {
+            where: { itemBType: 'audio', state: 'active' },
+            attributes: ['index'],
+        },
+        include: [
+            {
+                model: Audio,
+                attributes: ['id', 'url'],
+            },
+        ],
+    })
+    res.status(200).json(audioBlocks)
 })
 
 // POST
