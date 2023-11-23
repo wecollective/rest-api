@@ -1005,7 +1005,7 @@ router.get('/post-urls', async (req, res) => {
     const urlBlocks = await post.getBlocks({
         attributes: ['id'],
         through: {
-            where: { itemBType: 'url', state: ['active'] },
+            where: { itemBType: 'url', state: 'active' },
             attributes: ['index'],
         },
         include: [
@@ -1016,6 +1016,25 @@ router.get('/post-urls', async (req, res) => {
         ],
     })
     res.status(200).json(urlBlocks)
+})
+
+router.get('/post-images', async (req, res) => {
+    const { postId } = req.query
+    const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
+    const imageBlocks = await post.getBlocks({
+        attributes: ['id', 'text'],
+        through: {
+            where: { itemBType: 'image', state: 'active' },
+            attributes: ['index'],
+        },
+        include: [
+            {
+                model: Image,
+                attributes: ['id', 'index', 'url'],
+            },
+        ],
+    })
+    res.status(200).json(imageBlocks)
 })
 
 // POST
