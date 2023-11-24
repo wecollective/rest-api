@@ -885,7 +885,7 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
     const beads = await post.getBeads({
         attributes: [...findFullPostAttributes('Post', accountId), 'color'],
         through: { where: { itemBType: 'bead', state: ['active', 'account-deleted'] } },
-        joinTableAttributes: ['index', 'relationship', 'state'],
+        joinTableAttributes: ['relationship', 'state'],
         include: [
             {
                 model: User,
@@ -893,12 +893,13 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
         ],
+        order: [[sequelize.col('Link.index'), 'ASC']],
         limit: 3,
     })
     const players = await post.getPlayers({
         attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
         through: { where: { type: 'glass-bead-game' } },
-        joinTableAttributes: ['index', 'state', 'color'],
+        joinTableAttributes: ['state', 'color'],
     })
 
     res.status(200).json({ game: post.GlassBeadGame, beads, players })
@@ -919,6 +920,7 @@ router.get('/next-beads', authenticateToken, async (req, res) => {
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
         ],
+        order: [[sequelize.col('Link.index'), 'ASC']],
         offset: +offset,
         limit: 10,
     })
@@ -1040,7 +1042,7 @@ router.get('/post-urls', async (req, res) => {
     const urlBlocks = await post.getBlocks({
         attributes: ['id'],
         through: { where: { itemBType: 'url', state: 'active' } },
-        joinTableAttributes: ['index'],
+        joinTableAttributes: [],
         include: [
             {
                 model: Url,
@@ -1054,16 +1056,17 @@ router.get('/post-urls', async (req, res) => {
 router.get('/post-images', async (req, res) => {
     const { postId, offset } = req.query
     const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
-    const imageBlocks = await post.getBlocks({
+    const blocks = await post.getBlocks({
         attributes: ['id', 'text'],
         through: { where: { itemBType: 'image', state: 'active' } },
-        joinTableAttributes: ['index'],
+        joinTableAttributes: [],
         include: [
             {
                 model: Image,
                 attributes: ['id', 'url'],
             },
         ],
+        order: [[sequelize.col('Link.index'), 'ASC']],
         offset: +offset,
         limit: +offset ? 10 : 4,
     })
@@ -1072,7 +1075,7 @@ router.get('/post-images', async (req, res) => {
         : await Link.count({
               where: { itemAType: 'post', itemAId: postId, itemBType: 'image', state: 'active' },
           })
-    res.status(200).json({ imageBlocks, total })
+    res.status(200).json({ blocks, total })
 })
 
 router.get('/post-audio', async (req, res) => {
@@ -1081,7 +1084,7 @@ router.get('/post-audio', async (req, res) => {
     const audioBlocks = await post.getBlocks({
         attributes: ['id', 'text'],
         through: { where: { itemBType: 'audio', state: 'active' } },
-        joinTableAttributes: ['index'],
+        joinTableAttributes: [],
         include: [
             {
                 model: Audio,
