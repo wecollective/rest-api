@@ -473,6 +473,30 @@ router.get('/test', async (req, res) => {
         // )
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
+
+        // // add totalBeads value to GBGs
+        // const games = await GlassBeadGame.findAll({ attributes: ['id', 'postId'] })
+        // Promise.all(
+        //     games.map(
+        //         (game) =>
+        //             new Promise(async (resolve) => {
+        //                 const totalBeads = await Link.count({
+        //                     where: {
+        //                         itemAType: 'post',
+        //                         itemAId: game.postId,
+        //                         itemBType: 'bead',
+        //                         relationship: 'root',
+        //                         state: 'active',
+        //                     },
+        //                 })
+        //                 game.update({ totalBeads }, { silent: true })
+        //                     .then(() => resolve())
+        //                     .catch((error) => resolve(error))
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
     }
 })
 
@@ -853,7 +877,11 @@ router.get('/poll-data', (req, res) => {
 router.get('/gbg-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.query
-    const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
+    const post = await Post.findOne({
+        where: { id: postId },
+        attributes: ['id'],
+        include: { model: GlassBeadGame },
+    })
     const beads = await post.getBeads({
         attributes: [...findFullPostAttributes('Post', accountId), 'color'],
         through: {
@@ -866,19 +894,21 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
                 as: 'Creator',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
-            {
-                model: Url,
-                attributes: ['id', 'url', 'image', 'title', 'description', 'domain'],
-            },
-            {
-                model: Audio,
-                attributes: ['url'],
-            },
-            {
-                model: Image,
-                attributes: ['id', 'index', 'url', 'caption'],
-            },
+            // {
+            //     model: Url,
+            //     attributes: ['id', 'url', 'image', 'title', 'description', 'domain'],
+            // },
+            // {
+            //     model: Audio,
+            //     attributes: ['url'],
+            // },
+            // {
+            //     model: Image,
+            //     attributes: ['id', 'index', 'url', 'caption'],
+            // },
         ],
+        // limit: 3,
+        // includeIgnoreAttributes: false,
     })
     const players = await post.getPlayers({
         attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
@@ -888,7 +918,7 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
         },
     })
 
-    res.status(200).json({ beads, players })
+    res.status(200).json({ game: post.GlassBeadGame, beads, players })
 })
 
 router.get('/prism-data', (req, res) => {
@@ -1052,6 +1082,7 @@ router.get('/post-audio', async (req, res) => {
                 attributes: ['id', 'url'],
             },
         ],
+        // includeIgnoreAttributes: false,
     })
     res.status(200).json(audioBlocks)
 })
@@ -1321,7 +1352,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 type === 'glass-bead-game'
                     ? await new Promise(async (resolve) => {
                           const topicImageUpload = files.find((f) => f.fieldname === 'topicImage')
-
+                          const totalBeads = beads.length + (sourcePostId ? 1 : 0)
                           const createGame = await GlassBeadGame.create({
                               postId: post.id,
                               state: 'active',
@@ -1351,6 +1382,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                               backgroundImage: null,
                               backgroundVideo: null,
                               backgroundVideoStartTime: null,
+                              totalBeads,
                           })
 
                           const linkSourceBead = sourcePostId
@@ -1979,6 +2011,10 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
                 lastActivity: new Date(),
             })
 
+            const incrementTotalBeads = await GlassBeadGame.increment('totalBeads', {
+                where: { postId },
+            })
+
             const createUrl =
                 type === 'url'
                     ? await Url.create({
@@ -2271,6 +2307,7 @@ router.post('/create-next-bead', authenticateToken, (req, res) => {
             )
 
             Promise.all([
+                incrementTotalBeads,
                 createUrl,
                 createAudio,
                 createImage,
@@ -3802,14 +3839,19 @@ router.post('/toggle-poll-answer-done', authenticateToken, async (req, res) => {
 // todo: add authenticateToken to all endpoints below
 router.post('/save-glass-bead-game', async (req, res) => {
     const { postId } = req.body
-
+    const totalBeads = await Link.count({
+        where: { itemAId: postId, itemBType: 'bead', state: 'draft' },
+    })
+    const updateGame = await GlassBeadGame.update(
+        { locked: true, totalBeads },
+        { where: { postId } }
+    )
     const updateLinks = await Link.update(
         { state: 'visible' },
-        { where: { type: 'gbg-post', itemAId: postId, state: 'draft' } }
+        { where: { itemAId: postId, itemBType: 'bead', state: 'draft' } }
     )
-    const updateGame = await GlassBeadGame.update({ locked: true }, { where: { postId } })
 
-    Promise.all([updateLinks, updateGame])
+    Promise.all([updateGame, updateLinks])
         .then(() => res.status(200).send({ message: 'Game saved' }))
         .catch((error) => res.status(500).json({ error }))
 })
