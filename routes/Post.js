@@ -894,20 +894,8 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
                 as: 'Creator',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
             },
-            // {
-            //     model: Url,
-            //     attributes: ['id', 'url', 'image', 'title', 'description', 'domain'],
-            // },
-            // {
-            //     model: Audio,
-            //     attributes: ['url'],
-            // },
-            // {
-            //     model: Image,
-            //     attributes: ['id', 'index', 'url', 'caption'],
-            // },
         ],
-        // limit: 3,
+        limit: 3,
         // includeIgnoreAttributes: false,
     })
     const players = await post.getPlayers({
@@ -919,6 +907,30 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
     })
 
     res.status(200).json({ game: post.GlassBeadGame, beads, players })
+})
+
+router.get('/next-beads', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId, offset } = req.query
+    const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
+    const beads = await post.getBeads({
+        attributes: [...findFullPostAttributes('Post', accountId), 'color'],
+        through: {
+            where: { itemBType: 'bead', state: ['active', 'account-deleted'] },
+            attributes: ['index', 'relationship', 'state'],
+        },
+        include: [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            },
+        ],
+        offset: +offset,
+        limit: 10,
+    })
+
+    res.status(200).json(beads)
 })
 
 router.get('/prism-data', (req, res) => {
