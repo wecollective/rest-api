@@ -1052,7 +1052,7 @@ router.get('/post-urls', async (req, res) => {
 })
 
 router.get('/post-images', async (req, res) => {
-    const { postId } = req.query
+    const { postId, offset } = req.query
     const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
     const imageBlocks = await post.getBlocks({
         attributes: ['id', 'text'],
@@ -1064,9 +1064,15 @@ router.get('/post-images', async (req, res) => {
                 attributes: ['id', 'url'],
             },
         ],
-        limit: 4,
+        offset: +offset,
+        limit: +offset ? 10 : 4,
     })
-    res.status(200).json(imageBlocks)
+    const total = +offset
+        ? null
+        : await Link.count({
+              where: { itemAType: 'post', itemAId: postId, itemBType: 'image', state: 'active' },
+          })
+    res.status(200).json({ imageBlocks, total })
 })
 
 router.get('/post-audio', async (req, res) => {
