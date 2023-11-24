@@ -884,10 +884,8 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
     })
     const beads = await post.getBeads({
         attributes: [...findFullPostAttributes('Post', accountId), 'color'],
-        through: {
-            where: { itemBType: 'bead', state: ['active', 'account-deleted'] },
-            attributes: ['index', 'relationship', 'state'],
-        },
+        through: { where: { itemBType: 'bead', state: ['active', 'account-deleted'] } },
+        joinTableAttributes: ['index', 'relationship', 'state'],
         include: [
             {
                 model: User,
@@ -896,14 +894,11 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
             },
         ],
         limit: 3,
-        // includeIgnoreAttributes: false,
     })
     const players = await post.getPlayers({
         attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
-        through: {
-            where: { type: 'glass-bead-game' },
-            attributes: ['index', 'state', 'color'],
-        },
+        through: { where: { type: 'glass-bead-game' } },
+        joinTableAttributes: ['index', 'state', 'color'],
     })
 
     res.status(200).json({ game: post.GlassBeadGame, beads, players })
@@ -915,10 +910,8 @@ router.get('/next-beads', authenticateToken, async (req, res) => {
     const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
     const beads = await post.getBeads({
         attributes: [...findFullPostAttributes('Post', accountId), 'color'],
-        through: {
-            where: { itemBType: 'bead', state: ['active', 'account-deleted'] },
-            attributes: ['index', 'relationship', 'state'],
-        },
+        through: { where: { itemBType: 'bead', state: ['active', 'account-deleted'] } },
+        joinTableAttributes: ['index', 'relationship', 'state'],
         include: [
             {
                 model: User,
@@ -1046,10 +1039,8 @@ router.get('/post-urls', async (req, res) => {
     const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
     const urlBlocks = await post.getBlocks({
         attributes: ['id'],
-        through: {
-            where: { itemBType: 'url', state: 'active' },
-            attributes: ['index'],
-        },
+        through: { where: { itemBType: 'url', state: 'active' } },
+        joinTableAttributes: ['index'],
         include: [
             {
                 model: Url,
@@ -1065,16 +1056,15 @@ router.get('/post-images', async (req, res) => {
     const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
     const imageBlocks = await post.getBlocks({
         attributes: ['id', 'text'],
-        through: {
-            where: { itemBType: 'image', state: 'active' },
-            attributes: ['index'],
-        },
+        through: { where: { itemBType: 'image', state: 'active' } },
+        joinTableAttributes: ['index'],
         include: [
             {
                 model: Image,
                 attributes: ['id', 'url'],
             },
         ],
+        limit: 4,
     })
     res.status(200).json(imageBlocks)
 })
@@ -1084,17 +1074,14 @@ router.get('/post-audio', async (req, res) => {
     const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
     const audioBlocks = await post.getBlocks({
         attributes: ['id', 'text'],
-        through: {
-            where: { itemBType: 'audio', state: 'active' },
-            attributes: ['index'],
-        },
+        through: { where: { itemBType: 'audio', state: 'active' } },
+        joinTableAttributes: ['index'],
         include: [
             {
                 model: Audio,
                 attributes: ['id', 'url'],
             },
         ],
-        // includeIgnoreAttributes: false,
     })
     res.status(200).json(audioBlocks)
 })
