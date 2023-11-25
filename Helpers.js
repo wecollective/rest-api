@@ -808,7 +808,8 @@ function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers, s
     }
     if (type !== 'All Types') {
         const formattedType = type.replace(/\s+/g, '-').toLowerCase()
-        where.mediaTypes = { [Op.like]: `%${formattedType}%` }
+        if (type === 'Text') where.mediaTypes = 'text'
+        else where.mediaTypes = { [Op.like]: `%${formattedType}%` }
     }
     if (location === 'space') {
         where['$AllPostSpaces.id$'] = id
@@ -843,20 +844,6 @@ function findPostInclude(accountId) {
             through: { where: { relationship: 'direct', type: 'post' }, attributes: [] },
         },
         {
-            model: Url,
-            where: { state: 'active' },
-            required: false,
-            attributes: ['id', 'url', 'image', 'title', 'description', 'domain'],
-        },
-        {
-            model: Image,
-            attributes: ['id', 'index', 'url', 'caption'],
-        },
-        {
-            model: Audio,
-            attributes: ['url'],
-        },
-        {
             model: Event,
             attributes: ['id', 'startTime', 'endTime'],
             include: [
@@ -880,20 +867,6 @@ function findPostInclude(accountId) {
                     },
                 },
             ],
-        },
-        { model: GlassBeadGame },
-        {
-            model: Post,
-            as: 'CardSides',
-            attributes: [...findFullPostAttributes('CardSides', accountId), 'watermark'],
-            through: {
-                where: { itemBType: 'card-face', state: ['active', 'account-deleted'] },
-                attributes: ['state', 'index'],
-            },
-            include: {
-                model: Image,
-                attributes: ['id', 'url'],
-            },
         },
     ]
 }
@@ -997,20 +970,17 @@ async function getToyboxItem(type, id) {
             {
                 model: Image,
                 attributes: ['url'],
-                limit: 1,
+                required: false,
             },
             {
                 model: Url,
-                where: { state: 'active' },
                 required: false,
                 attributes: ['image', 'title', 'description', 'domain'],
-                limit: 1,
             },
             {
                 model: Audio,
                 required: false,
                 attributes: ['url'],
-                limit: 1,
             },
             {
                 model: Post,
