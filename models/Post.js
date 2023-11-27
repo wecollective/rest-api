@@ -16,6 +16,7 @@ module.exports = (sequelize, DataTypes) => {
             searchableText: DataTypes.TEXT,
             color: DataTypes.STRING,
             watermark: DataTypes.BOOLEAN,
+            originSpaceId: DataTypes.INTEGER,
             state: DataTypes.STRING,
             totalLikes: DataTypes.INTEGER,
             totalComments: DataTypes.INTEGER,
@@ -70,6 +71,15 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'postId',
         })
 
+        // blocks
+        Post.belongsToMany(models.Post, {
+            through: models.Link,
+            as: 'Blocks',
+            foreignKey: 'itemAId',
+            otherKey: 'itemBId',
+        })
+        //
+
         Post.belongsToMany(models.Post, {
             through: models.Link,
             as: 'Beads',
@@ -113,15 +123,16 @@ module.exports = (sequelize, DataTypes) => {
         })
 
         // updated from itemId to postId (20-11-2023)
-        Post.hasMany(models.Url, {
+        // updated from hasMany to hasOne (23-11-2023)
+        Post.hasOne(models.Url, {
             foreignKey: 'postId',
         })
 
-        Post.hasMany(models.Image, {
+        Post.hasOne(models.Image, {
             foreignKey: 'postId',
         })
 
-        Post.hasMany(models.Audio, {
+        Post.hasOne(models.Audio, {
             foreignKey: 'postId',
         })
         //

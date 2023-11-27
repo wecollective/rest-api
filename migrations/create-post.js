@@ -32,6 +32,9 @@ module.exports = {
             watermark: {
                 type: Sequelize.BOOLEAN,
             },
+            originSpaceId: {
+                type: Sequelize.INTEGER,
+            },
             state: {
                 type: Sequelize.STRING,
             },
