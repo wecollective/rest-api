@@ -498,151 +498,204 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
 
-        // migrate root comments to post table
-        const comments = await Comment.findAll()
+        // // migrate root comments to post table
+        // const comments = await Comment.findAll()
 
-        const rootCommentMappings = []
+        // const rootCommentMappings = []
 
-        const migrateRootComments = await Promise.all(
-            comments
-                .filter((c) => !c.parentCommentId)
-                .map(
-                    (comment) =>
-                        new Promise(async (resolve) => {
-                            // create new post
-                            const newPost = await Post.create(
-                                {
-                                    ...defaultPostValues,
-                                    type: 'comment',
-                                    text: comment.text,
-                                    mediaTypes: 'text',
-                                    creatorId: comment.creatorId,
-                                    originSpaceId: comment.spaceId,
-                                    state: comment.state === 'visible' ? 'active' : 'deleted',
-                                    totalLikes: comment.totalLikes,
-                                    totalLinks: comment.totalLinks,
-                                    totalRatings: comment.totalRatings,
-                                    createdAt: comment.createdAt,
-                                    updatedAt: comment.updatedAt,
-                                    lastActivity: comment.createdAt,
-                                },
-                                { silent: true }
-                            )
-                            // add comment mapping
-                            rootCommentMappings.push({ commentId: comment.id, postId: newPost.id })
-                            // create link to post
-                            const createLink = await Link.create(
-                                {
-                                    creatorId: comment.creatorId,
-                                    itemAType: comment.itemType,
-                                    itemBType: 'comment',
-                                    itemAId: comment.itemId,
-                                    itemBId: newPost.id,
-                                    relationship: 'root',
-                                    state: 'active',
-                                    totalLikes: 0,
-                                    totalComments: 0,
-                                    totalRatings: 0,
-                                    createdAt: comment.createdAt,
-                                    updatedAt: comment.createdAt,
-                                },
-                                { silent: true }
-                            )
-                            // update reactions
-                            const updateReactions = await Reaction.update(
-                                { itemId: newPost.id },
-                                { where: { itemType: 'comment', itemId: comment.id }, silent: true }
-                            )
-                            Promise.all([createLink, updateReactions])
-                                .then(() => resolve())
-                                .catch((error) => resolve(error))
-                        })
-                )
-        )
+        // const migrateRootComments = await Promise.all(
+        //     comments
+        //         .filter((c) => !c.parentCommentId)
+        //         .map(
+        //             (comment) =>
+        //                 new Promise(async (resolve) => {
+        //                     // create new post
+        //                     const newPost = await Post.create(
+        //                         {
+        //                             ...defaultPostValues,
+        //                             type: 'comment',
+        //                             text: comment.text,
+        //                             mediaTypes: 'text',
+        //                             creatorId: comment.creatorId,
+        //                             originSpaceId: comment.spaceId,
+        //                             state: comment.state === 'visible' ? 'active' : 'deleted',
+        //                             totalLikes: comment.totalLikes,
+        //                             totalLinks: comment.totalLinks,
+        //                             totalRatings: comment.totalRatings,
+        //                             createdAt: comment.createdAt,
+        //                             updatedAt: comment.updatedAt,
+        //                             lastActivity: comment.createdAt,
+        //                         },
+        //                         { silent: true }
+        //                     )
+        //                     // add comment mapping
+        //                     rootCommentMappings.push({ commentId: comment.id, postId: newPost.id })
+        //                     // create link to post
+        //                     const createLink = await Link.create(
+        //                         {
+        //                             creatorId: comment.creatorId,
+        //                             itemAType: comment.itemType,
+        //                             itemBType: 'comment',
+        //                             itemAId: comment.itemId,
+        //                             itemBId: newPost.id,
+        //                             relationship: 'root',
+        //                             state: 'active',
+        //                             totalLikes: 0,
+        //                             totalComments: 0,
+        //                             totalRatings: 0,
+        //                             createdAt: comment.createdAt,
+        //                             updatedAt: comment.createdAt,
+        //                         },
+        //                         { silent: true }
+        //                     )
+        //                     // update reactions
+        //                     const updateReactions = await Reaction.update(
+        //                         { itemId: newPost.id },
+        //                         { where: { itemType: 'comment', itemId: comment.id }, silent: true }
+        //                     )
+        //                     Promise.all([createLink, updateReactions])
+        //                         .then(() => resolve())
+        //                         .catch((error) => resolve(error))
+        //                 })
+        //         )
+        // )
 
-        const migrateChildComments = await Promise.all(
-            comments
-                .filter((c) => c.parentCommentId)
-                .map(
-                    (comment) =>
-                        new Promise(async (resolve) => {
-                            // create new post
-                            const newPost = await Post.create(
-                                {
-                                    ...defaultPostValues,
-                                    type: 'comment',
-                                    text: comment.text,
-                                    mediaTypes: 'text',
-                                    creatorId: comment.creatorId,
-                                    originSpaceId: comment.spaceId,
-                                    state: comment.state === 'visible' ? 'active' : 'deleted',
-                                    totalLikes: comment.totalLikes,
-                                    totalLinks: comment.totalLinks,
-                                    totalRatings: comment.totalRatings,
-                                    createdAt: comment.createdAt,
-                                    updatedAt: comment.updatedAt,
-                                    lastActivity: comment.createdAt,
-                                },
-                                { silent: true }
-                            )
-                            // find parent comment
-                            const parentComment = rootCommentMappings.find(
-                                (c) => c.commentId === comment.parentCommentId
-                            )
-                            // create link to post
-                            const createRootLink = await Link.create(
-                                {
-                                    creatorId: comment.creatorId,
-                                    itemAType: comment.itemType,
-                                    itemBType: 'comment',
-                                    itemAId: comment.itemId,
-                                    itemBId: newPost.id,
-                                    relationship: 'root',
-                                    state: 'active',
-                                    totalLikes: 0,
-                                    totalComments: 0,
-                                    totalRatings: 0,
-                                    createdAt: comment.createdAt,
-                                    updatedAt: comment.createdAt,
-                                },
-                                { silent: true }
-                            )
-                            const createParentLink = await Link.create(
-                                {
-                                    creatorId: comment.creatorId,
-                                    itemAType: 'comment',
-                                    itemBType: 'comment',
-                                    itemAId: parentComment.postId,
-                                    itemBId: newPost.id,
-                                    relationship: 'parent',
-                                    state: 'active',
-                                    totalLikes: 0,
-                                    totalComments: 0,
-                                    totalRatings: 0,
-                                    createdAt: comment.createdAt,
-                                    updatedAt: comment.createdAt,
-                                },
-                                { silent: true }
-                            )
-                            // update reactions
-                            const updateReactions = await Reaction.update(
-                                { itemId: newPost.id },
-                                { where: { itemType: 'comment', itemId: comment.id }, silent: true }
-                            )
-                            Promise.all([createRootLink, createParentLink, updateReactions])
-                                .then(() => resolve())
-                                .catch((error) => resolve(error))
-                        })
-                )
-        )
+        // const migrateChildComments = await Promise.all(
+        //     comments
+        //         .filter((c) => c.parentCommentId)
+        //         .map(
+        //             (comment) =>
+        //                 new Promise(async (resolve) => {
+        //                     // create new post
+        //                     const newPost = await Post.create(
+        //                         {
+        //                             ...defaultPostValues,
+        //                             type: 'comment',
+        //                             text: comment.text,
+        //                             mediaTypes: 'text',
+        //                             creatorId: comment.creatorId,
+        //                             originSpaceId: comment.spaceId,
+        //                             state: comment.state === 'visible' ? 'active' : 'deleted',
+        //                             totalLikes: comment.totalLikes,
+        //                             totalLinks: comment.totalLinks,
+        //                             totalRatings: comment.totalRatings,
+        //                             createdAt: comment.createdAt,
+        //                             updatedAt: comment.updatedAt,
+        //                             lastActivity: comment.createdAt,
+        //                         },
+        //                         { silent: true }
+        //                     )
+        //                     // find parent comment
+        //                     const parentComment = rootCommentMappings.find(
+        //                         (c) => c.commentId === comment.parentCommentId
+        //                     )
+        //                     // create link to post
+        //                     const createRootLink = await Link.create(
+        //                         {
+        //                             creatorId: comment.creatorId,
+        //                             itemAType: comment.itemType,
+        //                             itemBType: 'comment',
+        //                             itemAId: comment.itemId,
+        //                             itemBId: newPost.id,
+        //                             relationship: 'root',
+        //                             state: 'active',
+        //                             totalLikes: 0,
+        //                             totalComments: 0,
+        //                             totalRatings: 0,
+        //                             createdAt: comment.createdAt,
+        //                             updatedAt: comment.createdAt,
+        //                         },
+        //                         { silent: true }
+        //                     )
+        //                     const createParentLink = await Link.create(
+        //                         {
+        //                             creatorId: comment.creatorId,
+        //                             itemAType: 'comment',
+        //                             itemBType: 'comment',
+        //                             itemAId: parentComment.postId,
+        //                             itemBId: newPost.id,
+        //                             relationship: 'parent',
+        //                             state: 'active',
+        //                             totalLikes: 0,
+        //                             totalComments: 0,
+        //                             totalRatings: 0,
+        //                             createdAt: comment.createdAt,
+        //                             updatedAt: comment.createdAt,
+        //                         },
+        //                         { silent: true }
+        //                     )
+        //                     // update reactions
+        //                     const updateReactions = await Reaction.update(
+        //                         { itemId: newPost.id },
+        //                         { where: { itemType: 'comment', itemId: comment.id }, silent: true }
+        //                     )
+        //                     Promise.all([createRootLink, createParentLink, updateReactions])
+        //                         .then(() => resolve())
+        //                         .catch((error) => resolve(error))
+        //                 })
+        //         )
+        // )
 
-        const tasks = [migrateRootComments, migrateChildComments]
-        for (const task of tasks) await task
-        res.status(200).json({ message: 'Success' })
+        // const tasks = [migrateRootComments, migrateChildComments]
+        // for (const task of tasks) await task
+        // res.status(200).json({ message: 'Success' })
 
-        // todo: add searchable text to comments using front end after migration
+        // // todo: add searchable text to comments using front end after migration
 
         // migrate poll answers
+
+        const pollAnswers = await PollAnswer.findAll()
+
+        Promise.all(
+            pollAnswers.map(
+                (answer) =>
+                    new Promise(async (resolve) => {
+                        // create new post
+                        const newPost = await Post.create(
+                            {
+                                ...defaultPostValues,
+                                type: 'poll-answer',
+                                text: answer.text,
+                                mediaTypes: 'text',
+                                creatorId: answer.creatorId,
+                                state: answer.state,
+                                createdAt: answer.createdAt,
+                                updatedAt: answer.updatedAt,
+                                lastActivity: answer.createdAt,
+                            },
+                            { silent: true }
+                        )
+                        // create link to post
+                        const createLink = await Link.create(
+                            {
+                                creatorId: answer.creatorId,
+                                itemAType: 'poll',
+                                itemBType: 'poll-answer',
+                                itemAId: answer.pollId,
+                                itemBId: newPost.id,
+                                relationship: 'root',
+                                state: 'active',
+                                totalLikes: 0,
+                                totalComments: 0,
+                                totalRatings: 0,
+                                createdAt: answer.createdAt,
+                                updatedAt: answer.createdAt,
+                            },
+                            { silent: true }
+                        )
+                        // update reactions
+                        const updateReactions = await Reaction.update(
+                            { itemId: newPost.id },
+                            { where: { type: 'vote', itemId: answer.id }, silent: true }
+                        )
+                        Promise.all([createLink, updateReactions])
+                            .then(() => resolve())
+                            .catch((error) => resolve(error))
+                    })
+            )
+        )
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json(error))
     }
 })
 
