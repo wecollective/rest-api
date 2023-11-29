@@ -73,6 +73,12 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
+        // before updates:
+        // + remove mediaTypes & originSpaceId from Post model
+        // + change postId back to itemId and hasOne to hasMany on Post --> Url, Audio, Image relationships
+
+        // run link-table-additions migration
+
         // // link table updates
         // const links = await Link.findAll({ attributes: ['id', 'type', 'relationship', 'state'] })
         // Promise.all(
@@ -89,11 +95,11 @@ router.get('/test', async (req, res) => {
         //                 if (link.type === 'gbg-post') {
         //                     update.itemAType = 'post'
         //                     update.itemBType = 'bead'
-        //                     update.relationship = 'root'
+        //                     update.relationship = 'parent'
         //                 } else if (link.type === 'card-post') {
         //                     update.itemAType = 'post'
         //                     update.itemBType = 'card-face'
-        //                     update.relationship = 'root'
+        //                     update.relationship = 'parent'
         //                 } else {
         //                     update.relationship = 'link'
         //                 }
@@ -151,6 +157,9 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
 
+        // run post-table-updates migration
+        // add back in mediaTypes & originSpaceId values on Post model
+
         // // post table media type updates
         // const posts = await Post.findAll({
         //     attributes: ['id', 'text', 'title', 'type'],
@@ -191,7 +200,11 @@ router.get('/test', async (req, res) => {
         //         },
         //     ],
         // })
-        // test before applying updates (as media tables updated)
+
+        // // test before applying updates (as media tables updated)
+        // // const filteredPosts = posts.filter((post) => post.CardSides.length > 0)
+        // // res.status(200).json(filteredPosts)
+
         // Promise.all(
         //     posts.map(
         //         (post) =>
@@ -247,6 +260,8 @@ router.get('/test', async (req, res) => {
         //     })
         // res.status(200).json(postsWithBeadIndexes)
 
+        // fix broken gbg indexes & duplicates here
+
         // // fix indexes on gbg links
         // const posts = await Post.findAll({
         //     where: { mediaTypes: { [Op.like]: `%glass-bead-game%` } },
@@ -289,16 +304,13 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
 
+        // run media table updates and then update Post model media foreignKeys (not hasMany --> hasOne) here
+
         // // embed urls, images, audio in posts
         // const posts = await Post.findAll({
         //     // where: { type: { [Op.or]: ['post', 'card-face'] } } (considered removing for beads but decided against)
-        //     attributes: ['id', 'type', 'createdAt'],
+        //     attributes: ['id', 'type', 'creatorId', 'createdAt'],
         //     include: [
-        //         {
-        //             model: User,
-        //             as: 'Creator',
-        //             attributes: ['id'],
-        //         },
         //         {
         //             model: Url,
         //             where: { state: 'active' },
@@ -335,7 +347,7 @@ router.get('/test', async (req, res) => {
         //                                         ...defaultPostValues,
         //                                         type: 'url',
         //                                         mediaTypes: 'url',
-        //                                         creatorId: post.Creator.id,
+        //                                         creatorId: post.creatorId,
         //                                         createdAt: post.createdAt,
         //                                         updatedAt: post.createdAt,
         //                                         lastActivity: post.createdAt,
@@ -350,12 +362,12 @@ router.get('/test', async (req, res) => {
         //                                 // link new post to parent post
         //                                 const createLink = await Link.create(
         //                                     {
-        //                                         creatorId: post.Creator.id,
+        //                                         creatorId: post.creatorId,
         //                                         itemAType: post.type,
         //                                         itemBType: 'url',
         //                                         itemAId: post.id,
         //                                         itemBId: newPost.id,
-        //                                         relationship: 'root',
+        //                                         relationship: 'parent',
         //                                         state: 'active',
         //                                         totalLikes: 0,
         //                                         totalComments: 0,
@@ -382,7 +394,7 @@ router.get('/test', async (req, res) => {
         //                                         type: 'image',
         //                                         mediaTypes: 'image',
         //                                         text: image.caption,
-        //                                         creatorId: post.Creator.id,
+        //                                         creatorId: post.creatorId,
         //                                         createdAt: post.createdAt,
         //                                         updatedAt: post.createdAt,
         //                                         lastActivity: post.createdAt,
@@ -397,12 +409,12 @@ router.get('/test', async (req, res) => {
         //                                 // link new post to parent post
         //                                 const createLink = await Link.create(
         //                                     {
-        //                                         creatorId: post.Creator.id,
+        //                                         creatorId: post.creatorId,
         //                                         itemAType: post.type,
         //                                         itemBType: 'image',
         //                                         itemAId: post.id,
         //                                         itemBId: newPost.id,
-        //                                         relationship: 'root',
+        //                                         relationship: 'parent',
         //                                         index: image.index,
         //                                         state: 'active',
         //                                         totalLikes: 0,
@@ -429,7 +441,7 @@ router.get('/test', async (req, res) => {
         //                                         ...defaultPostValues,
         //                                         type: 'audio',
         //                                         mediaTypes: 'audio',
-        //                                         creatorId: post.Creator.id,
+        //                                         creatorId: post.creatorId,
         //                                         createdAt: post.createdAt,
         //                                         updatedAt: post.createdAt,
         //                                         lastActivity: post.createdAt,
@@ -444,12 +456,12 @@ router.get('/test', async (req, res) => {
         //                                 // link new post to parent post
         //                                 const createLink = await Link.create(
         //                                     {
-        //                                         creatorId: post.Creator.id,
+        //                                         creatorId: post.creatorId,
         //                                         itemAType: post.type,
         //                                         itemBType: 'audio',
         //                                         itemAId: post.id,
         //                                         itemBId: newPost.id,
-        //                                         relationship: 'root',
+        //                                         relationship: 'parent',
         //                                         state: 'active',
         //                                         totalLikes: 0,
         //                                         totalComments: 0,
@@ -474,6 +486,8 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
 
+        // run gbg-total-beads migration here
+
         // // add totalBeads value to GBGs
         // const games = await GlassBeadGame.findAll({ attributes: ['id', 'postId'] })
         // Promise.all(
@@ -485,7 +499,7 @@ router.get('/test', async (req, res) => {
         //                         itemAType: 'post',
         //                         itemAId: game.postId,
         //                         itemBType: 'bead',
-        //                         relationship: 'root',
+        //                         relationship: 'parent',
         //                         state: 'active',
         //                     },
         //                 })
@@ -498,7 +512,7 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
 
-        // // migrate root comments to post table
+        // // migrate root comments to post table (4 mins 40 seconds)
         // const comments = await Comment.findAll()
 
         // const rootCommentMappings = []
@@ -538,7 +552,7 @@ router.get('/test', async (req, res) => {
         //                             itemBType: 'comment',
         //                             itemAId: comment.itemId,
         //                             itemBId: newPost.id,
-        //                             relationship: 'root',
+        //                             relationship: 'parent',
         //                             state: 'active',
         //                             totalLikes: 0,
         //                             totalComments: 0,
@@ -642,7 +656,7 @@ router.get('/test', async (req, res) => {
 
         // // todo: add searchable text to comments using front end after migration
 
-        // // migrate poll answers
+        // // migrate poll answers (add root link to post too?)
         // const pollAnswers = await PollAnswer.findAll()
         // Promise.all(
         //     pollAnswers.map(
@@ -664,7 +678,7 @@ router.get('/test', async (req, res) => {
         //                     },
         //                     { silent: true }
         //                 )
-        //                 // create link to post
+        //                 // create link to poll
         //                 const createLink = await Link.create(
         //                     {
         //                         creatorId: answer.creatorId,
@@ -672,7 +686,7 @@ router.get('/test', async (req, res) => {
         //                         itemBType: 'poll-answer',
         //                         itemAId: answer.pollId,
         //                         itemBId: newPost.id,
-        //                         relationship: 'root',
+        //                         relationship: 'parent',
         //                         state: 'active',
         //                         totalLikes: 0,
         //                         totalComments: 0,
@@ -695,6 +709,8 @@ router.get('/test', async (req, res) => {
         // )
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
+
+        // update Post model hasMany --> hasOne
     }
 })
 
@@ -1001,7 +1017,9 @@ router.get('/post-comments', authenticateToken, async (req, res) => {
         return new Promise(async (resolve) => {
             const comments = await root.getBlocks({
                 attributes: findFullPostAttributes('Post', accountId),
-                through: { where: { itemBType: 'comment', state: 'active' } },
+                through: {
+                    where: { itemBType: 'comment', relationship: 'parent', state: 'active' },
+                },
                 joinTableAttributes: [],
                 include: [
                     {

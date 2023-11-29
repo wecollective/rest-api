@@ -14,6 +14,14 @@ module.exports = {
                     },
                     { transaction: t }
                 ),
+                queryInterface.addColumn(
+                    'Posts',
+                    'originSpaceId',
+                    {
+                        type: Sequelize.DataTypes.INTEGER,
+                    },
+                    { transaction: t }
+                ),
             ])
         })
     },
