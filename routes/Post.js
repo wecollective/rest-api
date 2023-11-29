@@ -1061,38 +1061,39 @@ router.get('/post-indirect-spaces', async (req, res) => {
     res.status(200).json(post.IndirectSpaces)
 })
 
-router.get('/poll-data', (req, res) => {
+router.get('/poll-data', async (req, res) => {
     const { postId } = req.query
-    Poll.findOne({
+    const poll = await Poll.findOne({
         where: { postId: postId },
         attributes: ['id', 'type', 'answersLocked'],
-        include: {
-            model: PollAnswer,
-            attributes: ['id', 'text', 'state', 'createdAt'],
-            where: { state: { [Op.or]: ['active', 'done'] } },
-            include: [
-                {
+    })
+    const answers = await poll.getAnswers({
+        attributes: ['id', 'text', 'state', 'createdAt'],
+        through: {
+            where: { itemBType: 'poll-answer', relationship: 'parent', state: 'active' },
+        },
+        joinTableAttributes: [],
+        include: [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            },
+            {
+                model: Reaction,
+                where: { itemType: 'poll-answer' },
+                required: false,
+                attributes: ['value', 'state', 'itemId', 'createdAt', 'updatedAt'],
+                include: {
                     model: User,
                     as: 'Creator',
-                    attributes: ['handle', 'name', 'flagImagePath'],
+                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
                 },
-                {
-                    model: Reaction,
-                    where: { itemType: 'poll-answer' },
-                    required: false,
-                    attributes: ['value', 'state', 'itemId', 'createdAt', 'updatedAt'],
-                    include: {
-                        model: User,
-                        as: 'Creator',
-                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                    },
-                },
-            ],
-            required: false,
-        },
+            },
+        ],
     })
-        .then((pollData) => res.status(200).json(pollData))
-        .catch((error) => res.status(500).json({ message: 'Error', error }))
+    poll.setDataValue('Answers', answers)
+    res.status(200).json(poll)
 })
 
 router.get('/gbg-data', authenticateToken, async (req, res) => {

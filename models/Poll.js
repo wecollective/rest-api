@@ -16,8 +16,11 @@ module.exports = (sequelize, DataTypes) => {
         {}
     )
     Poll.associate = function (models) {
-        Poll.hasMany(models.PollAnswer, {
-            foreignKey: 'pollId',
+        Poll.belongsToMany(models.Post, {
+            through: models.Link,
+            as: 'Answers',
+            foreignKey: 'itemAId',
+            otherKey: 'itemBId',
         })
     }
     return Poll
