@@ -642,60 +642,59 @@ router.get('/test', async (req, res) => {
 
         // // todo: add searchable text to comments using front end after migration
 
-        // migrate poll answers
-
-        const pollAnswers = await PollAnswer.findAll()
-
-        Promise.all(
-            pollAnswers.map(
-                (answer) =>
-                    new Promise(async (resolve) => {
-                        // create new post
-                        const newPost = await Post.create(
-                            {
-                                ...defaultPostValues,
-                                type: 'poll-answer',
-                                text: answer.text,
-                                mediaTypes: 'text',
-                                creatorId: answer.creatorId,
-                                state: answer.state,
-                                createdAt: answer.createdAt,
-                                updatedAt: answer.updatedAt,
-                                lastActivity: answer.createdAt,
-                            },
-                            { silent: true }
-                        )
-                        // create link to post
-                        const createLink = await Link.create(
-                            {
-                                creatorId: answer.creatorId,
-                                itemAType: 'poll',
-                                itemBType: 'poll-answer',
-                                itemAId: answer.pollId,
-                                itemBId: newPost.id,
-                                relationship: 'root',
-                                state: 'active',
-                                totalLikes: 0,
-                                totalComments: 0,
-                                totalRatings: 0,
-                                createdAt: answer.createdAt,
-                                updatedAt: answer.createdAt,
-                            },
-                            { silent: true }
-                        )
-                        // update reactions
-                        const updateReactions = await Reaction.update(
-                            { itemId: newPost.id },
-                            { where: { type: 'vote', itemId: answer.id }, silent: true }
-                        )
-                        Promise.all([createLink, updateReactions])
-                            .then(() => resolve())
-                            .catch((error) => resolve(error))
-                    })
-            )
-        )
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json(error))
+        // // migrate poll answers
+        // const pollAnswers = await PollAnswer.findAll()
+        // Promise.all(
+        //     pollAnswers.map(
+        //         (answer) =>
+        //             new Promise(async (resolve) => {
+        //                 // create new post
+        //                 const newPost = await Post.create(
+        //                     {
+        //                         ...defaultPostValues,
+        //                         type: 'poll-answer',
+        //                         text: answer.text,
+        //                         searchableText: answer.text,
+        //                         mediaTypes: 'text',
+        //                         creatorId: answer.creatorId,
+        //                         state: answer.state,
+        //                         createdAt: answer.createdAt,
+        //                         updatedAt: answer.updatedAt,
+        //                         lastActivity: answer.createdAt,
+        //                     },
+        //                     { silent: true }
+        //                 )
+        //                 // create link to post
+        //                 const createLink = await Link.create(
+        //                     {
+        //                         creatorId: answer.creatorId,
+        //                         itemAType: 'poll',
+        //                         itemBType: 'poll-answer',
+        //                         itemAId: answer.pollId,
+        //                         itemBId: newPost.id,
+        //                         relationship: 'root',
+        //                         state: 'active',
+        //                         totalLikes: 0,
+        //                         totalComments: 0,
+        //                         totalRatings: 0,
+        //                         createdAt: answer.createdAt,
+        //                         updatedAt: answer.createdAt,
+        //                     },
+        //                     { silent: true }
+        //                 )
+        //                 // update reactions
+        //                 const updateReactions = await Reaction.update(
+        //                     { itemId: newPost.id },
+        //                     { where: { type: 'vote', itemId: answer.id }, silent: true }
+        //                 )
+        //                 Promise.all([createLink, updateReactions])
+        //                     .then(() => resolve())
+        //                     .catch((error) => resolve(error))
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
     }
 })
 
@@ -992,36 +991,41 @@ router.get('/target-from-text', authenticateToken, async (req, res) => {
     }
 })
 
-router.get('/post-comments', authenticateToken, (req, res) => {
+router.get('/post-comments', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.query
+    const limits = [10, 10, 10] // number of comments to inlcude per generation (length of array determines max depth)
+    const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
 
-    Comment.findAll({
-        where: { itemType: 'post', itemId: postId, parentCommentId: null },
-        order: [['createdAt', 'ASC']],
-        attributes: findCommentAttributes('Comment', accountId),
-        include: [
-            {
-                model: User,
-                as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-            },
-            {
-                model: Comment,
-                as: 'Replies',
-                separate: true,
-                where: { state: 'visible' },
-                order: [['createdAt', 'ASC']],
-                attributes: findCommentAttributes('Comment', accountId),
-                include: {
-                    model: User,
-                    as: 'Creator',
-                    attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                },
-            },
-        ],
-    })
-        .then((comments) => res.status(200).json(comments))
+    async function getChildComments(root, depth) {
+        return new Promise(async (resolve) => {
+            const comments = await root.getBlocks({
+                attributes: findFullPostAttributes('Post', accountId),
+                through: { where: { itemBType: 'comment', state: 'active' } },
+                joinTableAttributes: [],
+                include: [
+                    {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                    },
+                ],
+                limit: limits[depth],
+            })
+            root.setDataValue('Comments', comments)
+            if (!limits[depth + 1]) resolve()
+            else {
+                Promise.all(
+                    root.dataValues.Comments.map((comment) => getChildComments(comment, depth + 1))
+                )
+                    .then(() => resolve())
+                    .catch((error) => resolve(error))
+            }
+        })
+    }
+
+    getChildComments(post, 0)
+        .then(() => res.status(200).json(post.dataValues.Comments))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
