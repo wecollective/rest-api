@@ -1281,7 +1281,7 @@ router.get('/post-images', async (req, res) => {
     const blocks = await post.getBlocks({
         attributes: ['id', 'text'],
         through: { where: { itemBType: 'image', state: 'active' } },
-        joinTableAttributes: [],
+        joinTableAttributes: ['index'],
         include: [
             {
                 model: Image,
@@ -1315,6 +1315,31 @@ router.get('/post-audio', async (req, res) => {
         ],
     })
     res.status(200).json(audioBlocks)
+})
+
+router.get('/card-faces', async (req, res) => {
+    const { postId } = req.query
+    const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
+    const cardBlocks = await post.getBlocks({
+        attributes: ['id', 'text', 'watermark', 'totalLikes', 'totalLinks'],
+        through: { where: { itemBType: 'card-face', state: 'active' } },
+        joinTableAttributes: ['index'],
+        include: [
+            {
+                model: Post,
+                as: 'Blocks',
+                through: { where: { itemBType: 'image', state: 'active' } },
+                attributes: ['id'],
+                include: [
+                    {
+                        model: Image,
+                        attributes: ['id', 'url'],
+                    },
+                ],
+            },
+        ],
+    })
+    res.status(200).json(cardBlocks)
 })
 
 // POST
