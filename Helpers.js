@@ -247,13 +247,16 @@ function sourcePostId() {
 function accountLike(itemType, model, accountId) {
     return [
         sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Reactions
-            WHERE Reactions.itemType = '${itemType}'
-            AND Reactions.itemId = ${model}.id
-            AND Reactions.creatorId = ${accountId}
-            AND Reactions.type = 'like'
-            AND Reactions.state = 'active'
+            SELECT CASE WHEN EXISTS (
+                SELECT Reactions.id
+                FROM Reactions
+                WHERE Reactions.itemType = '${itemType}'
+                AND Reactions.itemId = ${model}.id
+                AND Reactions.creatorId = ${accountId}
+                AND Reactions.type = 'like'
+                AND Reactions.state = 'active'
+            )
+            THEN 1 ELSE 0 END
         )`),
         'accountLike',
     ]
@@ -262,12 +265,17 @@ function accountLike(itemType, model, accountId) {
 function accountComment(itemType, model, accountId) {
     return [
         sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Comments
-            WHERE Comments.itemType = '${itemType}'
-            AND Comments.itemId = ${model}.id
-            AND Comments.creatorId = ${accountId}
-            AND Comments.state = 'visible'
+            SELECT CASE WHEN EXISTS (
+                SELECT Links.id
+                FROM Links
+                WHERE Links.creatorId = ${accountId}
+                AND Links.itemAId = ${model}.id
+                AND Links.itemAType = '${itemType}'
+                AND Links.itemBType = 'comment'
+                AND (Links.relationship = 'parent' OR Links.relationship = 'root')
+                AND Links.state = 'active'
+            )
+            THEN 1 ELSE 0 END
         )`),
         'accountComment',
     ]
@@ -276,13 +284,16 @@ function accountComment(itemType, model, accountId) {
 function accountRating(itemType, model, accountId) {
     return [
         sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Reactions
-            WHERE Reactions.itemType = '${itemType}'
-            AND Reactions.itemId = ${model}.id
-            AND Reactions.creatorId = ${accountId}
-            AND Reactions.type = 'rating'
-            AND Reactions.state = 'active'
+            SELECT CASE WHEN EXISTS (
+                SELECT Reactions.id
+                FROM Reactions
+                WHERE Reactions.itemType = '${itemType}'
+                AND Reactions.itemId = ${model}.id
+                AND Reactions.creatorId = ${accountId}
+                AND Reactions.type = 'rating'
+                AND Reactions.state = 'active'
+            )
+            THEN 1 ELSE 0 END
         )`),
         'accountRating',
     ]
@@ -291,13 +302,16 @@ function accountRating(itemType, model, accountId) {
 function accountRepost(itemType, model, accountId) {
     return [
         sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Reactions
-            WHERE Reactions.itemType = '${itemType}'
-            AND Reactions.itemId = ${model}.id
-            AND Reactions.creatorId = ${accountId}
-            AND Reactions.type = 'repost'
-            AND Reactions.state = 'active'
+            SELECT CASE WHEN EXISTS (
+                SELECT Reactions.id
+                FROM Reactions
+                WHERE Reactions.itemType = '${itemType}'
+                AND Reactions.itemId = ${model}.id
+                AND Reactions.creatorId = ${accountId}
+                AND Reactions.type = 'repost'
+                AND Reactions.state = 'active'
+            )
+            THEN 1 ELSE 0 END
         )`),
         'accountRepost',
     ]
@@ -306,15 +320,19 @@ function accountRepost(itemType, model, accountId) {
 function accountLink(itemType, model, accountId) {
     return [
         sequelize.literal(`(
-            SELECT COUNT(*) > 0
-            FROM Links
-            WHERE Links.state = 'visible'
-            AND Links.creatorId = ${accountId}
-            AND (
-                (Links.itemAId = ${model}.id AND (Links.type = '${itemType}-post' OR Links.type = '${itemType}-comment'))
-                OR
-                (Links.itemBId = ${model}.id AND (Links.type = 'post-${itemType}' OR Links.type = 'comment-${itemType}'))
+            SELECT CASE WHEN EXISTS (
+                SELECT Links.id
+                FROM Links
+                WHERE Links.state = 'active'
+                AND Links.relationship = 'link'
+                AND Links.creatorId = ${accountId}
+                AND (
+                    (Links.itemAId = ${model}.id AND Links.itemAType = '${itemType}')
+                    OR
+                    (Links.itemBId = ${model}.id AND Links.itemBType = '${itemType}')
+                )
             )
+            THEN 1 ELSE 0 END
         )`),
         'accountLink',
     ]
@@ -1222,7 +1240,7 @@ async function updateAllSpaceStats(res) {
 
 async function updateAllSpaceUserStats(res) {
     // calculate and update all SpaceUserStats (currently only totalPostLikes value)
-    // warning: long operation (~10 mins with 680 spaces)
+    // warning: long operation (~10 mins with 680 spaces) (using for loop to prevent db overload?)
     const spaces = await Space.findAll({
         where: { totalPostLikes: { [Op.gt]: 0 } },
         attributes: ['id'],
