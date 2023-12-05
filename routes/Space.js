@@ -476,6 +476,7 @@ router.get('/top-contributors', async (req, res) => {
         order: [
             ['totalPostLikes', 'DESC'],
             ['createdAt', 'ASC'],
+            ['id', 'ASC'],
         ],
         offset: +offset,
         limit: 10,
