@@ -1,5 +1,4 @@
-const sequelize = require('sequelize')
-const Op = sequelize.Op
+const config = require('./Config')
 const {
     Space,
     User,
@@ -10,10 +9,14 @@ const {
     Image,
     Url,
     Audio,
+    Link,
     SpaceUserStat,
     SpaceParent,
     SpaceAncestor,
+    Notification,
 } = require('./models')
+const fs = require('fs')
+const { Op, literal } = require('sequelize')
 
 var aws = require('aws-sdk')
 var multer = require('multer')
@@ -24,10 +27,12 @@ aws.config.update({
     region: 'eu-west-1',
 })
 const s3 = new aws.S3({})
-const fs = require('fs')
+
 var ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 ffmpeg.setFfmpegPath(ffmpegPath)
+const sgMail = require('@sendgrid/mail')
+sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
 const imageMBLimit = 10
 const audioMBLimit = 30
@@ -42,11 +47,10 @@ const defaultPostValues = {
     totalGlassBeadGames: 0,
 }
 
-function findFileName(file, accountId, isAudio) {
+function findFileName(file, accountId) {
     const date = Date.now().toString()
-    const name = file.originalname.replace(/[^A-Za-z0-9]/g, '-').substring(0, 30)
-    const extension = isAudio ? 'mp3' : file.mimetype.split('/')[1]
-    return `${accountId}-${date}-${name}.${extension}`
+    const extension = file.fieldname.includes('audio') ? 'mp3' : file.mimetype.split('/')[1]
+    return `${accountId}-${date}-${file.filename}.${extension}`
 }
 
 function noMulterErrors(error, res) {
@@ -60,6 +64,7 @@ function noMulterErrors(error, res) {
     return true
 }
 
+// no longer used in create-post route
 function multerParams(type, accountId) {
     // types: 'image-file', 'audio-file', 'audio-blob', 'glass-bead-game' (also: 'stream-image', 'toybox-row-image')
     // todo: set up new account bucket for stream and toybox images
@@ -75,24 +80,61 @@ function multerParams(type, accountId) {
             bucket: `weco-${process.env.NODE_ENV}-${bucketType}`,
             acl: 'public-read',
             metadata: (req, file, cb) => cb(null, { mimetype: file.mimetype }),
-            key: (req, file, cb) => cb(null, findFileName(file, accountId, isAudio)),
+            key: (req, file, cb) => cb(null, findFileName(file, accountId)),
         })
     }
     return params
 }
 
-function convertAndUploadAudio(file, accountId, type) {
+// function convertAndUploadAudio(file, accountId, type) {
+//     return new Promise((resolve) => {
+//         // convert raw audio to mp3
+//         const outputPath = `temp/audio/mp3/${file.filename}.mp3`
+//         ffmpeg(file.path)
+//             .output(outputPath)
+//             .on('end', () => {
+//                 // upload new mp3 file to s3 bucket
+//                 fs.readFile(outputPath, (error, data) => {
+//                     if (!error) {
+//                         const fileName = findFileName(file, accountId, true)
+//                         const bucket = `weco-${process.env.NODE_ENV}-post-audio`
+//                         const s3Object = {
+//                             Bucket: bucket,
+//                             ACL: 'public-read',
+//                             Key: fileName,
+//                             Body: data,
+//                             Metadata: { mimetype: 'audio/mp3' },
+//                             ContentType: 'audio/mpeg',
+//                         }
+//                         s3.putObject(s3Object, (err) => {
+//                             // delete old files
+//                             if (type === 'post')
+//                                 fs.unlink(`temp/audio/raw/${file.filename}`, (e) => console.log(e))
+//                             else fs.unlink(`temp/beads/${file.filename}`, (e) => console.log(e))
+//                             fs.unlink(`temp/audio/mp3/${file.filename}.mp3`, (e) => console.log(e))
+//                             // return audio url
+//                             resolve(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
+//                         })
+//                     }
+//                 })
+//             })
+//             .run()
+//     })
+// }
+
+function convertAndUploadAudio(file, accountId) {
     return new Promise((resolve) => {
         // convert raw audio to mp3
-        const outputPath = `temp/audio/mp3/${file.filename}.mp3`
+        // todo: configure ffmpeg options
+        const outputPath = `temp/mp3s/${file.filename}.mp3`
         ffmpeg(file.path)
             .output(outputPath)
             .on('end', () => {
-                // upload new mp3 file to s3 bucket
-                fs.readFile(outputPath, (err, data) => {
-                    if (!err) {
-                        const fileName = findFileName(file, accountId, true)
-                        const bucket = `weco-${process.env.NODE_ENV}-post-audio`
+                // upload mp3 to s3 bucket
+                fs.readFile(outputPath, (fsError, data) => {
+                    if (!fsError) {
+                        const fileName = findFileName(file, accountId)
+                        const bucket = `weco-${process.env.NODE_ENV}-post-audio` // todo: remame 'post-audio' to 'audio' ?
                         const s3Object = {
                             Bucket: bucket,
                             ACL: 'public-read',
@@ -101,12 +143,10 @@ function convertAndUploadAudio(file, accountId, type) {
                             Metadata: { mimetype: 'audio/mp3' },
                             ContentType: 'audio/mpeg',
                         }
-                        s3.putObject(s3Object, (err) => {
+                        s3.putObject(s3Object, (s3Error) => {
                             // delete old files
-                            if (type === 'post')
-                                fs.unlink(`temp/audio/raw/${file.filename}`, (e) => console.log(e))
-                            else fs.unlink(`temp/beads/${file.filename}`, (e) => console.log(e))
-                            fs.unlink(`temp/audio/mp3/${file.filename}.mp3`, (e) => console.log(e))
+                            fs.unlink(`temp/post-files/${file.filename}`, (e) => console.log(e))
+                            fs.unlink(`temp/mp3s/${file.filename}.mp3`, (e) => console.log(e))
                             // return audio url
                             resolve(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
                         })
@@ -117,12 +157,35 @@ function convertAndUploadAudio(file, accountId, type) {
     })
 }
 
+function uploadPostFile(file, accountId) {
+    return new Promise((resolve) => {
+        const bucketType = file.fieldname.includes('audio') ? 'post-audio' : 'post-images'
+        const bucket = `weco-${process.env.NODE_ENV}-${bucketType}`
+        const fileName = findFileName(file, accountId)
+        fs.readFile(`temp/post-files/${file.filename}`, (err, data) => {
+            const s3Object = {
+                Bucket: bucket,
+                Key: fileName,
+                Body: data,
+                Metadata: { mimetype: file.mimetype },
+                ACL: 'public-read',
+            }
+            s3.putObject(s3Object, (err) => {
+                // delete old file
+                fs.unlink(`temp/post-files/${file.filename}`, (e) => console.log(e))
+                // return upload url
+                resolve(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
+            })
+        })
+    })
+}
+
 function uploadBeadFile(file, accountId) {
     return new Promise((resolve) => {
         // fieldnames include: 'topicImage', 'imageFile', 'audioFile',
         const isAudio = file.fieldname.includes('audio')
         const bucketType = isAudio ? 'post-audio' : 'post-images'
-        const fileName = findFileName(file, accountId, isAudio)
+        const fileName = findFileName(file, accountId)
         const bucket = `weco-${process.env.NODE_ENV}-${bucketType}`
         fs.readFile(`temp/beads/${file.filename}`, (err, data) => {
             const s3Object = {
@@ -139,6 +202,155 @@ function uploadBeadFile(file, accountId) {
                 resolve(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
             })
         })
+    })
+}
+
+function createImage(accountId, postId, image, index, files) {
+    return new Promise(async (resolve) => {
+        const newPost = await Post.create({
+            ...defaultPostValues,
+            creatorId: accountId,
+            type: 'image',
+            mediaTypes: 'image',
+            text: image.text || null,
+            searchableText: image.text || null,
+            lastActivity: new Date(),
+        })
+        const addImage = await Image.create({
+            creatorId: accountId,
+            postId: newPost.id,
+            url: image.url || files.find((file) => file.originalname === image.id).url,
+        })
+        const addLink = await Link.create({
+            creatorId: accountId,
+            itemAType: 'post',
+            itemBType: 'image',
+            itemAId: postId,
+            itemBId: newPost.id,
+            index,
+            relationship: 'parent',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        Promise.all([addImage, addLink])
+            .then(() => resolve())
+            .catch((error) => resolve(error))
+    })
+}
+
+function createAudio(accountId, postId, audio, index, files) {
+    return new Promise(async (resolve) => {
+        const newPost = await Post.create({
+            ...defaultPostValues,
+            creatorId: accountId,
+            type: 'audio',
+            mediaTypes: 'audio',
+            text: audio.text || null,
+            searchableText: audio.text || null,
+            lastActivity: new Date(),
+        })
+        const addAudio = await Audio.create({
+            creatorId: accountId,
+            postId: newPost.id,
+            url: audio.url || files.find((file) => file.originalname === audio.id).url,
+        })
+        const addLink = await Link.create({
+            creatorId: accountId,
+            itemAType: 'post',
+            itemBType: 'audio',
+            itemAId: postId,
+            itemBId: newPost.id,
+            index,
+            relationship: 'parent',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        Promise.all([addAudio, addLink])
+            .then(() => resolve())
+            .catch((error) => resolve(error))
+    })
+}
+
+function createUrl(accountId, postId, urlData, index) {
+    return new Promise(async (resolve) => {
+        const { url, title, description, domain, image, searchableText } = urlData
+        const newPost = await Post.create({
+            ...defaultPostValues,
+            creatorId: accountId,
+            type: 'url',
+            mediaTypes: 'url',
+            searchableText,
+            lastActivity: new Date(),
+        })
+        const addUrl = await Url.create({
+            creatorId: accountId,
+            postId: newPost.id,
+            url,
+            title,
+            description,
+            domain,
+            image,
+        })
+        const addLink = await Link.create({
+            creatorId: accountId,
+            itemAType: 'post',
+            itemBType: 'url',
+            itemAId: postId,
+            itemBId: newPost.id,
+            index,
+            relationship: 'parent',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        Promise.all([addUrl, addLink])
+            .then(() => resolve())
+            .catch((error) => resolve(error))
+    })
+}
+
+function notifyPostMention(creator, user, postId) {
+    // creator attributes: id, name, handle
+    // user attributes: id, name, email, emailsDisabled (user must also be model for accountMuted function)
+    return new Promise(async (resolve) => {
+        const sendNotification = await Notification.create({
+            ownerId: user.id,
+            type: 'post-mention',
+            seen: false,
+            userId: creator.id,
+            postId,
+        })
+        const skipEmail = user.emailsDisabled || (await accountMuted(creator.id, user))
+        const sendEmail = skipEmail
+            ? null
+            : await sgMail.send({
+                  to: user.email,
+                  from: { email: 'admin@weco.io', name: 'we { collective }' },
+                  subject: 'New notification',
+                  text: `
+                        Hi ${user.name}, ${creator.name} just mentioned you in a post on weco:
+                        http://${config.appURL}/p/${postId}
+                    `,
+                  html: `
+                        <p>
+                            Hi ${user.name},
+                            <br/>
+                            <a href='${config.appURL}/u/${creator.handle}'>${creator.name}</a>
+                            just mentioned you in a 
+                            <a href='${config.appURL}/p/${postId}'>post</a>
+                            on weco
+                        </p>
+                    `,
+              })
+
+        Promise.all([sendNotification, sendEmail])
+            .then(() => resolve())
+            .catch((error) => resolve(error))
     })
 }
 
@@ -217,14 +429,13 @@ function findUserOrder(filter, sortBy) {
 // model prop used to distinguish between Post and Beads
 function totalRatingPoints(itemType, model) {
     return [
-        sequelize.literal(
+        literal(
             `(
-                SELECT SUM(value)
-                FROM Reactions
-                WHERE Reactions.itemType = '${itemType}'
-                AND Reactions.itemId = ${model}.id
-                AND Reactions.type = 'rating'
-                AND Reactions.state = 'active'
+                SELECT SUM(value) FROM Reactions
+                WHERE itemType = '${itemType}'
+                AND itemId = ${model}.id
+                AND type = 'rating'
+                AND state = 'active'
             )`
         ),
         'totalRatingPoints',
@@ -233,12 +444,10 @@ function totalRatingPoints(itemType, model) {
 
 function sourcePostId() {
     return [
-        sequelize.literal(`(
-            SELECT Link.itemAId
-            FROM Links
-            AS Link
-            WHERE Link.itemBId = Post.id
-            AND (Link.type = 'gbg-post' OR Link.type = 'card-post')
+        literal(`(
+            SELECT itemAId FROM Links
+            WHERE itemBId = Post.id
+            AND (type = 'gbg-post' OR type = 'card-post')
         )`),
         'sourcePostId',
     ]
@@ -246,15 +455,14 @@ function sourcePostId() {
 
 function accountLike(itemType, model, accountId) {
     return [
-        sequelize.literal(`(
+        literal(`(
             SELECT CASE WHEN EXISTS (
-                SELECT Reactions.id
-                FROM Reactions
-                WHERE Reactions.itemType = '${itemType}'
-                AND Reactions.itemId = ${model}.id
-                AND Reactions.creatorId = ${accountId}
-                AND Reactions.type = 'like'
-                AND Reactions.state = 'active'
+                SELECT id FROM Reactions
+                WHERE itemType = '${itemType}'
+                AND itemId = ${model}.id
+                AND creatorId = ${accountId}
+                AND type = 'like'
+                AND state = 'active'
             )
             THEN 1 ELSE 0 END
         )`),
@@ -264,16 +472,15 @@ function accountLike(itemType, model, accountId) {
 
 function accountComment(itemType, model, accountId) {
     return [
-        sequelize.literal(`(
+        literal(`(
             SELECT CASE WHEN EXISTS (
-                SELECT Links.id
-                FROM Links
-                WHERE Links.creatorId = ${accountId}
-                AND Links.itemAId = ${model}.id
-                AND Links.itemAType = '${itemType}'
-                AND Links.itemBType = 'comment'
-                AND (Links.relationship = 'parent' OR Links.relationship = 'root')
-                AND Links.state = 'active'
+                SELECT id FROM Links
+                WHERE creatorId = ${accountId}
+                AND itemAId = ${model}.id
+                AND itemAType = '${itemType}'
+                AND itemBType = 'comment'
+                AND (relationship = 'parent' OR relationship = 'root')
+                AND state = 'active'
             )
             THEN 1 ELSE 0 END
         )`),
@@ -283,15 +490,14 @@ function accountComment(itemType, model, accountId) {
 
 function accountRating(itemType, model, accountId) {
     return [
-        sequelize.literal(`(
+        literal(`(
             SELECT CASE WHEN EXISTS (
-                SELECT Reactions.id
-                FROM Reactions
-                WHERE Reactions.itemType = '${itemType}'
-                AND Reactions.itemId = ${model}.id
-                AND Reactions.creatorId = ${accountId}
-                AND Reactions.type = 'rating'
-                AND Reactions.state = 'active'
+                SELECT id FROM Reactions
+                WHERE itemType = '${itemType}'
+                AND itemId = ${model}.id
+                AND creatorId = ${accountId}
+                AND type = 'rating'
+                AND state = 'active'
             )
             THEN 1 ELSE 0 END
         )`),
@@ -301,15 +507,14 @@ function accountRating(itemType, model, accountId) {
 
 function accountRepost(itemType, model, accountId) {
     return [
-        sequelize.literal(`(
+        literal(`(
             SELECT CASE WHEN EXISTS (
-                SELECT Reactions.id
-                FROM Reactions
-                WHERE Reactions.itemType = '${itemType}'
-                AND Reactions.itemId = ${model}.id
-                AND Reactions.creatorId = ${accountId}
-                AND Reactions.type = 'repost'
-                AND Reactions.state = 'active'
+                SELECT id FROM Reactions
+                WHERE itemType = '${itemType}'
+                AND itemId = ${model}.id
+                AND creatorId = ${accountId}
+                AND type = 'repost'
+                AND state = 'active'
             )
             THEN 1 ELSE 0 END
         )`),
@@ -319,17 +524,16 @@ function accountRepost(itemType, model, accountId) {
 
 function accountLink(itemType, model, accountId) {
     return [
-        sequelize.literal(`(
+        literal(`(
             SELECT CASE WHEN EXISTS (
-                SELECT Links.id
-                FROM Links
-                WHERE Links.state = 'active'
-                AND Links.relationship = 'link'
-                AND Links.creatorId = ${accountId}
+                SELECT id FROM Links
+                WHERE state = 'active'
+                AND relationship = 'link'
+                AND creatorId = ${accountId}
                 AND (
-                    (Links.itemAId = ${model}.id AND Links.itemAType = '${itemType}')
+                    (itemAId = ${model}.id AND itemAType = '${itemType}')
                     OR
-                    (Links.itemBId = ${model}.id AND Links.itemBType = '${itemType}')
+                    (itemBId = ${model}.id AND itemBType = '${itemType}')
                 )
             )
             THEN 1 ELSE 0 END
@@ -338,12 +542,13 @@ function accountLink(itemType, model, accountId) {
     ]
 }
 
+// todo: apply above SQL syntax to literals below (remove table names where not required)
 function postAccess(accountId) {
     // todo: 10x faster approach found & applied on user-posts route. Apply to post-data & space-events routes then remove function.
     // checks number of private spaces post is in = number of those spaces user has access to
     // reposts excluded so public posts can be reposted into private spaces without blocking access
     return [
-        sequelize.literal(`(
+        literal(`(
             (SELECT COUNT(*)
                 FROM Spaces
                 WHERE Spaces.state = 'active'
@@ -394,7 +599,7 @@ async function accountMuted(accountId, user) {
 // space literal
 // rename to total space descendents
 const totalSpaceSpaces = [
-    sequelize.literal(`(
+    literal(`(
         SELECT COUNT(*)
         FROM Spaces
         WHERE Spaces.handle != Space.handle
@@ -411,7 +616,7 @@ const totalSpaceSpaces = [
 ]
 
 const totalSpacePosts = [
-    sequelize.literal(`(
+    literal(`(
     SELECT COUNT(*)
         FROM Posts
         WHERE Posts.state = 'visible'
@@ -427,7 +632,7 @@ const totalSpacePosts = [
 ]
 
 const totalSpaceUsers = [
-    sequelize.literal(`(
+    literal(`(
         SELECT COUNT(*)
             FROM Users
             WHERE Users.emailVerified = true
@@ -445,7 +650,7 @@ const totalSpaceUsers = [
 ]
 
 const totalSpaceFollowers = [
-    sequelize.literal(`(
+    literal(`(
         SELECT COUNT(*)
         FROM Users
         WHERE Users.id IN (
@@ -462,7 +667,7 @@ const totalSpaceFollowers = [
 ]
 
 const totalSpaceComments = [
-    sequelize.literal(`(
+    literal(`(
         SELECT COUNT(*)
         FROM Comments
         WHERE Comments.state = 'visible'
@@ -479,7 +684,7 @@ const totalSpaceComments = [
 ]
 
 const totalSpaceReactions = [
-    sequelize.literal(`(
+    literal(`(
         SELECT COUNT(*)
         FROM Reactions
         WHERE Reactions.state = 'active'
@@ -496,7 +701,7 @@ const totalSpaceReactions = [
 ]
 
 const totalSpaceLikes = [
-    sequelize.literal(`(
+    literal(`(
         SELECT COUNT(*)
         FROM Reactions
         WHERE Reactions.state = 'active'
@@ -514,7 +719,7 @@ const totalSpaceLikes = [
 ]
 
 const totalSpaceRatings = [
-    sequelize.literal(`(
+    literal(`(
         SELECT COUNT(*)
         FROM Reactions
         WHERE Reactions.state = 'active'
@@ -532,7 +737,7 @@ const totalSpaceRatings = [
 ]
 
 const totalSpaceChildren = [
-    sequelize.literal(`(
+    literal(`(
         SELECT COUNT(*)
         FROM SpaceParents
         WHERE SpaceParents.spaceAId = Space.id
@@ -545,7 +750,7 @@ function spaceAccess(accountId) {
     // checks direct user access to space
     // used in findSpaceMapAttributes, space-data, find-spaces, and nav-list-child-spaces
     return [
-        sequelize.literal(`(
+        literal(`(
         SELECT SpaceUsers.state
         FROM SpaceUsers
         WHERE SpaceUsers.userId = ${accountId}
@@ -558,7 +763,7 @@ function spaceAccess(accountId) {
 }
 
 const restrictedAncestors = [
-    sequelize.literal(`(
+    literal(`(
         SELECT Spaces.id
         FROM Spaces
         WHERE Spaces.state = 'active'
@@ -578,7 +783,7 @@ function ancestorAccess(accountId) {
     // checks number of private ancestors = number of those ancestors user has access to
     // todo: find more efficient query
     return [
-        sequelize.literal(`(
+        literal(`(
         (SELECT COUNT(*)
             FROM Spaces
                 WHERE Spaces.state = 'active'
@@ -621,7 +826,7 @@ function ancestorAccess(accountId) {
 function isModerator(accountId) {
     // checks user is mod of space
     return [
-        sequelize.literal(`(
+        literal(`(
             SELECT COUNT(*)
             FROM SpaceUsers
             WHERE SpaceUsers.userId = ${accountId}
@@ -636,7 +841,7 @@ function isModerator(accountId) {
 function isFollowingSpace(accountId) {
     // checks user is following space
     return [
-        sequelize.literal(`(
+        literal(`(
             SELECT COUNT(*)
             FROM SpaceUsers
             WHERE SpaceUsers.userId = ${accountId}
@@ -651,7 +856,7 @@ function isFollowingSpace(accountId) {
 function isFollowingUser(accountId) {
     // checks account is following user
     return [
-        sequelize.literal(`(
+        literal(`(
             SELECT COUNT(*)
             FROM UserUsers
             WHERE UserUsers.userAId = ${accountId}
@@ -666,7 +871,7 @@ function isFollowingUser(accountId) {
 function totalLikesReceivedInSpace(spaceId) {
     // calculates the total likes recieved by the user in a space
     return [
-        sequelize.literal(`(
+        literal(`(
             SELECT SUM(totalLikes)
             FROM Posts
             WHERE Posts.state = 'visible'
@@ -685,7 +890,7 @@ function totalLikesReceivedInSpace(spaceId) {
 function totalSpaceResults(filters) {
     if (!filters) {
         return [
-            sequelize.literal(`(
+            literal(`(
                 SELECT COUNT(*)
                 FROM SpaceParents
                 WHERE SpaceParents.spaceAId = Space.id
@@ -699,7 +904,7 @@ function totalSpaceResults(filters) {
         const endDate = createSQLDate(new Date())
         return depth === 'Deep'
             ? [
-                  sequelize.literal(`(
+                  literal(`(
                     SELECT COUNT(*)
                     FROM Spaces s
                     WHERE s.id != Space.id
@@ -720,7 +925,7 @@ function totalSpaceResults(filters) {
                   'totalResults',
               ]
             : [
-                  sequelize.literal(`(
+                  literal(`(
                     SELECT COUNT(*)
                     FROM Spaces s
                     WHERE s.state = 'active'
@@ -743,14 +948,14 @@ function totalSpaceResults(filters) {
 
 // user literals
 const totalUsers = [
-    sequelize.literal(
+    literal(
         `(SELECT COUNT(*) FROM Users WHERE Users.emailVerified = true AND Users.state = 'active')`
     ),
     'totalUsers',
 ]
 
 const totalUserPosts = [
-    sequelize.literal(`(
+    literal(`(
         SELECT COUNT(*)
         FROM Posts
         WHERE Posts.state = 'visible'
@@ -761,7 +966,7 @@ const totalUserPosts = [
 ]
 
 const totalUserComments = [
-    sequelize.literal(`(
+    literal(`(
         SELECT COUNT(*)
         FROM Comments
         WHERE Comments.creatorId = User.id
@@ -970,7 +1175,7 @@ async function getToyboxItem(type, id) {
         model = Post
         attributes = [
             'id',
-            'type',
+            'mediaTypes',
             'title',
             'text',
             'color',
@@ -1252,7 +1457,7 @@ async function updateAllSpaceUserStats(res) {
             where: { state: 'active' },
             attributes: ['id', totalLikesReceivedInSpace(space.id)],
             order: [
-                [sequelize.literal('likesReceived'), 'DESC'],
+                [literal('likesReceived'), 'DESC'],
                 ['createdAt', 'ASC'],
             ],
             having: { ['likesReceived']: { [Op.gt]: 0 } },
@@ -1308,6 +1513,7 @@ module.exports = {
     noMulterErrors,
     multerParams,
     convertAndUploadAudio,
+    uploadPostFile,
     uploadBeadFile,
     sourcePostId,
     restrictedAncestors,
@@ -1317,6 +1523,10 @@ module.exports = {
     accountLike,
     accountMuted,
     attachParentSpace,
+    createImage,
+    createAudio,
+    createUrl,
+    notifyPostMention,
     // database operations
     updateAllSpaceStats,
     updateAllSpaceUserStats,
@@ -1324,7 +1534,7 @@ module.exports = {
 
 // function totalPostLinks(model) {
 //     return [
-//         sequelize.literal(
+//         literal(
 //             `(SELECT COUNT(*) FROM Links AS Link WHERE Link.state = 'visible' AND Link.type != 'gbg-post' AND (Link.itemAId = ${model}.id OR Link.itemBId = ${model}.id))`
 //         ),
 //         'totalLinks',
@@ -1333,7 +1543,7 @@ module.exports = {
 
 // function totalPostLikes(model) {
 //     return [
-//         sequelize.literal(
+//         literal(
 //             `(
 //                 SELECT COUNT(*)
 //                 FROM Reactions
@@ -1349,7 +1559,7 @@ module.exports = {
 
 // function totalPostComments(model) {
 //     return [
-//         sequelize.literal(
+//         literal(
 //             `(SELECT COUNT(*) FROM Comments AS Comment WHERE Comment.state = 'visible' AND Comment.type = 'post' AND Comment.itemId = ${model}.id)`
 //         ),
 //         'totalComments',
@@ -1358,7 +1568,7 @@ module.exports = {
 
 // function totalPostRatings(model) {
 //     return [
-//         sequelize.literal(
+//         literal(
 //             `(
 //                 SELECT COUNT(*)
 //                 FROM Reactions
@@ -1374,7 +1584,7 @@ module.exports = {
 
 // function totalPostReposts(model) {
 //     return [
-//         sequelize.literal(
+//         literal(
 //             `(
 //                 SELECT COUNT(*)
 //                 FROM Reactions
