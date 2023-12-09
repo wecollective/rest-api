@@ -107,6 +107,16 @@ router.get('/user-modal-data', async (req, res) => {
     else res.status(404).json({ message: 'User not found' })
 })
 
+router.get('/user-mention-data', async (req, res) => {
+    const { userId } = req.query
+    const user = await User.findOne({
+        where: { id: userId },
+        attributes: ['handle', 'name', 'flagImagePath'],
+    })
+    if (user) res.status(200).json(user)
+    else res.status(404).json({ message: 'User not found' })
+})
+
 router.post('/user-posts', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { userId, limit, offset, params } = req.body
