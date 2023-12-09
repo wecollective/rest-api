@@ -71,7 +71,7 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'postId',
         })
 
-        // blocks
+        // blocks (use for all post children: media, comments, beads etc?)
         Post.belongsToMany(models.Post, {
             through: models.Link,
             as: 'Blocks',

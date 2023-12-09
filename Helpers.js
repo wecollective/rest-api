@@ -314,7 +314,7 @@ function createUrl(accountId, postId, urlData, index) {
     })
 }
 
-function notifyPostMention(creator, user, postId) {
+function notifyMention(creator, user, postId) {
     // creator attributes: id, name, handle
     // user attributes: id, name, email, emailsDisabled (user must also be model for accountMuted function)
     return new Promise(async (resolve) => {
@@ -1007,11 +1007,11 @@ function findFullPostAttributes(model, accountId) {
         'totalReposts',
         'totalRatings',
         'totalLinks',
-        accountLike('post', model, accountId),
-        accountComment('post', model, accountId),
-        accountLink('post', model, accountId),
-        accountRating('post', model, accountId),
-        accountRepost('post', model, accountId),
+        // accountLike('post', model, accountId),
+        // accountComment('post', model, accountId),
+        // accountLink('post', model, accountId),
+        // accountRating('post', model, accountId),
+        // accountRepost('post', model, accountId),
     ]
 }
 
@@ -1526,7 +1526,7 @@ module.exports = {
     createImage,
     createAudio,
     createUrl,
-    notifyPostMention,
+    notifyMention,
     // database operations
     updateAllSpaceStats,
     updateAllSpaceUserStats,

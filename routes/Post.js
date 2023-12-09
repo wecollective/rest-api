@@ -8,8 +8,8 @@ const { v4: uuidv4 } = require('uuid')
 const puppeteer = require('puppeteer')
 const aws = require('aws-sdk')
 const multer = require('multer')
-const ffmpeg = require('fluent-ffmpeg')
-const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
+// const ffmpeg = require('fluent-ffmpeg')
+// const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 const authenticateToken = require('../middleware/authenticateToken')
 const sequelize = require('sequelize')
 const Op = sequelize.Op
@@ -22,6 +22,7 @@ const {
     multerParams,
     noMulterErrors,
     convertAndUploadAudio,
+    uploadPostFile,
     uploadBeadFile,
     sourcePostId,
     getLinkedItem,
@@ -29,6 +30,10 @@ const {
     accountLike,
     accountMuted,
     attachParentSpace,
+    createUrl,
+    createImage,
+    createAudio,
+    notifyMention,
 } = require('../Helpers')
 const {
     Space,
@@ -55,7 +60,7 @@ const {
 } = require('../models')
 
 // initialise
-ffmpeg.setFfmpegPath(ffmpegPath)
+// ffmpeg.setFfmpegPath(ffmpegPath)
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 aws.config.update({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -72,6 +77,8 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
+
+        // todo: update comment and poll answer notification ids when migrated
 
         // before updates:
         // + remove mediaTypes & originSpaceId from Post model
@@ -1082,13 +1089,13 @@ router.get('/poll-data', async (req, res) => {
             {
                 model: Reaction,
                 where: { itemType: 'poll-answer' },
-                required: false,
                 attributes: ['value', 'state', 'itemId', 'createdAt', 'updatedAt'],
                 include: {
                     model: User,
                     as: 'Creator',
                     attributes: ['id', 'handle', 'name', 'flagImagePath'],
                 },
+                required: false,
             },
         ],
     })
@@ -1227,15 +1234,9 @@ router.get('/scrape-url', authenticateToken, async (req, res) => {
             if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
             if (urlData.image[0] === '/')
                 urlData.image = `https://${new URL(url).hostname}${urlData.image}`
-            res.send(urlData)
-        } catch (e) {
-            console.log('error: ', e)
-            res.send({
-                title: null,
-                description: null,
-                domain: null,
-                image: null,
-            })
+            res.status(200).json(urlData)
+        } catch (error) {
+            res.status(200).json({ data: null, error })
         } finally {
             await browser.close()
         }
@@ -1282,12 +1283,7 @@ router.get('/post-images', async (req, res) => {
         attributes: ['id', 'text'],
         through: { where: { itemBType: 'image', state: 'active' } },
         joinTableAttributes: ['index'],
-        include: [
-            {
-                model: Image,
-                attributes: ['id', 'url'],
-            },
-        ],
+        include: [{ model: Image, attributes: ['id', 'url'] }],
         order: [[sequelize.col('Link.index'), 'ASC']],
         offset: +offset,
         limit: +offset ? 10 : 4,
@@ -1301,20 +1297,23 @@ router.get('/post-images', async (req, res) => {
 })
 
 router.get('/post-audio', async (req, res) => {
-    const { postId } = req.query
+    const { postId, offset } = req.query
     const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
-    const audioBlocks = await post.getBlocks({
+    const blocks = await post.getBlocks({
         attributes: ['id', 'text'],
         through: { where: { itemBType: 'audio', state: 'active' } },
-        joinTableAttributes: [],
-        include: [
-            {
-                model: Audio,
-                attributes: ['id', 'url'],
-            },
-        ],
+        joinTableAttributes: ['index'],
+        include: [{ model: Audio, attributes: ['id', 'url'] }],
+        order: [[sequelize.col('Link.index'), 'ASC']],
+        offset: +offset,
+        limit: +offset ? 10 : 4,
     })
-    res.status(200).json(audioBlocks)
+    const total = +offset
+        ? null
+        : await Link.count({
+              where: { itemAType: 'post', itemAId: postId, itemBType: 'image', state: 'active' },
+          })
+    res.status(200).json({ blocks, total })
 })
 
 router.get('/card-faces', async (req, res) => {
@@ -1343,80 +1342,845 @@ router.get('/card-faces', async (req, res) => {
 })
 
 // POST
+// router.post('/create-post', authenticateToken, (req, res) => {
+//     const accountId = req.user ? req.user.id : null
+//     const { uploadType } = req.query
+//     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+//     else {
+//         async function createPost(postData, files) {
+//             const {
+//                 creatorName,
+//                 creatorHandle,
+//                 mediaTypes,
+//                 spaceIds,
+//                 title,
+//                 text,
+//                 mentions,
+//                 urls,
+//                 images,
+//                 startTime,
+//                 endTime,
+//                 pollType,
+//                 pollAnswersLocked,
+//                 pollAnswers,
+//                 governance,
+//                 pollAction,
+//                 pollThreshold,
+//                 topicGroup,
+//                 topicImageUrl,
+//                 gbgSettings,
+//                 beads,
+//                 sourcePostId,
+//                 sourceCreatorId,
+//                 cardFrontText,
+//                 cardFrontSearchableText,
+//                 cardBackText,
+//                 cardBackSearchableText,
+//                 cardFrontWatermark,
+//                 cardBackWatermark,
+//                 searchableText,
+//                 sourceType,
+//                 sourceId,
+//                 linkDescription,
+//             } = postData
+
+//             const post = await Post.create({
+//                 ...defaultPostValues,
+//                 creatorId: accountId,
+//                 type: 'post',
+//                 mediaTypes,
+//                 title: title || null,
+//                 text: text || null,
+//                 searchableText,
+//                 lastActivity: new Date(),
+//             })
+
+//             const createDirectRelationships = await Promise.all(
+//                 spaceIds.map(
+//                     (spaceId) =>
+//                         new Promise(async (resolve) => {
+//                             const createSpacePost = await SpacePost.create({
+//                                 type: 'post',
+//                                 relationship: 'direct',
+//                                 creatorId: accountId,
+//                                 postId: post.id,
+//                                 spaceId,
+//                                 state: 'active',
+//                             })
+//                             const updateTotalPosts = await Space.increment('totalPosts', {
+//                                 where: { id: spaceId },
+//                                 silent: true,
+//                             })
+//                             Promise.all([createSpacePost, updateTotalPosts])
+//                                 .then(() => resolve())
+//                                 .catch((error) => resolve(error))
+//                         })
+//                 )
+//             )
+
+//             const createIndirectRelationships = await new Promise(async (resolve1) => {
+//                 const spaces = await Space.findAll({
+//                     where: { id: spaceIds, state: 'active' },
+//                     attributes: ['id'],
+//                     include: {
+//                         model: Space,
+//                         as: 'SpaceAncestors',
+//                         attributes: ['id'],
+//                         through: { where: { state: 'open' }, attributes: [] },
+//                     },
+//                 })
+//                 // gather ancestor ids
+//                 const ids = []
+//                 spaces.forEach((space) =>
+//                     ids.push(...space.SpaceAncestors.map((space) => space.id))
+//                 )
+//                 // remove duplicates and direct spaces
+//                 const filteredIds = [...new Set(ids)].filter((id) => !spaceIds.includes(id))
+//                 Promise.all(
+//                     filteredIds.map(
+//                         (id) =>
+//                             new Promise(async (resolve2) => {
+//                                 const createSpacePost = await SpacePost.create({
+//                                     type: 'post',
+//                                     relationship: 'indirect',
+//                                     creatorId: accountId,
+//                                     postId: post.id,
+//                                     spaceId: id,
+//                                     state: 'active',
+//                                 })
+//                                 const updateTotalPosts = await Space.increment('totalPosts', {
+//                                     where: { id },
+//                                     silent: true,
+//                                 })
+//                                 Promise.all([createSpacePost, updateTotalPosts])
+//                                     .then((data) => resolve2(data[0]))
+//                                     .catch((error) => resolve2(error))
+//                             })
+//                     )
+//                 )
+//                     .then((data) => resolve1(data))
+//                     .catch((error) => resolve1(error))
+//             })
+
+//             const notifyMentions = await new Promise(async (resolve) => {
+//                 const users = await User.findAll({
+//                     where: { handle: mentions, state: 'active' },
+//                     attributes: ['id', 'name', 'email', 'emailsDisabled'],
+//                 })
+//                 Promise.all(
+//                     users.map(
+//                         (user) =>
+//                             new Promise(async (reso) => {
+//                                 const sendNotification = await Notification.create({
+//                                     ownerId: user.id,
+//                                     type: 'post-mention',
+//                                     seen: false,
+//                                     userId: accountId,
+//                                     postId: post.id,
+//                                 })
+//                                 const skipEmail =
+//                                     user.emailsDisabled || (await accountMuted(accountId, user))
+//                                 const sendEmail = skipEmail
+//                                     ? null
+//                                     : await sgMail.send({
+//                                           to: user.email,
+//                                           from: {
+//                                               email: 'admin@weco.io',
+//                                               name: 'we { collective }',
+//                                           },
+//                                           subject: 'New notification',
+//                                           text: `
+//                                         Hi ${user.name}, ${creatorName} just mentioned you in a post on weco:
+//                                         http://${config.appURL}/p/${post.id}
+//                                     `,
+//                                           html: `
+//                                         <p>
+//                                             Hi ${user.name},
+//                                             <br/>
+//                                             <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+//                                             just mentioned you in a
+//                                             <a href='${config.appURL}/p/${post.id}'>post</a>
+//                                             on weco
+//                                         </p>
+//                                     `,
+//                                       })
+
+//                                 Promise.all([sendNotification, sendEmail])
+//                                     .then(() => reso())
+//                                     .catch((error) => reso(error))
+//                             })
+//                     )
+//                 )
+//                     .then((data) => resolve(data))
+//                     .catch((error) => resolve(data, error))
+//             })
+
+//             const createUrls = await Promise.all(
+//                 urls.map((urlData) =>
+//                     Url.create({
+//                         type: 'post',
+//                         state: 'active',
+//                         itemId: post.id,
+//                         url: urlData.url,
+//                         image: urlData.image,
+//                         title: urlData.title,
+//                         description: urlData.description,
+//                         domain: urlData.domain,
+//                     })
+//                 )
+//             )
+
+//             const createImages =
+//                 type === 'image'
+//                     ? await Promise.all(
+//                           images.map((image, index) =>
+//                               Image.create({
+//                                   itemId: post.id,
+//                                   type: 'post',
+//                                   creatorId: accountId,
+//                                   index,
+//                                   url:
+//                                       image.url ||
+//                                       files.find((file) => Number(file.originalname) === index)
+//                                           .location,
+//                                   caption: image.caption,
+//                               })
+//                           )
+//                       )
+//                     : null
+
+//             const createAudio =
+//                 type === 'audio'
+//                     ? await Audio.create({
+//                           itemId: post.id,
+//                           state: 'active',
+//                           type: 'post',
+//                           url: files[0].location,
+//                       })
+//                     : null
+
+//             const createEvent =
+//                 type === 'event' || (type === 'glass-bead-game' && gbgSettings.startTime)
+//                     ? await Event.create({
+//                           postId: post.id,
+//                           state: 'active',
+//                           startTime: type === 'event' ? startTime : gbgSettings.startTime,
+//                           endTime: type === 'event' ? endTime : gbgSettings.endTime,
+//                       })
+//                     : null
+
+//             const createPoll =
+//                 type === 'poll'
+//                     ? await new Promise(async (resolve) => {
+//                           const newPoll = await Poll.create({
+//                               postId: post.id,
+//                               type: pollType,
+//                               answersLocked: pollAnswersLocked,
+//                               spaceId: governance ? spaceIds[0] : null,
+//                               action: governance
+//                                   ? pollAction === 'None'
+//                                       ? null
+//                                       : pollAction
+//                                   : null,
+//                               threshold: governance
+//                                   ? pollAction === 'Create spaces'
+//                                       ? pollThreshold
+//                                       : null
+//                                   : null,
+//                               // state: null,
+//                               // endTime: pollEndTime || null,
+//                           })
+//                           Promise.all(
+//                               pollAnswers.map((answer) =>
+//                                   PollAnswer.create({
+//                                       pollId: newPoll.id,
+//                                       creatorId: answer.Creator ? answer.Creator.id : accountId,
+//                                       text: answer.text,
+//                                       state: answer.state || 'active',
+//                                   })
+//                               )
+//                           ).then((answers) => resolve({ poll: newPoll, answers }))
+//                       })
+//                     : null
+
+//             const createGBG =
+//                 type === 'glass-bead-game'
+//                     ? await new Promise(async (resolve) => {
+//                           const topicImageUpload = files.find((f) => f.fieldname === 'topicImage')
+//                           const totalBeads = beads.length + (sourcePostId ? 1 : 0)
+//                           const createGame = await GlassBeadGame.create({
+//                               postId: post.id,
+//                               state: 'active',
+//                               locked: false,
+//                               topicGroup,
+//                               topicImage: topicImageUpload
+//                                   ? topicImageUpload.location
+//                                   : topicImageUrl || null,
+//                               synchronous: gbgSettings.synchronous,
+//                               multiplayer: gbgSettings.multiplayer,
+//                               nextMoveDeadline: gbgSettings.nextMoveDeadline || null,
+//                               allowedBeadTypes: gbgSettings.allowedBeadTypes
+//                                   .join(',')
+//                                   .toLowerCase(),
+//                               playerOrder:
+//                                   gbgSettings.players.length > 0
+//                                       ? gbgSettings.players.map((p) => p.id).join(',')
+//                                       : null,
+//                               totalMoves: gbgSettings.totalMoves || null,
+//                               movesPerPlayer: gbgSettings.movesPerPlayer || null,
+//                               moveDuration: gbgSettings.moveDuration || null,
+//                               moveTimeWindow: gbgSettings.moveTimeWindow || null,
+//                               characterLimit: gbgSettings.characterLimit || null,
+//                               introDuration: gbgSettings.introDuration || null,
+//                               outroDuration: gbgSettings.outroDuration || null,
+//                               intervalDuration: gbgSettings.intervalDuration || null,
+//                               backgroundImage: null,
+//                               backgroundVideo: null,
+//                               backgroundVideoStartTime: null,
+//                               totalBeads,
+//                           })
+
+//                           const linkSourceBead = sourcePostId
+//                               ? await Link.create({
+//                                     state: 'visible',
+//                                     type: 'gbg-post',
+//                                     index: 0,
+//                                     relationship: 'source',
+//                                     creatorId: accountId,
+//                                     itemAId: post.id,
+//                                     itemBId: sourcePostId,
+//                                     totalLikes: 0,
+//                                     totalComments: 0,
+//                                     totalRatings: 0,
+//                                 })
+//                               : null
+
+//                           const notifySourceCreator =
+//                               sourcePostId && sourceCreatorId !== accountId
+//                                   ? await new Promise(async (Resolve) => {
+//                                         const sourceCreator = await User.findOne({
+//                                             where: { id: sourceCreatorId },
+//                                             attributes: ['name', 'email', 'emailsDisabled'],
+//                                         })
+//                                         const notifyCreator = await Notification.create({
+//                                             type: 'new-gbg-from-your-post',
+//                                             ownerId: sourceCreatorId,
+//                                             userId: accountId,
+//                                             postId: post.id,
+//                                             seen: false,
+//                                         })
+//                                         const skipEmail =
+//                                             sourceCreator.emailsDisabled ||
+//                                             (await accountMuted(accountId, sourceCreator))
+//                                         const emailCreator = skipEmail
+//                                             ? null
+//                                             : await sgMail.send({
+//                                                   to: sourceCreator.email,
+//                                                   from: {
+//                                                       email: 'admin@weco.io',
+//                                                       name: 'we { collective }',
+//                                                   },
+//                                                   subject: 'New notification',
+//                                                   text: `
+//                                                 Hi ${sourceCreator.name}, ${creatorName} just created a new glass bead game from your post on weco: https://${config.appURL}/p/${post.id}
+//                                             `,
+//                                                   html: `
+//                                                 <p>
+//                                                     Hi ${sourceCreator.name},
+//                                                     <br/>
+//                                                     <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
+//                                                     just created a new <a href='${config.appURL}/p/${post.id}'>glass bead game</a> from your post on weco.
+//                                                 </p>
+//                                             `,
+//                                               })
+//                                         Promise.all([notifyCreator, emailCreator])
+//                                             .then(() => Resolve())
+//                                             .catch((error) => Resolve(error))
+//                                     })
+//                                   : null
+
+//                           const createBeads = await Promise.all(
+//                               beads.map(
+//                                   (bead, index) =>
+//                                       new Promise(async (Resolve) => {
+//                                           const newBead = await Post.create({
+//                                               ...defaultPostValues,
+//                                               type: `gbg-${bead.type}`,
+//                                               creatorId: accountId,
+//                                               color: bead.color || null,
+//                                               text: bead.text || null,
+//                                               searchableText: bead.searchableText,
+//                                               lastActivity: new Date(),
+//                                           })
+
+//                                           const createBeadUrl =
+//                                               bead.type === 'url'
+//                                                   ? await Url.create({
+//                                                         type: 'post',
+//                                                         state: 'active',
+//                                                         itemId: newBead.id,
+//                                                         creatorId: accountId,
+//                                                         ...bead.Urls[0],
+//                                                     })
+//                                                   : null
+
+//                                           const createBeadAudio =
+//                                               bead.type === 'audio'
+//                                                   ? await Audio.create({
+//                                                         type: 'post',
+//                                                         itemId: newBead.id,
+//                                                         state: 'active',
+//                                                         url:
+//                                                             bead.Audios[0].url ||
+//                                                             files.find(
+//                                                                 (file) =>
+//                                                                     Number(file.originalname) ===
+//                                                                     index
+//                                                             ).location,
+//                                                     })
+//                                                   : null
+
+//                                           const createBeadImage =
+//                                               bead.type === 'image'
+//                                                   ? await Image.create({
+//                                                         type: 'post',
+//                                                         itemId: newBead.id,
+//                                                         creatorId: accountId,
+//                                                         url:
+//                                                             bead.Images[0].url ||
+//                                                             files.find(
+//                                                                 (file) =>
+//                                                                     Number(file.originalname) ===
+//                                                                     index
+//                                                             ).location,
+//                                                         caption: bead.Images[0].caption,
+//                                                     })
+//                                                   : null
+
+//                                           const createLink = await Link.create({
+//                                               state: 'visible',
+//                                               type: 'gbg-post',
+//                                               index: index + 1,
+//                                               creatorId: accountId,
+//                                               itemAId: post.id,
+//                                               itemBId: newBead.id,
+//                                               totalLikes: 0,
+//                                               totalComments: 0,
+//                                               totalRatings: 0,
+//                                           })
+
+//                                           Promise.all([
+//                                               createBeadUrl,
+//                                               createBeadAudio,
+//                                               createBeadImage,
+//                                               createLink,
+//                                           ]).then((data) =>
+//                                               Resolve({
+//                                                   newBead,
+//                                                   url: data[0],
+//                                                   audio: data[1],
+//                                                   image: data[2],
+//                                                   link: data[3],
+//                                               })
+//                                           )
+//                                       })
+//                               )
+//                           )
+
+//                           const setUpPlayers = await new Promise(async (Resolve) => {
+//                               const { multiplayer, players } = gbgSettings
+//                               if (multiplayer && players.length > 0) {
+//                                   const createRelationships = await Promise.all(
+//                                       players.map(
+//                                           async (player, index) =>
+//                                               await UserPost.create({
+//                                                   userId: player.id,
+//                                                   postId: post.id,
+//                                                   type: 'glass-bead-game',
+//                                                   relationship: 'player',
+//                                                   index: index + 1,
+//                                                   color: player.color,
+//                                                   state:
+//                                                       player.id === accountId
+//                                                           ? 'accepted'
+//                                                           : 'pending',
+//                                               })
+//                                       )
+//                                   )
+
+//                                   const otherPlayers = await User.findAll({
+//                                       where: {
+//                                           id: players
+//                                               .filter((p) => p.id !== accountId)
+//                                               .map((p) => p.id),
+//                                       },
+//                                       attributes: [
+//                                           'id',
+//                                           'name',
+//                                           'handle',
+//                                           'email',
+//                                           'emailsDisabled',
+//                                       ],
+//                                   })
+
+//                                   const notifyOtherPlayers = await Promise.all(
+//                                       otherPlayers.map(
+//                                           async (player) =>
+//                                               await new Promise(async (res) => {
+//                                                   const createNotification =
+//                                                       await Notification.create({
+//                                                           type: 'gbg-invitation',
+//                                                           ownerId: player.id,
+//                                                           userId: accountId,
+//                                                           postId: post.id,
+//                                                           seen: false,
+//                                                           state: 'pending',
+//                                                       })
+
+//                                                   const sendEmail = player.emailsDisabled
+//                                                       ? null
+//                                                       : await sgMail.send({
+//                                                             to: player.email,
+//                                                             from: {
+//                                                                 email: 'admin@weco.io',
+//                                                                 name: 'we { collective }',
+//                                                             },
+//                                                             subject: 'New notification',
+//                                                             text: `
+//                                             Hi ${player.name}, ${creatorName} just invited you to join a Weave on weco: https://${config.appURL}/p/${post.id}
+//                                             Log in and go to your notifications to accept or reject the invitation: https://${config.appURL}/u/${player.handle}/notifications
+//                                         `,
+//                                                             html: `
+//                                             <p>
+//                                                 Hi ${player.name},
+//                                                 <br/>
+//                                                 <a href='${
+//                                                     config.appURL
+//                                                 }/u/${creatorHandle}'>${creatorName}</a> just invited you to join a
+//                                                 <a href='${config.appURL}/p/${
+//                                                                 post.id
+//                                                             }'>Weave</a> on weco.
+//                                                 <br/>
+//                                                 Log in and go to your <a href='${config.appURL}/u/${
+//                                                                 player.handle
+//                                                             }/notifications'>notifications</a>
+//                                                 to accept or reject the invitation.
+//                                                 <br/>
+//                                                 <br/>
+//                                                 Weave settings:
+//                                                 <br/>
+//                                                 <br/>
+//                                                 Player order: ${players
+//                                                     .map((p) => p.name)
+//                                                     .join(' → ')}
+//                                                 <br/>
+//                                                 Turns (moves per player): ${
+//                                                     gbgSettings.movesPerPlayer
+//                                                 }
+//                                                 <br/>
+//                                                 Allowed bead types: ${gbgSettings.allowedBeadTypes}
+//                                                 <br/>
+//                                                 Time window for moves: ${
+//                                                     gbgSettings.moveTimeWindow
+//                                                         ? `${gbgSettings.moveTimeWindow} minutes`
+//                                                         : 'Off'
+//                                                 }
+//                                                 <br/>
+//                                                 Character limit: ${
+//                                                     gbgSettings.characterLimit
+//                                                         ? `${gbgSettings.characterLimit} characters`
+//                                                         : 'Off'
+//                                                 }
+//                                                 <br/>
+//                                                 Audio time limit: ${
+//                                                     gbgSettings.moveDuration
+//                                                         ? `${gbgSettings.moveDuration} seconds`
+//                                                         : 'Off'
+//                                                 }
+//                                                 <br/>
+//                                             </p>
+//                                         `,
+//                                                         })
+//                                                   Promise.all([createNotification, sendEmail])
+//                                                       .then(() => res())
+//                                                       .catch((error) => res(error))
+//                                               })
+//                                       )
+//                                   )
+
+//                                   Promise.all([createRelationships, notifyOtherPlayers])
+//                                       .then(() => Resolve())
+//                                       .catch((error) => Resolve(error))
+//                               } else Resolve()
+//                           })
+//                           Promise.all([
+//                               createGame,
+//                               linkSourceBead,
+//                               notifySourceCreator,
+//                               createBeads,
+//                               setUpPlayers,
+//                           ])
+//                               .then((data) => resolve({ game: data[0], beads: data[3] }))
+//                               .catch((error) => resolve(error))
+//                       })
+//                     : null
+
+//             const createCard =
+//                 type === 'card'
+//                     ? await new Promise(async (resolve) => {
+//                           const cardFrontImage = files.find((file) => file.originalname === 'front')
+//                           const cardBackImage = files.find((file) => file.originalname === 'back')
+//                           const createCardFront = await Post.create({
+//                               ...defaultPostValues,
+//                               type: 'card-front',
+//                               creatorId: accountId,
+//                               text: cardFrontText || null,
+//                               searchableText: cardFrontSearchableText,
+//                               watermark: cardFrontWatermark,
+//                               lastActivity: new Date(),
+//                           })
+//                           const createCardBack = await Post.create({
+//                               ...defaultPostValues,
+//                               type: 'card-back',
+//                               creatorId: accountId,
+//                               text: cardBackText || null,
+//                               searchableText: cardBackSearchableText,
+//                               watermark: cardBackWatermark,
+//                               lastActivity: new Date(),
+//                           })
+//                           const linkCardFront = await Link.create({
+//                               state: 'visible',
+//                               type: 'card-post',
+//                               // relationship: 'front',
+//                               creatorId: accountId,
+//                               itemAId: post.id,
+//                               itemBId: createCardFront.id,
+//                               totalLikes: 0,
+//                               totalComments: 0,
+//                               totalRatings: 0,
+//                           })
+//                           const linkCardBack = await Link.create({
+//                               state: 'visible',
+//                               type: 'card-post',
+//                               // relationship: 'back',
+//                               creatorId: accountId,
+//                               itemAId: post.id,
+//                               itemBId: createCardBack.id,
+//                               totalLikes: 0,
+//                               totalComments: 0,
+//                               totalRatings: 0,
+//                           })
+//                           const createCardFrontImage = cardFrontImage
+//                               ? await Image.create({
+//                                     type: 'post',
+//                                     itemId: createCardFront.id,
+//                                     creatorId: accountId,
+//                                     url: cardFrontImage.location,
+//                                 })
+//                               : null
+//                           const createCardBackImage = cardBackImage
+//                               ? await Image.create({
+//                                     type: 'post',
+//                                     itemId: createCardBack.id,
+//                                     creatorId: accountId,
+//                                     url: cardBackImage.location,
+//                                 })
+//                               : null
+
+//                           Promise.all([
+//                               createCardFront,
+//                               createCardBack,
+//                               linkCardFront,
+//                               linkCardBack,
+//                               createCardFrontImage,
+//                               createCardBackImage,
+//                           ])
+//                               .then((data) =>
+//                                   resolve({
+//                                       front: {
+//                                           ...data[0].dataValues,
+//                                           Images: cardFrontImage ? [data[4].dataValues] : [],
+//                                       },
+//                                       back: {
+//                                           ...data[1].dataValues,
+//                                           Images: cardBackImage ? [data[5].dataValues] : [],
+//                                       },
+//                                   })
+//                               )
+//                               .catch((error) => resolve(error))
+//                       })
+//                     : null
+
+//             const createLink = sourceId
+//                 ? await new Promise(async (resolve) => {
+//                       // todo: handle other source types when needed
+//                       const createNewLink = await Link.create({
+//                           state: 'visible',
+//                           type: `${sourceType}-post`,
+//                           creatorId: accountId,
+//                           itemAId: sourceId,
+//                           itemBId: post.id,
+//                           description: linkDescription,
+//                           totalLikes: 0,
+//                           totalComments: 0,
+//                           totalRatings: 0,
+//                       })
+//                       const updateSourceLinks = await Post.increment('totalLinks', {
+//                           where: { id: sourceId },
+//                           silent: true,
+//                       })
+//                       const updateTargetLinks = await post.update(
+//                           { totalLinks: 1 },
+//                           { where: { id: post.id }, silent: true }
+//                       )
+//                       Promise.all([createNewLink, updateSourceLinks, updateTargetLinks])
+//                           .then(() => resolve())
+//                           .catch((error) => resolve(error))
+//                   })
+//                 : null
+
+//             Promise.all([
+//                 createDirectRelationships,
+//                 createIndirectRelationships,
+//                 notifyMentions,
+//                 createUrls,
+//                 createImages,
+//                 createAudio,
+//                 createEvent,
+//                 createPoll,
+//                 createGBG,
+//                 createCard,
+//                 createLink,
+//             ]).then((data) => {
+//                 res.status(200).json({
+//                     post,
+//                     indirectSpaces: data[1],
+//                     images: data[4],
+//                     audio: data[5],
+//                     event: data[6],
+//                     pollData: data[7],
+//                     gbg: data[8],
+//                     card: data[9],
+//                 })
+//             })
+//         }
+
+//         // todo: single upload process (like glass bead game) that handles all file uploads
+
+//         if (uploadType === 'image-file') {
+//             multer(multerParams(uploadType, accountId)).any('file')(req, res, (error) => {
+//                 const { files, body } = req
+//                 if (noMulterErrors(error, res)) createPost(JSON.parse(body.postData), files)
+//             })
+//         } else if (uploadType === 'audio-file') {
+//             multer(multerParams(uploadType, accountId)).single('file')(req, res, (error) => {
+//                 const { file, body } = req
+//                 if (noMulterErrors(error, res)) createPost(JSON.parse(body.postData), [file])
+//             })
+//         } else if (uploadType === 'audio-blob') {
+//             multer(multerParams(uploadType, accountId)).single('file')(req, res, (error) => {
+//                 const { file, body } = req
+//                 if (noMulterErrors(error, res)) {
+//                     convertAndUploadAudio(file, accountId, 'post').then((location) =>
+//                         createPost(JSON.parse(body.postData), [{ location }])
+//                     )
+//                 }
+//             })
+//         } else if (uploadType === 'glass-bead-game') {
+//             multer(multerParams(uploadType, accountId)).any()(req, res, (error) => {
+//                 const { files, body } = req
+//                 if (noMulterErrors(error, res)) {
+//                     Promise.all(
+//                         files.map(
+//                             async (file) =>
+//                                 await new Promise((resolve) => {
+//                                     if (file.fieldname === 'audioBlob') {
+//                                         convertAndUploadAudio(file, accountId, 'bead').then((url) =>
+//                                             resolve({ ...file, location: url })
+//                                         )
+//                                     } else if (file.fieldname !== 'postData') {
+//                                         uploadBeadFile(file, accountId).then((url) =>
+//                                             resolve({ ...file, location: url })
+//                                         )
+//                                     }
+//                                 })
+//                         )
+//                     ).then((newFiles) => {
+//                         createPost(JSON.parse(body.postData), newFiles)
+//                     })
+//                 }
+//             })
+//         } else {
+//             createPost(req.body)
+//         }
+//     }
+// })
+
 router.post('/create-post', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { uploadType } = req.query
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        async function createPost(postData, files) {
+        async function createPost(data, files) {
+            console.log(777, data, files)
             const {
-                creatorName,
-                creatorHandle,
-                type,
-                spaceIds,
-                title,
+                type, // post, comment, poll-answer
+                mediaTypes,
+                spaceIds, // not present in comments
+                title, // not present in comments
                 text,
+                searchableText,
                 mentions,
                 urls,
                 images,
-                startTime,
-                endTime,
-                pollType,
-                pollAnswersLocked,
-                pollAnswers,
-                governance,
-                pollAction,
-                pollThreshold,
-                topicGroup,
-                topicImageUrl,
-                gbgSettings,
-                beads,
-                sourcePostId,
-                sourceCreatorId,
-                cardFrontText,
-                cardFrontSearchableText,
-                cardBackText,
-                cardBackSearchableText,
-                cardFrontWatermark,
-                cardBackWatermark,
-                searchableText,
-                sourceType,
-                sourceId,
-                linkDescription,
-            } = postData
+                audios,
+                event,
+                poll,
+                glassBeadGame,
+                card,
+                link, // sourceId, sourceCreatorId, description etc. (used for comments as well?)
+            } = data
+
+            const creator = await User.findOne({
+                where: { id: accountId },
+                attributes: ['name', 'handle'],
+            })
 
             const post = await Post.create({
                 ...defaultPostValues,
-                type,
                 creatorId: accountId,
+                type,
+                mediaTypes,
                 title: title || null,
-                text: text || null,
+                text,
                 searchableText,
                 lastActivity: new Date(),
             })
 
-            const createDirectRelationships = await Promise.all(
-                spaceIds.map(
-                    (spaceId) =>
-                        new Promise(async (resolve) => {
-                            const createSpacePost = await SpacePost.create({
-                                type: 'post',
-                                relationship: 'direct',
-                                creatorId: accountId,
-                                postId: post.id,
-                                spaceId,
-                                state: 'active',
-                            })
-                            const updateTotalPosts = await Space.increment('totalPosts', {
-                                where: { id: spaceId },
-                                silent: true,
-                            })
-                            Promise.all([createSpacePost, updateTotalPosts])
-                                .then(() => resolve())
-                                .catch((error) => resolve(error))
-                        })
-                )
-            )
+            // todo: set up createSpacePost function & merge direct and inderect promises into one 'addSpaces' promise
+            const createDirectRelationships = spaceIds
+                ? await Promise.all(
+                      spaceIds.map(
+                          (spaceId) =>
+                              new Promise(async (resolve) => {
+                                  const createSpacePost = await SpacePost.create({
+                                      type: 'post',
+                                      relationship: 'direct',
+                                      creatorId: accountId,
+                                      postId: post.id,
+                                      spaceId,
+                                      state: 'active',
+                                  })
+                                  const updateTotalPosts = await Space.increment('totalPosts', {
+                                      where: { id: spaceId },
+                                      silent: true,
+                                  })
+                                  Promise.all([createSpacePost, updateTotalPosts])
+                                      .then(() => resolve())
+                                      .catch((error) => resolve(error))
+                              })
+                      )
+                  )
+                : null
 
             const createIndirectRelationships = await new Promise(async (resolve1) => {
                 const spaces = await Space.findAll({
@@ -1462,229 +2226,160 @@ router.post('/create-post', authenticateToken, (req, res) => {
                     .catch((error) => resolve1(error))
             })
 
-            const notifyMentions = await new Promise(async (resolve) => {
-                const users = await User.findAll({
-                    where: { handle: mentions, state: 'active' },
-                    attributes: ['id', 'name', 'email', 'emailsDisabled'],
-                })
-                Promise.all(
-                    users.map(
-                        (user) =>
-                            new Promise(async (reso) => {
-                                const sendNotification = await Notification.create({
-                                    ownerId: user.id,
-                                    type: 'post-mention',
-                                    seen: false,
-                                    userId: accountId,
-                                    postId: post.id,
-                                })
-                                const skipEmail =
-                                    user.emailsDisabled || (await accountMuted(accountId, user))
-                                const sendEmail = skipEmail
-                                    ? null
-                                    : await sgMail.send({
-                                          to: user.email,
-                                          from: {
-                                              email: 'admin@weco.io',
-                                              name: 'we { collective }',
-                                          },
-                                          subject: 'New notification',
-                                          text: `
-                                        Hi ${user.name}, ${creatorName} just mentioned you in a post on weco:
-                                        http://${config.appURL}/p/${post.id}
-                                    `,
-                                          html: `
-                                        <p>
-                                            Hi ${user.name},
-                                            <br/>
-                                            <a href='${config.appURL}/u/${creatorHandle}'>${creatorName}</a>
-                                            just mentioned you in a 
-                                            <a href='${config.appURL}/p/${post.id}'>post</a>
-                                            on weco
-                                        </p>
-                                    `,
-                                      })
+            const notifyMentions = mentions.length
+                ? await new Promise(async (resolve) => {
+                      const users = await User.findAll({
+                          where: { id: mentions, state: 'active' },
+                          attributes: ['id', 'name', 'email', 'emailsDisabled'],
+                      })
+                      Promise.all(users.map((user) => notifyMention(creator, user, post.id)))
+                          .then(() => resolve())
+                          .catch((error) => resolve(data, error))
+                  })
+                : null
 
-                                Promise.all([sendNotification, sendEmail])
-                                    .then(() => reso())
-                                    .catch((error) => reso(error))
-                            })
-                    )
-                )
-                    .then((data) => resolve(data))
-                    .catch((error) => resolve(data, error))
-            })
+            // const createUrls = urls.length
+            //     ? await Promise.all(urls.map((url, i) => createUrl(accountId, post.id, url, i)))
+            //     : null
+
+            // const createImages = images.length
+            //     ? await Promise.all(
+            //           images.map((image, i) => createImage(accountId, post.id, image, i, files))
+            //       )
+            //     : null
 
             const createUrls = await Promise.all(
-                urls.map((urlData) =>
-                    Url.create({
-                        type: 'post',
-                        state: 'active',
-                        itemId: post.id,
-                        url: urlData.url,
-                        image: urlData.image,
-                        title: urlData.title,
-                        description: urlData.description,
-                        domain: urlData.domain,
-                    })
-                )
+                urls.map((url, i) => createUrl(accountId, post.id, url, i))
             )
 
-            const createImages =
-                type === 'image'
-                    ? await Promise.all(
-                          images.map((image, index) =>
-                              Image.create({
-                                  itemId: post.id,
-                                  type: 'post',
-                                  creatorId: accountId,
-                                  index,
-                                  url:
-                                      image.url ||
-                                      files.find((file) => Number(file.originalname) === index)
-                                          .location,
-                                  caption: image.caption,
+            const createImages = await Promise.all(
+                images.map((image, i) => createImage(accountId, post.id, image, i, files))
+            )
+
+            const createAudios = await Promise.all(
+                audios.map((audio, i) => createAudio(accountId, post.id, audio, i, files))
+            )
+
+            const createEvent = event
+                ? await Event.create({
+                      postId: post.id,
+                      state: 'active',
+                      startTime: event.startTime,
+                      endTime: event.endTime,
+                  })
+                : null
+
+            // todo: set up create poll answer function
+            const createPoll = poll
+                ? await new Promise(async (resolve) => {
+                      const { answers, answersLocked, governance, action, threshold } = poll // type
+                      const newPoll = await Poll.create({
+                          postId: post.id,
+                          type: poll.type,
+                          answersLocked: answersLocked,
+                          spaceId: governance ? spaceIds[0] : null,
+                          action: governance ? (action === 'None' ? null : action) : null,
+                          threshold: governance
+                              ? action === 'Create spaces'
+                                  ? threshold
+                                  : null
+                              : null,
+                          // state: null,
+                          // endTime: pollEndTime || null,
+                      })
+                      Promise.all(
+                          answers.map((answer) =>
+                              PollAnswer.create({
+                                  pollId: newPoll.id,
+                                  creatorId: answer.Creator ? answer.Creator.id : accountId,
+                                  text: answer.text,
+                                  state: answer.state || 'active',
                               })
                           )
-                      )
-                    : null
+                      ).then((answers) => resolve({ poll: newPoll, answers }))
+                  })
+                : null
 
-            const createAudio =
-                type === 'audio'
-                    ? await Audio.create({
-                          itemId: post.id,
-                          state: 'active',
-                          type: 'post',
-                          url: files[0].location,
-                      })
-                    : null
-
-            const createEvent =
-                type === 'event' || (type === 'glass-bead-game' && gbgSettings.startTime)
-                    ? await Event.create({
+            const createGBG = mediaTypes.includes('glass-bead-game')
+                ? await new Promise(async (resolve) => {
+                      const { topic, settings, beads } = glassBeadGame
+                      const topicImageUpload = files.find((f) => f.fieldname === 'topicImage')
+                      const totalBeads = beads.length + (sourcePostId ? 1 : 0)
+                      const createGame = await GlassBeadGame.create({
                           postId: post.id,
                           state: 'active',
-                          startTime: type === 'event' ? startTime : gbgSettings.startTime,
-                          endTime: type === 'event' ? endTime : gbgSettings.endTime,
-                      })
-                    : null
-
-            const createPoll =
-                type === 'poll'
-                    ? await new Promise(async (resolve) => {
-                          const newPoll = await Poll.create({
-                              postId: post.id,
-                              type: pollType,
-                              answersLocked: pollAnswersLocked,
-                              spaceId: governance ? spaceIds[0] : null,
-                              action: governance
-                                  ? pollAction === 'None'
-                                      ? null
-                                      : pollAction
+                          locked: false,
+                          topicGroup,
+                          topicImage: topicImageUpload
+                              ? topicImageUpload.location
+                              : topicImageUrl || null,
+                          synchronous: gbgSettings.synchronous,
+                          multiplayer: gbgSettings.multiplayer,
+                          nextMoveDeadline: gbgSettings.nextMoveDeadline || null,
+                          allowedBeadTypes: gbgSettings.allowedBeadTypes.join(',').toLowerCase(),
+                          playerOrder:
+                              gbgSettings.players.length > 0
+                                  ? gbgSettings.players.map((p) => p.id).join(',')
                                   : null,
-                              threshold: governance
-                                  ? pollAction === 'Create spaces'
-                                      ? pollThreshold
-                                      : null
-                                  : null,
-                              // state: null,
-                              // endTime: pollEndTime || null,
-                          })
-                          Promise.all(
-                              pollAnswers.map((answer) =>
-                                  PollAnswer.create({
-                                      pollId: newPoll.id,
-                                      creatorId: answer.Creator ? answer.Creator.id : accountId,
-                                      text: answer.text,
-                                      state: answer.state || 'active',
-                                  })
-                              )
-                          ).then((answers) => resolve({ poll: newPoll, answers }))
+                          totalMoves: gbgSettings.totalMoves || null,
+                          movesPerPlayer: gbgSettings.movesPerPlayer || null,
+                          moveDuration: gbgSettings.moveDuration || null,
+                          moveTimeWindow: gbgSettings.moveTimeWindow || null,
+                          characterLimit: gbgSettings.characterLimit || null,
+                          introDuration: gbgSettings.introDuration || null,
+                          outroDuration: gbgSettings.outroDuration || null,
+                          intervalDuration: gbgSettings.intervalDuration || null,
+                          backgroundImage: null,
+                          backgroundVideo: null,
+                          backgroundVideoStartTime: null,
+                          totalBeads,
                       })
-                    : null
 
-            const createGBG =
-                type === 'glass-bead-game'
-                    ? await new Promise(async (resolve) => {
-                          const topicImageUpload = files.find((f) => f.fieldname === 'topicImage')
-                          const totalBeads = beads.length + (sourcePostId ? 1 : 0)
-                          const createGame = await GlassBeadGame.create({
-                              postId: post.id,
-                              state: 'active',
-                              locked: false,
-                              topicGroup,
-                              topicImage: topicImageUpload
-                                  ? topicImageUpload.location
-                                  : topicImageUrl || null,
-                              synchronous: gbgSettings.synchronous,
-                              multiplayer: gbgSettings.multiplayer,
-                              nextMoveDeadline: gbgSettings.nextMoveDeadline || null,
-                              allowedBeadTypes: gbgSettings.allowedBeadTypes
-                                  .join(',')
-                                  .toLowerCase(),
-                              playerOrder:
-                                  gbgSettings.players.length > 0
-                                      ? gbgSettings.players.map((p) => p.id).join(',')
-                                      : null,
-                              totalMoves: gbgSettings.totalMoves || null,
-                              movesPerPlayer: gbgSettings.movesPerPlayer || null,
-                              moveDuration: gbgSettings.moveDuration || null,
-                              moveTimeWindow: gbgSettings.moveTimeWindow || null,
-                              characterLimit: gbgSettings.characterLimit || null,
-                              introDuration: gbgSettings.introDuration || null,
-                              outroDuration: gbgSettings.outroDuration || null,
-                              intervalDuration: gbgSettings.intervalDuration || null,
-                              backgroundImage: null,
-                              backgroundVideo: null,
-                              backgroundVideoStartTime: null,
-                              totalBeads,
-                          })
+                      const linkSourceBead = sourcePostId
+                          ? await Link.create({
+                                state: 'visible',
+                                type: 'gbg-post',
+                                index: 0,
+                                relationship: 'source',
+                                creatorId: accountId,
+                                itemAId: post.id,
+                                itemBId: sourcePostId,
+                                totalLikes: 0,
+                                totalComments: 0,
+                                totalRatings: 0,
+                            })
+                          : null
 
-                          const linkSourceBead = sourcePostId
-                              ? await Link.create({
-                                    state: 'visible',
-                                    type: 'gbg-post',
-                                    index: 0,
-                                    relationship: 'source',
-                                    creatorId: accountId,
-                                    itemAId: post.id,
-                                    itemBId: sourcePostId,
-                                    totalLikes: 0,
-                                    totalComments: 0,
-                                    totalRatings: 0,
-                                })
-                              : null
-
-                          const notifySourceCreator =
-                              sourcePostId && sourceCreatorId !== accountId
-                                  ? await new Promise(async (Resolve) => {
-                                        const sourceCreator = await User.findOne({
-                                            where: { id: sourceCreatorId },
-                                            attributes: ['name', 'email', 'emailsDisabled'],
-                                        })
-                                        const notifyCreator = await Notification.create({
-                                            type: 'new-gbg-from-your-post',
-                                            ownerId: sourceCreatorId,
-                                            userId: accountId,
-                                            postId: post.id,
-                                            seen: false,
-                                        })
-                                        const skipEmail =
-                                            sourceCreator.emailsDisabled ||
-                                            (await accountMuted(accountId, sourceCreator))
-                                        const emailCreator = skipEmail
-                                            ? null
-                                            : await sgMail.send({
-                                                  to: sourceCreator.email,
-                                                  from: {
-                                                      email: 'admin@weco.io',
-                                                      name: 'we { collective }',
-                                                  },
-                                                  subject: 'New notification',
-                                                  text: `
+                      const notifySourceCreator =
+                          sourcePostId && sourceCreatorId !== accountId
+                              ? await new Promise(async (Resolve) => {
+                                    const sourceCreator = await User.findOne({
+                                        where: { id: sourceCreatorId },
+                                        attributes: ['name', 'email', 'emailsDisabled'],
+                                    })
+                                    const notifyCreator = await Notification.create({
+                                        type: 'new-gbg-from-your-post',
+                                        ownerId: sourceCreatorId,
+                                        userId: accountId,
+                                        postId: post.id,
+                                        seen: false,
+                                    })
+                                    const skipEmail =
+                                        sourceCreator.emailsDisabled ||
+                                        (await accountMuted(accountId, sourceCreator))
+                                    const emailCreator = skipEmail
+                                        ? null
+                                        : await sgMail.send({
+                                              to: sourceCreator.email,
+                                              from: {
+                                                  email: 'admin@weco.io',
+                                                  name: 'we { collective }',
+                                              },
+                                              subject: 'New notification',
+                                              text: `
                                                 Hi ${sourceCreator.name}, ${creatorName} just created a new glass bead game from your post on weco: https://${config.appURL}/p/${post.id}
                                             `,
-                                                  html: `
+                                              html: `
                                                 <p>
                                                     Hi ${sourceCreator.name},
                                                     <br/>
@@ -1692,165 +2387,154 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                     just created a new <a href='${config.appURL}/p/${post.id}'>glass bead game</a> from your post on weco.
                                                 </p>
                                             `,
-                                              })
-                                        Promise.all([notifyCreator, emailCreator])
-                                            .then(() => Resolve())
-                                            .catch((error) => Resolve(error))
-                                    })
-                                  : null
-
-                          const createBeads = await Promise.all(
-                              beads.map(
-                                  (bead, index) =>
-                                      new Promise(async (Resolve) => {
-                                          const newBead = await Post.create({
-                                              ...defaultPostValues,
-                                              type: `gbg-${bead.type}`,
-                                              creatorId: accountId,
-                                              color: bead.color || null,
-                                              text: bead.text || null,
-                                              searchableText: bead.searchableText,
-                                              lastActivity: new Date(),
                                           })
+                                    Promise.all([notifyCreator, emailCreator])
+                                        .then(() => Resolve())
+                                        .catch((error) => Resolve(error))
+                                })
+                              : null
 
-                                          const createBeadUrl =
-                                              bead.type === 'url'
-                                                  ? await Url.create({
-                                                        type: 'post',
-                                                        state: 'active',
-                                                        itemId: newBead.id,
-                                                        creatorId: accountId,
-                                                        ...bead.Urls[0],
-                                                    })
-                                                  : null
-
-                                          const createBeadAudio =
-                                              bead.type === 'audio'
-                                                  ? await Audio.create({
-                                                        type: 'post',
-                                                        itemId: newBead.id,
-                                                        state: 'active',
-                                                        url:
-                                                            bead.Audios[0].url ||
-                                                            files.find(
-                                                                (file) =>
-                                                                    Number(file.originalname) ===
-                                                                    index
-                                                            ).location,
-                                                    })
-                                                  : null
-
-                                          const createBeadImage =
-                                              bead.type === 'image'
-                                                  ? await Image.create({
-                                                        type: 'post',
-                                                        itemId: newBead.id,
-                                                        creatorId: accountId,
-                                                        url:
-                                                            bead.Images[0].url ||
-                                                            files.find(
-                                                                (file) =>
-                                                                    Number(file.originalname) ===
-                                                                    index
-                                                            ).location,
-                                                        caption: bead.Images[0].caption,
-                                                    })
-                                                  : null
-
-                                          const createLink = await Link.create({
-                                              state: 'visible',
-                                              type: 'gbg-post',
-                                              index: index + 1,
-                                              creatorId: accountId,
-                                              itemAId: post.id,
-                                              itemBId: newBead.id,
-                                              totalLikes: 0,
-                                              totalComments: 0,
-                                              totalRatings: 0,
-                                          })
-
-                                          Promise.all([
-                                              createBeadUrl,
-                                              createBeadAudio,
-                                              createBeadImage,
-                                              createLink,
-                                          ]).then((data) =>
-                                              Resolve({
-                                                  newBead,
-                                                  url: data[0],
-                                                  audio: data[1],
-                                                  image: data[2],
-                                                  link: data[3],
-                                              })
-                                          )
+                      const createBeads = await Promise.all(
+                          beads.map(
+                              (bead, index) =>
+                                  new Promise(async (Resolve) => {
+                                      const newBead = await Post.create({
+                                          ...defaultPostValues,
+                                          type: `gbg-${bead.type}`,
+                                          creatorId: accountId,
+                                          color: bead.color || null,
+                                          text: bead.text || null,
+                                          searchableText: bead.searchableText,
+                                          lastActivity: new Date(),
                                       })
-                              )
-                          )
 
-                          const setUpPlayers = await new Promise(async (Resolve) => {
-                              const { multiplayer, players } = gbgSettings
-                              if (multiplayer && players.length > 0) {
-                                  const createRelationships = await Promise.all(
-                                      players.map(
-                                          async (player, index) =>
-                                              await UserPost.create({
-                                                  userId: player.id,
-                                                  postId: post.id,
-                                                  type: 'glass-bead-game',
-                                                  relationship: 'player',
-                                                  index: index + 1,
-                                                  color: player.color,
-                                                  state:
-                                                      player.id === accountId
-                                                          ? 'accepted'
-                                                          : 'pending',
-                                              })
+                                      const createBeadUrl =
+                                          bead.type === 'url'
+                                              ? await Url.create({
+                                                    type: 'post',
+                                                    state: 'active',
+                                                    itemId: newBead.id,
+                                                    creatorId: accountId,
+                                                    ...bead.Urls[0],
+                                                })
+                                              : null
+
+                                      const createBeadAudio =
+                                          bead.type === 'audio'
+                                              ? await Audio.create({
+                                                    type: 'post',
+                                                    itemId: newBead.id,
+                                                    state: 'active',
+                                                    url:
+                                                        bead.Audios[0].url ||
+                                                        files.find(
+                                                            (file) =>
+                                                                Number(file.originalname) === index
+                                                        ).location,
+                                                })
+                                              : null
+
+                                      const createBeadImage =
+                                          bead.type === 'image'
+                                              ? await Image.create({
+                                                    type: 'post',
+                                                    itemId: newBead.id,
+                                                    creatorId: accountId,
+                                                    url:
+                                                        bead.Images[0].url ||
+                                                        files.find(
+                                                            (file) =>
+                                                                Number(file.originalname) === index
+                                                        ).location,
+                                                    caption: bead.Images[0].caption,
+                                                })
+                                              : null
+
+                                      const createLink = await Link.create({
+                                          state: 'visible',
+                                          type: 'gbg-post',
+                                          index: index + 1,
+                                          creatorId: accountId,
+                                          itemAId: post.id,
+                                          itemBId: newBead.id,
+                                          totalLikes: 0,
+                                          totalComments: 0,
+                                          totalRatings: 0,
+                                      })
+
+                                      Promise.all([
+                                          createBeadUrl,
+                                          createBeadAudio,
+                                          createBeadImage,
+                                          createLink,
+                                      ]).then((data) =>
+                                          Resolve({
+                                              newBead,
+                                              url: data[0],
+                                              audio: data[1],
+                                              image: data[2],
+                                              link: data[3],
+                                          })
                                       )
-                                  )
-
-                                  const otherPlayers = await User.findAll({
-                                      where: {
-                                          id: players
-                                              .filter((p) => p.id !== accountId)
-                                              .map((p) => p.id),
-                                      },
-                                      attributes: [
-                                          'id',
-                                          'name',
-                                          'handle',
-                                          'email',
-                                          'emailsDisabled',
-                                      ],
                                   })
+                          )
+                      )
 
-                                  const notifyOtherPlayers = await Promise.all(
-                                      otherPlayers.map(
-                                          async (player) =>
-                                              await new Promise(async (res) => {
-                                                  const createNotification =
-                                                      await Notification.create({
-                                                          type: 'gbg-invitation',
-                                                          ownerId: player.id,
-                                                          userId: accountId,
-                                                          postId: post.id,
-                                                          seen: false,
-                                                          state: 'pending',
-                                                      })
+                      const setUpPlayers = await new Promise(async (Resolve) => {
+                          const { multiplayer, players } = gbgSettings
+                          if (multiplayer && players.length > 0) {
+                              const createRelationships = await Promise.all(
+                                  players.map(
+                                      async (player, index) =>
+                                          await UserPost.create({
+                                              userId: player.id,
+                                              postId: post.id,
+                                              type: 'glass-bead-game',
+                                              relationship: 'player',
+                                              index: index + 1,
+                                              color: player.color,
+                                              state:
+                                                  player.id === accountId ? 'accepted' : 'pending',
+                                          })
+                                  )
+                              )
 
-                                                  const sendEmail = player.emailsDisabled
-                                                      ? null
-                                                      : await sgMail.send({
-                                                            to: player.email,
-                                                            from: {
-                                                                email: 'admin@weco.io',
-                                                                name: 'we { collective }',
-                                                            },
-                                                            subject: 'New notification',
-                                                            text: `
+                              const otherPlayers = await User.findAll({
+                                  where: {
+                                      id: players
+                                          .filter((p) => p.id !== accountId)
+                                          .map((p) => p.id),
+                                  },
+                                  attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
+                              })
+
+                              const notifyOtherPlayers = await Promise.all(
+                                  otherPlayers.map(
+                                      async (player) =>
+                                          await new Promise(async (res) => {
+                                              const createNotification = await Notification.create({
+                                                  type: 'gbg-invitation',
+                                                  ownerId: player.id,
+                                                  userId: accountId,
+                                                  postId: post.id,
+                                                  seen: false,
+                                                  state: 'pending',
+                                              })
+
+                                              const sendEmail = player.emailsDisabled
+                                                  ? null
+                                                  : await sgMail.send({
+                                                        to: player.email,
+                                                        from: {
+                                                            email: 'admin@weco.io',
+                                                            name: 'we { collective }',
+                                                        },
+                                                        subject: 'New notification',
+                                                        text: `
                                             Hi ${player.name}, ${creatorName} just invited you to join a Weave on weco: https://${config.appURL}/p/${post.id}
                                             Log in and go to your notifications to accept or reject the invitation: https://${config.appURL}/u/${player.handle}/notifications
                                         `,
-                                                            html: `
+                                                        html: `
                                             <p>
                                                 Hi ${player.name},
                                                 <br/>
@@ -1858,12 +2542,12 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                     config.appURL
                                                 }/u/${creatorHandle}'>${creatorName}</a> just invited you to join a 
                                                 <a href='${config.appURL}/p/${
-                                                                post.id
-                                                            }'>Weave</a> on weco.
+                                                            post.id
+                                                        }'>Weave</a> on weco.
                                                 <br/>
                                                 Log in and go to your <a href='${config.appURL}/u/${
-                                                                player.handle
-                                                            }/notifications'>notifications</a> 
+                                                            player.handle
+                                                        }/notifications'>notifications</a> 
                                                 to accept or reject the invitation.
                                                 <br/>
                                                 <br/>
@@ -1900,116 +2584,116 @@ router.post('/create-post', authenticateToken, (req, res) => {
                                                 <br/>
                                             </p>
                                         `,
-                                                        })
-                                                  Promise.all([createNotification, sendEmail])
-                                                      .then(() => res())
-                                                      .catch((error) => res(error))
-                                              })
-                                      )
+                                                    })
+                                              Promise.all([createNotification, sendEmail])
+                                                  .then(() => res())
+                                                  .catch((error) => res(error))
+                                          })
                                   )
-
-                                  Promise.all([createRelationships, notifyOtherPlayers])
-                                      .then(() => Resolve())
-                                      .catch((error) => Resolve(error))
-                              } else Resolve()
-                          })
-                          Promise.all([
-                              createGame,
-                              linkSourceBead,
-                              notifySourceCreator,
-                              createBeads,
-                              setUpPlayers,
-                          ])
-                              .then((data) => resolve({ game: data[0], beads: data[3] }))
-                              .catch((error) => resolve(error))
-                      })
-                    : null
-
-            const createCard =
-                type === 'card'
-                    ? await new Promise(async (resolve) => {
-                          const cardFrontImage = files.find((file) => file.originalname === 'front')
-                          const cardBackImage = files.find((file) => file.originalname === 'back')
-                          const createCardFront = await Post.create({
-                              ...defaultPostValues,
-                              type: 'card-front',
-                              creatorId: accountId,
-                              text: cardFrontText || null,
-                              searchableText: cardFrontSearchableText,
-                              watermark: cardFrontWatermark,
-                              lastActivity: new Date(),
-                          })
-                          const createCardBack = await Post.create({
-                              ...defaultPostValues,
-                              type: 'card-back',
-                              creatorId: accountId,
-                              text: cardBackText || null,
-                              searchableText: cardBackSearchableText,
-                              watermark: cardBackWatermark,
-                              lastActivity: new Date(),
-                          })
-                          const linkCardFront = await Link.create({
-                              state: 'visible',
-                              type: 'card-post',
-                              // relationship: 'front',
-                              creatorId: accountId,
-                              itemAId: post.id,
-                              itemBId: createCardFront.id,
-                              totalLikes: 0,
-                              totalComments: 0,
-                              totalRatings: 0,
-                          })
-                          const linkCardBack = await Link.create({
-                              state: 'visible',
-                              type: 'card-post',
-                              // relationship: 'back',
-                              creatorId: accountId,
-                              itemAId: post.id,
-                              itemBId: createCardBack.id,
-                              totalLikes: 0,
-                              totalComments: 0,
-                              totalRatings: 0,
-                          })
-                          const createCardFrontImage = cardFrontImage
-                              ? await Image.create({
-                                    type: 'post',
-                                    itemId: createCardFront.id,
-                                    creatorId: accountId,
-                                    url: cardFrontImage.location,
-                                })
-                              : null
-                          const createCardBackImage = cardBackImage
-                              ? await Image.create({
-                                    type: 'post',
-                                    itemId: createCardBack.id,
-                                    creatorId: accountId,
-                                    url: cardBackImage.location,
-                                })
-                              : null
-
-                          Promise.all([
-                              createCardFront,
-                              createCardBack,
-                              linkCardFront,
-                              linkCardBack,
-                              createCardFrontImage,
-                              createCardBackImage,
-                          ])
-                              .then((data) =>
-                                  resolve({
-                                      front: {
-                                          ...data[0].dataValues,
-                                          Images: cardFrontImage ? [data[4].dataValues] : [],
-                                      },
-                                      back: {
-                                          ...data[1].dataValues,
-                                          Images: cardBackImage ? [data[5].dataValues] : [],
-                                      },
-                                  })
                               )
-                              .catch((error) => resolve(error))
+
+                              Promise.all([createRelationships, notifyOtherPlayers])
+                                  .then(() => Resolve())
+                                  .catch((error) => Resolve(error))
+                          } else Resolve()
                       })
-                    : null
+                      Promise.all([
+                          createGame,
+                          linkSourceBead,
+                          notifySourceCreator,
+                          createBeads,
+                          setUpPlayers,
+                      ])
+                          .then((data) => resolve({ game: data[0], beads: data[3] }))
+                          .catch((error) => resolve(error))
+                  })
+                : null
+
+            const createCard = mediaTypes.includes('card')
+                ? await new Promise(async (resolve) => {
+                      const { front, back } = card
+                      const cardFrontImage = files.find((file) => file.originalname === 'front')
+                      const cardBackImage = files.find((file) => file.originalname === 'back')
+                      const createCardFront = await Post.create({
+                          ...defaultPostValues,
+                          type: 'card-front',
+                          creatorId: accountId,
+                          text: cardFrontText || null,
+                          searchableText: cardFrontSearchableText,
+                          watermark: cardFrontWatermark,
+                          lastActivity: new Date(),
+                      })
+                      const createCardBack = await Post.create({
+                          ...defaultPostValues,
+                          type: 'card-back',
+                          creatorId: accountId,
+                          text: cardBackText || null,
+                          searchableText: cardBackSearchableText,
+                          watermark: cardBackWatermark,
+                          lastActivity: new Date(),
+                      })
+                      const linkCardFront = await Link.create({
+                          state: 'visible',
+                          type: 'card-post',
+                          // relationship: 'front',
+                          creatorId: accountId,
+                          itemAId: post.id,
+                          itemBId: createCardFront.id,
+                          totalLikes: 0,
+                          totalComments: 0,
+                          totalRatings: 0,
+                      })
+                      const linkCardBack = await Link.create({
+                          state: 'visible',
+                          type: 'card-post',
+                          // relationship: 'back',
+                          creatorId: accountId,
+                          itemAId: post.id,
+                          itemBId: createCardBack.id,
+                          totalLikes: 0,
+                          totalComments: 0,
+                          totalRatings: 0,
+                      })
+                      const createCardFrontImage = cardFrontImage
+                          ? await Image.create({
+                                type: 'post',
+                                itemId: createCardFront.id,
+                                creatorId: accountId,
+                                url: cardFrontImage.location,
+                            })
+                          : null
+                      const createCardBackImage = cardBackImage
+                          ? await Image.create({
+                                type: 'post',
+                                itemId: createCardBack.id,
+                                creatorId: accountId,
+                                url: cardBackImage.location,
+                            })
+                          : null
+
+                      Promise.all([
+                          createCardFront,
+                          createCardBack,
+                          linkCardFront,
+                          linkCardBack,
+                          createCardFrontImage,
+                          createCardBackImage,
+                      ])
+                          .then((data) =>
+                              resolve({
+                                  front: {
+                                      ...data[0].dataValues,
+                                      Images: cardFrontImage ? [data[4].dataValues] : [],
+                                  },
+                                  back: {
+                                      ...data[1].dataValues,
+                                      Images: cardBackImage ? [data[5].dataValues] : [],
+                                  },
+                              })
+                          )
+                          .catch((error) => resolve(error))
+                  })
+                : null
 
             const createLink = sourceId
                 ? await new Promise(async (resolve) => {
@@ -2045,7 +2729,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 notifyMentions,
                 createUrls,
                 createImages,
-                createAudio,
+                createAudios,
                 createEvent,
                 createPoll,
                 createGBG,
@@ -2055,62 +2739,35 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 res.status(200).json({
                     post,
                     indirectSpaces: data[1],
-                    images: data[4],
-                    audio: data[5],
-                    event: data[6],
-                    pollData: data[7],
-                    gbg: data[8],
-                    card: data[9],
+                    // images: data[4],
+                    // audio: data[5],
+                    // event: data[6],
+                    // pollData: data[7],
+                    // gbg: data[8],
+                    // card: data[9],
                 })
             })
         }
 
-        if (uploadType === 'image-file') {
-            multer(multerParams(uploadType, accountId)).any('file')(req, res, (error) => {
-                const { files, body } = req
-                if (noMulterErrors(error, res)) createPost(JSON.parse(body.postData), files)
-            })
-        } else if (uploadType === 'audio-file') {
-            multer(multerParams(uploadType, accountId)).single('file')(req, res, (error) => {
-                const { file, body } = req
-                if (noMulterErrors(error, res)) createPost(JSON.parse(body.postData), [file])
-            })
-        } else if (uploadType === 'audio-blob') {
-            multer(multerParams(uploadType, accountId)).single('file')(req, res, (error) => {
-                const { file, body } = req
-                if (noMulterErrors(error, res)) {
-                    convertAndUploadAudio(file, accountId, 'post').then((location) =>
-                        createPost(JSON.parse(body.postData), [{ location }])
-                    )
+        // todo: only id and url required in resolve (not full file)?
+        function uploadFile(file) {
+            return new Promise((resolve) => {
+                if (file.fieldname === 'audio-blob') {
+                    convertAndUploadAudio(file, accountId).then((url) => resolve({ ...file, url }))
+                } else if (file.fieldname !== 'post-data') {
+                    uploadPostFile(file, accountId).then((url) => resolve({ ...file, url }))
                 }
             })
-        } else if (uploadType === 'glass-bead-game') {
-            multer(multerParams(uploadType, accountId)).any()(req, res, (error) => {
-                const { files, body } = req
-                if (noMulterErrors(error, res)) {
-                    Promise.all(
-                        files.map(
-                            async (file) =>
-                                await new Promise((resolve) => {
-                                    if (file.fieldname === 'audioBlob') {
-                                        convertAndUploadAudio(file, accountId, 'bead').then((url) =>
-                                            resolve({ ...file, location: url })
-                                        )
-                                    } else if (file.fieldname !== 'postData') {
-                                        uploadBeadFile(file, accountId).then((url) =>
-                                            resolve({ ...file, location: url })
-                                        )
-                                    }
-                                })
-                        )
-                    ).then((newFiles) => {
-                        createPost(JSON.parse(body.postData), newFiles)
-                    })
-                }
-            })
-        } else {
-            createPost(req.body)
         }
+
+        const multerParams = { dest: './temp/post-files', limits: { fileSize: 30 * 1024 * 1024 } }
+        multer(multerParams).any()(req, res, (error) => {
+            if (noMulterErrors(error, res)) {
+                Promise.all(req.files.map((file) => uploadFile(file)))
+                    .then((files) => createPost(JSON.parse(req.body['post-data']), files))
+                    .catch((error) => res.status(500).json(error))
+            }
+        })
     }
 })
 
