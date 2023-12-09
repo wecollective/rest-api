@@ -34,6 +34,7 @@ const {
     createImage,
     createAudio,
     notifyMention,
+    createSpacePost,
 } = require('../Helpers')
 const {
     Space,
@@ -2156,75 +2157,41 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 lastActivity: new Date(),
             })
 
-            // todo: set up createSpacePost function & merge direct and inderect promises into one 'addSpaces' promise
-            const createDirectRelationships = spaceIds
-                ? await Promise.all(
-                      spaceIds.map(
-                          (spaceId) =>
-                              new Promise(async (resolve) => {
-                                  const createSpacePost = await SpacePost.create({
-                                      type: 'post',
-                                      relationship: 'direct',
-                                      creatorId: accountId,
-                                      postId: post.id,
-                                      spaceId,
-                                      state: 'active',
-                                  })
-                                  const updateTotalPosts = await Space.increment('totalPosts', {
-                                      where: { id: spaceId },
-                                      silent: true,
-                                  })
-                                  Promise.all([createSpacePost, updateTotalPosts])
-                                      .then(() => resolve())
-                                      .catch((error) => resolve(error))
-                              })
+            const addSpaces = spaceIds
+                ? await new Promise(async (resolve) => {
+                      const addDirectSpaces = await Promise.all(
+                          spaceIds.map((spaceId) =>
+                              createSpacePost(accountId, spaceId, post.id, 'post', 'direct')
+                          )
                       )
-                  )
+                      // get each spaces ancestors
+                      const spaces = await Space.findAll({
+                          where: { id: spaceIds, state: 'active' },
+                          attributes: ['id'],
+                          include: {
+                              model: Space,
+                              as: 'SpaceAncestors',
+                              attributes: ['id'],
+                              through: { where: { state: 'open' }, attributes: [] },
+                          },
+                      })
+                      // gather ancestor ids
+                      let ancestorIds = []
+                      spaces.forEach((space) =>
+                          ancestorIds.push(...space.SpaceAncestors.map((space) => space.id))
+                      )
+                      // remove duplicates and direct spaces
+                      ancestorIds = [...new Set(ancestorIds)].filter((id) => !spaceIds.includes(id))
+                      const addIndirectSpaces = await Promise.all(
+                          ancestorIds.map((spaceId) =>
+                              createSpacePost(accountId, spaceId, post.id, 'post', 'indirect')
+                          )
+                      )
+                      Promise.all([addDirectSpaces, addIndirectSpaces])
+                          .then((data) => resolve(data))
+                          .catch((error) => resolve(error))
+                  })
                 : null
-
-            const createIndirectRelationships = await new Promise(async (resolve1) => {
-                const spaces = await Space.findAll({
-                    where: { id: spaceIds, state: 'active' },
-                    attributes: ['id'],
-                    include: {
-                        model: Space,
-                        as: 'SpaceAncestors',
-                        attributes: ['id'],
-                        through: { where: { state: 'open' }, attributes: [] },
-                    },
-                })
-                // gather ancestor ids
-                const ids = []
-                spaces.forEach((space) =>
-                    ids.push(...space.SpaceAncestors.map((space) => space.id))
-                )
-                // remove duplicates and direct spaces
-                const filteredIds = [...new Set(ids)].filter((id) => !spaceIds.includes(id))
-                Promise.all(
-                    filteredIds.map(
-                        (id) =>
-                            new Promise(async (resolve2) => {
-                                const createSpacePost = await SpacePost.create({
-                                    type: 'post',
-                                    relationship: 'indirect',
-                                    creatorId: accountId,
-                                    postId: post.id,
-                                    spaceId: id,
-                                    state: 'active',
-                                })
-                                const updateTotalPosts = await Space.increment('totalPosts', {
-                                    where: { id },
-                                    silent: true,
-                                })
-                                Promise.all([createSpacePost, updateTotalPosts])
-                                    .then((data) => resolve2(data[0]))
-                                    .catch((error) => resolve2(error))
-                            })
-                    )
-                )
-                    .then((data) => resolve1(data))
-                    .catch((error) => resolve1(error))
-            })
 
             const notifyMentions = mentions.length
                 ? await new Promise(async (resolve) => {
@@ -2237,16 +2204,6 @@ router.post('/create-post', authenticateToken, (req, res) => {
                           .catch((error) => resolve(data, error))
                   })
                 : null
-
-            // const createUrls = urls.length
-            //     ? await Promise.all(urls.map((url, i) => createUrl(accountId, post.id, url, i)))
-            //     : null
-
-            // const createImages = images.length
-            //     ? await Promise.all(
-            //           images.map((image, i) => createImage(accountId, post.id, image, i, files))
-            //       )
-            //     : null
 
             const createUrls = await Promise.all(
                 urls.map((url, i) => createUrl(accountId, post.id, url, i))
@@ -2724,8 +2681,7 @@ router.post('/create-post', authenticateToken, (req, res) => {
                 : null
 
             Promise.all([
-                createDirectRelationships,
-                createIndirectRelationships,
+                addSpaces,
                 notifyMentions,
                 createUrls,
                 createImages,

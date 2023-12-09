@@ -316,7 +316,7 @@ function createUrl(accountId, postId, urlData, index) {
 
 function notifyMention(creator, user, postId) {
     // creator attributes: id, name, handle
-    // user attributes: id, name, email, emailsDisabled (user must also be model for accountMuted function)
+    // user attributes (must be model for accountMuted function): id, name, email, emailsDisabled
     return new Promise(async (resolve) => {
         const sendNotification = await Notification.create({
             ownerId: user.id,
@@ -349,6 +349,26 @@ function notifyMention(creator, user, postId) {
               })
 
         Promise.all([sendNotification, sendEmail])
+            .then(() => resolve())
+            .catch((error) => resolve(error))
+    })
+}
+
+function createSpacePost(accountId, spaceId, postId, type, relationship) {
+    return new Promise(async (resolve) => {
+        const addSpacePost = await SpacePost.create({
+            creatorId: accountId,
+            type, // 'post' or 'repost'
+            relationship, // 'direct' or 'indirect'
+            postId,
+            spaceId,
+            state: 'active',
+        })
+        const updateTotalPosts = await Space.increment('totalPosts', {
+            where: { id: spaceId },
+            silent: true,
+        })
+        Promise.all([addSpacePost, updateTotalPosts])
             .then(() => resolve())
             .catch((error) => resolve(error))
     })
@@ -1527,6 +1547,7 @@ module.exports = {
     createAudio,
     createUrl,
     notifyMention,
+    createSpacePost,
     // database operations
     updateAllSpaceStats,
     updateAllSpaceUserStats,
