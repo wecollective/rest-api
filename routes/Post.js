@@ -2193,6 +2193,16 @@ router.post('/create-post', authenticateToken, (req, res) => {
                   })
                 : null
 
+            const addLinks = link
+                ? await new Promise(async (resolve) => {
+                      // link to parent
+                      // link to root
+                      // Promise.all([addDirectSpaces, addIndirectSpaces])
+                      //     .then((data) => resolve(data))
+                      //     .catch((error) => resolve(error))
+                  })
+                : null
+
             const notifyMentions = mentions.length
                 ? await new Promise(async (resolve) => {
                       const users = await User.findAll({

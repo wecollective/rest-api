@@ -360,8 +360,8 @@ function createSpacePost(accountId, spaceId, postId, type, relationship) {
             creatorId: accountId,
             type, // 'post' or 'repost'
             relationship, // 'direct' or 'indirect'
-            postId,
             spaceId,
+            postId,
             state: 'active',
         })
         const updateTotalPosts = await Space.increment('totalPosts', {
