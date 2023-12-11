@@ -3,7 +3,8 @@ const config = require('../Config')
 const express = require('express')
 const router = express.Router()
 const sequelize = require('sequelize')
-const Op = sequelize.Op
+const { Op, QueryTypes } = sequelize
+const db = require('../models/index')
 const crypto = require('crypto')
 const { v4: uuidv4 } = require('uuid')
 const sgMail = require('@sendgrid/mail')
@@ -363,6 +364,22 @@ router.get('/space-data', authenticateToken, async (req, res) => {
     }
 })
 
+router.get('/space-access', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { spaceId } = req.query
+    const [{ state }] = await db.sequelize.query(
+        `
+            SELECT state FROM SpaceUsers
+            WHERE userId = :accountId
+            AND spaceId = :spaceId
+            AND relationship = 'access'
+            AND (state = 'active' OR state = 'pending')
+        `,
+        { replacements: { spaceId, accountId }, type: QueryTypes.SELECT }
+    )
+    res.status(200).json(state)
+})
+
 router.get('/space-modal-data', async (req, res) => {
     const { spaceId } = req.query
     const space = await Space.findOne({
@@ -380,8 +397,7 @@ router.get('/space-modal-data', async (req, res) => {
     else res.status(404).json({ message: 'Space not found' })
 })
 
-router.post('/nav-list-spaces', authenticateToken, async (req, res) => {
-    const accountId = req.user ? req.user.id : null
+router.post('/nav-list-spaces', async (req, res) => {
     const { spaceId, offset, includeParents, includeChildren } = req.body
     const order = [
         ['totalPostLikes', 'DESC'],
@@ -398,7 +414,7 @@ router.post('/nav-list-spaces', authenticateToken, async (req, res) => {
         'totalComments',
         'totalPosts',
         'totalFollowers',
-        totalSpaceChildren,
+        totalSpaceChildren, // todo store as tally
     ]
 
     const parents = includeParents
@@ -420,7 +436,7 @@ router.post('/nav-list-spaces', authenticateToken, async (req, res) => {
     const children = includeChildren
         ? await Space.findAndCountAll({
               where: { '$DirectParentSpaces.id$': spaceId, state: 'active' },
-              attributes: [...baseAttributes, 'privacy', spaceAccess(accountId)],
+              attributes: [...baseAttributes, 'privacy'],
               order,
               offset: +offset,
               limit: 10,
