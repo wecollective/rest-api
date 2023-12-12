@@ -4,7 +4,6 @@ const {
     User,
     Post,
     Comment,
-    GlassBeadGame,
     Event,
     Image,
     Url,
@@ -16,7 +15,8 @@ const {
     Notification,
 } = require('./models')
 const fs = require('fs')
-const { Op, literal } = require('sequelize')
+const { Op, QueryTypes, literal } = require('sequelize')
+const db = require('./models/index')
 
 var aws = require('aws-sdk')
 var multer = require('multer')
@@ -374,6 +374,11 @@ function createSpacePost(accountId, spaceId, postId, type, relationship) {
     })
 }
 
+// common models
+function creator(extraFields) {
+    return { model: User, as: 'Creator', attributes: ['id', 'handle', 'name', ...extraFields] }
+}
+
 // general functions
 function createSQLDate(date) {
     return new Date(date).toISOString().slice(0, 19).replace('T', ' ')
@@ -473,93 +478,57 @@ function sourcePostId() {
     ]
 }
 
-function accountLike(itemType, model, accountId) {
-    return [
-        literal(`(
-            SELECT CASE WHEN EXISTS (
-                SELECT id FROM Reactions
-                WHERE itemType = '${itemType}'
-                AND itemId = ${model}.id
-                AND creatorId = ${accountId}
-                AND type = 'like'
-                AND state = 'active'
-            )
-            THEN 1 ELSE 0 END
-        )`),
-        'accountLike',
-    ]
+async function accountReaction(type, postId, accountId) {
+    const [{ reaction }] = await db.sequelize.query(
+        `SELECT CASE WHEN EXISTS (
+            SELECT id FROM Reactions
+            WHERE itemType = 'post'
+            AND itemId = :postId
+            AND creatorId = :accountId
+            AND type = :type
+            AND state = 'active'
+        )
+        THEN 1 ELSE 0 END AS reaction`,
+        { replacements: { type, postId, accountId }, type: QueryTypes.SELECT }
+    )
+    return reaction
 }
 
-function accountComment(itemType, model, accountId) {
-    return [
-        literal(`(
-            SELECT CASE WHEN EXISTS (
-                SELECT id FROM Links
-                WHERE creatorId = ${accountId}
-                AND itemAId = ${model}.id
-                AND itemAType = '${itemType}'
-                AND itemBType = 'comment'
-                AND (relationship = 'parent' OR relationship = 'root')
-                AND state = 'active'
-            )
-            THEN 1 ELSE 0 END
-        )`),
-        'accountComment',
-    ]
+async function accountComment(postId, accountId) {
+    const [{ comment }] = await db.sequelize.query(
+        `SELECT CASE WHEN EXISTS (
+            SELECT id FROM Links
+            WHERE creatorId = :accountId
+            AND itemAId = :postId
+            AND itemAType = 'post'
+            AND itemBType = 'comment'
+            AND (relationship = 'parent' OR relationship = 'root')
+            AND state = 'active'
+        )
+        THEN 1 ELSE 0 END AS comment`,
+        { replacements: { postId, accountId }, type: QueryTypes.SELECT }
+    )
+    return comment
 }
 
-function accountRating(itemType, model, accountId) {
-    return [
-        literal(`(
-            SELECT CASE WHEN EXISTS (
-                SELECT id FROM Reactions
-                WHERE itemType = '${itemType}'
-                AND itemId = ${model}.id
-                AND creatorId = ${accountId}
-                AND type = 'rating'
-                AND state = 'active'
+// todo: update for comments
+async function accountLink(postId, accountId) {
+    const [{ link }] = await db.sequelize.query(
+        `SELECT CASE WHEN EXISTS (
+            SELECT id FROM Links
+            WHERE state = 'active'
+            AND relationship = 'link'
+            AND creatorId = :accountId
+            AND (
+                (itemAId = :postId AND itemAType = 'post')
+                OR
+                (itemBId = :postId AND itemBType = 'post')
             )
-            THEN 1 ELSE 0 END
-        )`),
-        'accountRating',
-    ]
-}
-
-function accountRepost(itemType, model, accountId) {
-    return [
-        literal(`(
-            SELECT CASE WHEN EXISTS (
-                SELECT id FROM Reactions
-                WHERE itemType = '${itemType}'
-                AND itemId = ${model}.id
-                AND creatorId = ${accountId}
-                AND type = 'repost'
-                AND state = 'active'
-            )
-            THEN 1 ELSE 0 END
-        )`),
-        'accountRepost',
-    ]
-}
-
-function accountLink(itemType, model, accountId) {
-    return [
-        literal(`(
-            SELECT CASE WHEN EXISTS (
-                SELECT id FROM Links
-                WHERE state = 'active'
-                AND relationship = 'link'
-                AND creatorId = ${accountId}
-                AND (
-                    (itemAId = ${model}.id AND itemAType = '${itemType}')
-                    OR
-                    (itemBId = ${model}.id AND itemBType = '${itemType}')
-                )
-            )
-            THEN 1 ELSE 0 END
-        )`),
-        'accountLink',
-    ]
+        )
+        THEN 1 ELSE 0 END AS link`,
+        { replacements: { postId, accountId }, type: QueryTypes.SELECT }
+    )
+    return link
 }
 
 // todo: apply above SQL syntax to literals below (remove table names where not required)
@@ -1540,7 +1509,6 @@ module.exports = {
     getLinkedItem,
     getFullLinkedItem,
     getToyboxItem,
-    accountLike,
     accountMuted,
     attachParentSpace,
     createImage,
@@ -1548,6 +1516,11 @@ module.exports = {
     createUrl,
     notifyMention,
     createSpacePost,
+    accountReaction,
+    accountComment,
+    accountLink,
+    // common models
+    creator,
     // database operations
     updateAllSpaceStats,
     updateAllSpaceUserStats,
@@ -1616,5 +1589,94 @@ module.exports = {
 //             )`
 //         ),
 //         'totalReposts',
+//     ]
+// }
+
+// function accountLike(itemType, model, accountId) {
+//     return [
+//         literal(`(
+//             SELECT CASE WHEN EXISTS (
+//                 SELECT id FROM Reactions
+//                 WHERE itemType = '${itemType}'
+//                 AND itemId = ${model}.id
+//                 AND creatorId = ${accountId}
+//                 AND type = 'like'
+//                 AND state = 'active'
+//             )
+//             THEN 1 ELSE 0 END
+//         )`),
+//         'accountLike',
+//     ]
+// }
+
+// function accountComment(itemType, model, accountId) {
+//     return [
+//         literal(`(
+//             SELECT CASE WHEN EXISTS (
+//                 SELECT id FROM Links
+//                 WHERE creatorId = ${accountId}
+//                 AND itemAId = ${model}.id
+//                 AND itemAType = '${itemType}'
+//                 AND itemBType = 'comment'
+//                 AND (relationship = 'parent' OR relationship = 'root')
+//                 AND state = 'active'
+//             )
+//             THEN 1 ELSE 0 END
+//         )`),
+//         'accountComment',
+//     ]
+// }
+
+// function accountRating(itemType, model, accountId) {
+//     return [
+//         literal(`(
+//             SELECT CASE WHEN EXISTS (
+//                 SELECT id FROM Reactions
+//                 WHERE itemType = '${itemType}'
+//                 AND itemId = ${model}.id
+//                 AND creatorId = ${accountId}
+//                 AND type = 'rating'
+//                 AND state = 'active'
+//             )
+//             THEN 1 ELSE 0 END
+//         )`),
+//         'accountRating',
+//     ]
+// }
+
+// function accountRepost(itemType, model, accountId) {
+//     return [
+//         literal(`(
+//             SELECT CASE WHEN EXISTS (
+//                 SELECT id FROM Reactions
+//                 WHERE itemType = '${itemType}'
+//                 AND itemId = ${model}.id
+//                 AND creatorId = ${accountId}
+//                 AND type = 'repost'
+//                 AND state = 'active'
+//             )
+//             THEN 1 ELSE 0 END
+//         )`),
+//         'accountRepost',
+//     ]
+// }
+
+// function accountLink(itemType, model, accountId) {
+//     return [
+//         literal(`(
+//             SELECT CASE WHEN EXISTS (
+//                 SELECT id FROM Links
+//                 WHERE state = 'active'
+//                 AND relationship = 'link'
+//                 AND creatorId = ${accountId}
+//                 AND (
+//                     (itemAId = ${model}.id AND itemAType = '${itemType}')
+//                     OR
+//                     (itemBId = ${model}.id AND itemBType = '${itemType}')
+//                 )
+//             )
+//             THEN 1 ELSE 0 END
+//         )`),
+//         'accountLink',
 //     ]
 // }
