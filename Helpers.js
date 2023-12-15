@@ -375,6 +375,7 @@ function createSpacePost(accountId, spaceId, postId, type, relationship) {
 }
 
 // common models
+// todo: remove as attributes change to much...
 function creator(extraFields) {
     return { model: User, as: 'Creator', attributes: ['id', 'handle', 'name', ...extraFields] }
 }
@@ -478,18 +479,18 @@ function sourcePostId() {
     ]
 }
 
-async function accountReaction(type, postId, accountId) {
+async function accountReaction(type, postType, postId, accountId) {
     const [{ reaction }] = await db.sequelize.query(
         `SELECT CASE WHEN EXISTS (
             SELECT id FROM Reactions
-            WHERE itemType = 'post'
+            WHERE itemType = :postType
             AND itemId = :postId
             AND creatorId = :accountId
             AND type = :type
             AND state = 'active'
         )
         THEN 1 ELSE 0 END AS reaction`,
-        { replacements: { type, postId, accountId }, type: QueryTypes.SELECT }
+        { replacements: { type, postType, postId, accountId }, type: QueryTypes.SELECT }
     )
     return reaction
 }
@@ -1079,6 +1080,12 @@ function findPostInclude(accountId) {
                     },
                 },
             ],
+        },
+        // for block posts
+        {
+            model: Image,
+            // as: 'Creator',
+            attributes: ['id', 'url'],
         },
     ]
 }
