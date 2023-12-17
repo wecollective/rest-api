@@ -1225,7 +1225,6 @@ router.get('/plot-graph-data', (req, res) => {
 })
 
 router.get('/scrape-url', authenticateToken, async (req, res) => {
-    // todo: set up timeout
     const accountId = req.user ? req.user.id : null
     const { url } = req.query
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
@@ -1233,7 +1232,7 @@ router.get('/scrape-url', authenticateToken, async (req, res) => {
         const browser = await puppeteer.launch() // { headless: false })
         try {
             const page = await browser.newPage()
-            await page.goto(url, { waitUntil: 'domcontentloaded' }) // { timeout: 60000 }, { waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2' }
+            await page.goto(url, { waitUntil: 'networkidle0', timeout: 20000 }) // { timeout: 20000 }, { waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2' }
             await page.evaluate(async () => {
                 const youtubeCookieConsent = await document.querySelector(
                     'base[href="https://consent.youtube.com/"]'
