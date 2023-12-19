@@ -80,8 +80,10 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
-        // todo: update comment and poll answer notification ids when migrated
-        // update comment link ids
+        // todo:
+        // + update comment and poll answer notification ids when migrated
+        // + update comment link ids when migrated
+        // + apply poll answer state to link, not new poll answer post
 
         // before updates:
         // + remove mediaTypes & originSpaceId from Post model
@@ -1139,9 +1141,10 @@ router.get('/poll-data', async (req, res) => {
         attributes: ['id', 'type', 'answersLocked'],
     })
     const answers = await poll.getAnswers({
-        attributes: ['id', 'text', 'state', 'createdAt'],
+        attributes: ['id', 'mediaTypes', 'text', 'state', 'createdAt'],
         through: {
-            where: { itemBType: 'poll-answer', relationship: 'parent', state: 'active' },
+            // relationship 'parent' not required?
+            where: { itemBType: 'poll-answer', state: 'active' },
         },
         joinTableAttributes: [],
         include: [
@@ -2183,9 +2186,13 @@ router.post('/create-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
+        // upload files and create post
         const { postData, files } = await uploadFiles(req, res, accountId)
-        const post = await createPost(postData, files, accountId)
+        const { post, event } = await createPost(postData, files, accountId)
         const { spaceIds } = postData
+        // store spaceIds and update with ancestors for response
+        const allSpaceIds = [...spaceIds]
+        // add spaces
         const addSpaces = spaceIds
             ? await new Promise(async (resolve) => {
                   const addDirectSpaces = await Promise.all(
@@ -2210,19 +2217,21 @@ router.post('/create-post', authenticateToken, async (req, res) => {
                   )
                   // remove duplicates and direct spaces
                   ancestorIds = [...new Set(ancestorIds)].filter((id) => !spaceIds.includes(id))
+                  // store ancestor ids for response
+                  allSpaceIds.push(...ancestorIds)
                   const addIndirectSpaces = await Promise.all(
                       ancestorIds.map((spaceId) =>
                           createSpacePost(accountId, spaceId, post.id, 'post', 'indirect')
                       )
                   )
                   Promise.all([addDirectSpaces, addIndirectSpaces])
-                      .then((data) => resolve(data))
+                      .then(() => resolve())
                       .catch((error) => resolve(error))
               })
             : null
 
         Promise.all([addSpaces])
-            .then(() => res.status(200).json(post))
+            .then(() => res.status(200).json({ post, allSpaceIds, event }))
             .catch((error) => res.status(500).json(error))
     }
 })
@@ -2233,7 +2242,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const { postData, files } = await uploadFiles(req, res, accountId)
-        const post = await createPost(postData, files, accountId)
+        const { post } = await createPost(postData, files, accountId)
         // add comment links
         const { type, link } = postData
         const addLinks = await new Promise(async (resolve) => {
@@ -2285,6 +2294,38 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
         })
         // todo: notify parent owner
         Promise.all([addLinks])
+            .then(() => res.status(200).json(post))
+            .catch((error) => res.status(500).json(error))
+    }
+})
+
+// todo: notify parent owner
+router.post('/create-poll-answer', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const { postData, files } = await uploadFiles(req, res, accountId)
+        const { post } = await createPost(postData, files, accountId)
+        const { type, link } = postData
+        const { parent } = link
+        const addParentLink = await Link.create({
+            creatorId: accountId,
+            itemAType: parent.type,
+            itemAId: parent.id,
+            itemBType: type,
+            itemBId: post.id,
+            relationship: 'parent',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        // const incrementParentAnswers = await Post.increment('totalComments', {
+        //     where: { id: parent.id },
+        //     silent: true,
+        // })
+        // todo: notify parent owner
+        Promise.all([addParentLink])
             .then(() => res.status(200).json(post))
             .catch((error) => res.status(500).json(error))
     }
@@ -4226,6 +4267,7 @@ router.post('/remove-poll-answer', authenticateToken, async (req, res) => {
     }
 })
 
+// todo: change link state to done, not poll answer
 router.post('/toggle-poll-answer-done', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { answerId, newState } = req.body

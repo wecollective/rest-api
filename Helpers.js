@@ -9,10 +9,12 @@ const {
     Url,
     Audio,
     Link,
+    Poll,
     SpaceUserStat,
     SpaceParent,
     SpaceAncestor,
     Notification,
+    SpacePost,
 } = require('./models')
 const fs = require('fs')
 const { Op, QueryTypes, literal } = require('sequelize')
@@ -1460,7 +1462,6 @@ async function createPost(data, files, accountId) {
             poll,
             glassBeadGame,
             card,
-            link, // rootType, rootId, parentType, parentId
             // todo: include sourceId, sourceCreatorId, description etc. in link
         } = data
 
@@ -1514,32 +1515,41 @@ async function createPost(data, files, accountId) {
               })
             : null
 
-        // todo: set up create poll answer function
         const createPoll = poll
             ? await new Promise(async (resolve) => {
-                  const { answers, answersLocked, governance, action, threshold } = poll // type
+                  const { type, answers, locked, governance, action, threshold } = poll
                   const newPoll = await Poll.create({
                       postId: post.id,
-                      type: poll.type,
-                      answersLocked: answersLocked,
+                      type,
+                      answersLocked: locked,
                       spaceId: governance ? spaceIds[0] : null,
-                      action: governance ? (action === 'None' ? null : action) : null,
-                      threshold: governance
-                          ? action === 'Create spaces'
-                              ? threshold
-                              : null
-                          : null,
-                      // state: null,
-                      // endTime: pollEndTime || null,
+                      action: action || null,
+                      threshold: threshold || null,
                   })
                   Promise.all(
-                      answers.map((answer) =>
-                          PollAnswer.create({
-                              pollId: newPoll.id,
-                              creatorId: answer.Creator ? answer.Creator.id : accountId,
-                              text: answer.text,
-                              state: answer.state || 'active',
-                          })
+                      answers.map(
+                          (answer) =>
+                              new Promise(async (resolve2) => {
+                                  const { post: newAnswer } = await createPost(
+                                      answer,
+                                      files,
+                                      accountId
+                                  )
+                                  Link.create({
+                                      creatorId: accountId,
+                                      itemAType: 'poll',
+                                      itemBType: 'poll-answer',
+                                      itemAId: newPoll.id,
+                                      itemBId: newAnswer.id,
+                                      //   relationship: 'parent',
+                                      state: 'active',
+                                      totalLikes: 0,
+                                      totalComments: 0,
+                                      totalRatings: 0,
+                                  })
+                                      .then(() => resolve2())
+                                      .catch((error) => resolve2(error))
+                              })
                       )
                   ).then((answers) => resolve({ poll: newPoll, answers }))
               })
@@ -1973,7 +1983,7 @@ async function createPost(data, files, accountId) {
             createGBG,
             createCard,
             // createLink,
-        ]).then(() => resolveA(post))
+        ]).then(() => resolveA({ post, event: createEvent }))
     })
 }
 
