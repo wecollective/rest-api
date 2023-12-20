@@ -218,10 +218,11 @@ function createImage(accountId, postId, image, index, files) {
             searchableText: image.text || null,
             lastActivity: new Date(),
         })
+        const file = files.find((file) => file.originalname === image.id)
         const addImage = await Image.create({
             creatorId: accountId,
             postId: newPost.id,
-            url: image.url || files.find((file) => file.originalname === image.id).url,
+            url: file ? file.url : image.Image.url,
         })
         const addLink = await Link.create({
             creatorId: accountId,
@@ -256,7 +257,7 @@ function createAudio(accountId, postId, audio, index, files) {
         const addAudio = await Audio.create({
             creatorId: accountId,
             postId: newPost.id,
-            url: audio.url || files.find((file) => file.originalname === audio.id).url,
+            url: files.find((file) => file.originalname === audio.id).url,
         })
         const addLink = await Link.create({
             creatorId: accountId,
@@ -1094,7 +1095,7 @@ function findPostInclude(accountId) {
         },
         {
             model: Url,
-            attributes: ['id', 'title', 'description', 'domain', 'image'],
+            attributes: ['id', 'url', 'title', 'description', 'domain', 'image'],
         },
     ]
 }
@@ -1444,14 +1445,16 @@ async function uploadFiles(req, res, accountId) {
     })
 }
 
-// todo: check notifyMentions is adding the correct notification type
+// todo:
+// + handle gbgs
+// + check notifyMentions is adding the correct notification type
+// + handle source post links (move to create-post route)
 async function createPost(data, files, accountId) {
     return new Promise(async (resolveA) => {
         const {
             type, // post, comment, poll-answer
             mediaTypes,
-            spaceIds, // not present in comments
-            title, // not present in comments
+            title,
             text,
             searchableText,
             mentions,
@@ -1462,8 +1465,9 @@ async function createPost(data, files, accountId) {
             poll,
             glassBeadGame,
             card,
-            // todo: include sourceId, sourceCreatorId, description etc. in link
+            watermark,
         } = data
+        // todo: include sourceId, sourceCreatorId, description etc. in link
 
         const creator = await User.findOne({
             where: { id: accountId },
@@ -1475,9 +1479,10 @@ async function createPost(data, files, accountId) {
             creatorId: accountId,
             type,
             mediaTypes,
-            title: title || null,
+            title: title || null, // not present in comments
             text,
             searchableText,
+            watermark: watermark || null,
             lastActivity: new Date(),
         })
 
@@ -1494,17 +1499,21 @@ async function createPost(data, files, accountId) {
               })
             : null
 
-        const createUrls = await Promise.all(
-            urls.map((url, i) => createUrl(accountId, post.id, url, i))
-        )
+        const createUrls = urls
+            ? await Promise.all(urls.map((url, i) => createUrl(accountId, post.id, url, i)))
+            : null
 
-        const createImages = await Promise.all(
-            images.map((image, i) => createImage(accountId, post.id, image, i, files))
-        )
+        const createImages = images
+            ? await Promise.all(
+                  images.map((image, i) => createImage(accountId, post.id, image, i, files))
+              )
+            : null
 
-        const createAudios = await Promise.all(
-            audios.map((audio, i) => createAudio(accountId, post.id, audio, i, files))
-        )
+        const createAudios = audios
+            ? await Promise.all(
+                  audios.map((audio, i) => createAudio(accountId, post.id, audio, i, files))
+              )
+            : null
 
         const createEvent = event
             ? await Event.create({
@@ -1857,90 +1866,34 @@ async function createPost(data, files, accountId) {
               })
             : null
 
-        const createCard = mediaTypes.includes('card')
-            ? await new Promise(async (resolve) => {
-                  const { front, back } = card
-                  const cardFrontImage = files.find((file) => file.originalname === 'front')
-                  const cardBackImage = files.find((file) => file.originalname === 'back')
-                  const createCardFront = await Post.create({
-                      ...defaultPostValues,
-                      type: 'card-front',
-                      creatorId: accountId,
-                      text: cardFrontText || null,
-                      searchableText: cardFrontSearchableText,
-                      watermark: cardFrontWatermark,
-                      lastActivity: new Date(),
-                  })
-                  const createCardBack = await Post.create({
-                      ...defaultPostValues,
-                      type: 'card-back',
-                      creatorId: accountId,
-                      text: cardBackText || null,
-                      searchableText: cardBackSearchableText,
-                      watermark: cardBackWatermark,
-                      lastActivity: new Date(),
-                  })
-                  const linkCardFront = await Link.create({
-                      state: 'visible',
-                      type: 'card-post',
-                      // relationship: 'front',
-                      creatorId: accountId,
-                      itemAId: post.id,
-                      itemBId: createCardFront.id,
-                      totalLikes: 0,
-                      totalComments: 0,
-                      totalRatings: 0,
-                  })
-                  const linkCardBack = await Link.create({
-                      state: 'visible',
-                      type: 'card-post',
-                      // relationship: 'back',
-                      creatorId: accountId,
-                      itemAId: post.id,
-                      itemBId: createCardBack.id,
-                      totalLikes: 0,
-                      totalComments: 0,
-                      totalRatings: 0,
-                  })
-                  const createCardFrontImage = cardFrontImage
-                      ? await Image.create({
-                            type: 'post',
-                            itemId: createCardFront.id,
-                            creatorId: accountId,
-                            url: cardFrontImage.location,
-                        })
-                      : null
-                  const createCardBackImage = cardBackImage
-                      ? await Image.create({
-                            type: 'post',
-                            itemId: createCardBack.id,
-                            creatorId: accountId,
-                            url: cardBackImage.location,
-                        })
-                      : null
-
-                  Promise.all([
-                      createCardFront,
-                      createCardBack,
-                      linkCardFront,
-                      linkCardBack,
-                      createCardFrontImage,
-                      createCardBackImage,
-                  ])
-                      .then((data) =>
-                          resolve({
-                              front: {
-                                  ...data[0].dataValues,
-                                  Images: cardFrontImage ? [data[4].dataValues] : [],
-                              },
-                              back: {
-                                  ...data[1].dataValues,
-                                  Images: cardBackImage ? [data[5].dataValues] : [],
-                              },
+        const createCard = card
+            ? await Promise.all(
+                  [card.front, card.back].map(
+                      (cardFace, index) =>
+                          new Promise(async (resolve) => {
+                              const { post: newCardFace } = await createPost(
+                                  cardFace,
+                                  files,
+                                  accountId
+                              )
+                              Link.create({
+                                  creatorId: accountId,
+                                  itemAType: 'post',
+                                  itemBType: 'card-face',
+                                  itemAId: post.id,
+                                  itemBId: newCardFace.id,
+                                  index,
+                                  // relationship: 'parent',
+                                  state: 'active',
+                                  totalLikes: 0,
+                                  totalComments: 0,
+                                  totalRatings: 0,
+                              })
+                                  .then(() => resolve())
+                                  .catch((error) => resolve(error))
                           })
-                      )
-                      .catch((error) => resolve(error))
-              })
+                  )
+              )
             : null
 
         // const createLink = sourceId
@@ -1972,8 +1925,6 @@ async function createPost(data, files, accountId) {
         //     : null
 
         Promise.all([
-            // addSpaces,
-            // addLinks,
             notifyMentions,
             createUrls,
             createImages,
@@ -1982,7 +1933,6 @@ async function createPost(data, files, accountId) {
             createPoll,
             createGBG,
             createCard,
-            // createLink,
         ]).then(() => resolveA({ post, event: createEvent }))
     })
 }
