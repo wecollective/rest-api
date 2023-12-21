@@ -1507,19 +1507,19 @@ function sendGBGInvite(player, postId, creator, settings) {
                   from: { email: 'admin@weco.io', name: 'we { collective }' },
                   subject: 'New notification',
                   text: `
-                        Hi ${player.name}, ${creator.name} just invited you to join a Weave on weco: https://${appURL}/p/${postId}
+                        Hi ${player.name}, ${creator.name} just invited you to join a game on weco: https://${appURL}/p/${postId}
                         Log in and go to your notifications to accept or reject the invitation.
                   `,
                   html: `
                         <p>
                             Hi ${player.name},
                             <br/>
-                            ${creatorLink} just invited you to join a <a href='${appURL}/p/${postId}'>Weave</a> on weco.
+                            ${creatorLink} just invited you to join a <a href='${appURL}/p/${postId}'>game</a> on weco.
                             <br/>
                             Log in and go to your notifications to accept or reject the invitation.
                             <br/>
                             <br/>
-                            Weave settings:
+                            Game settings:
                             <br/>
                             <br/>
                             Player order: ${players.map((p) => p.name).join(' → ')}
@@ -1620,7 +1620,7 @@ async function createPost(data, files, accountId) {
             text,
             searchableText,
             color: color || null,
-            watermark: watermark || null,
+            watermark: !!watermark,
             lastActivity: new Date(),
         })
 

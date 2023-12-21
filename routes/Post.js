@@ -34,7 +34,6 @@ const {
     accountReaction,
     accountComment,
     accountLink,
-    creator,
     uploadFiles,
     createPost,
 } = require('../Helpers')
@@ -84,6 +83,7 @@ router.get('/test', async (req, res) => {
         // + update comment and poll answer notification ids when migrated
         // + update comment link ids when migrated
         // + apply poll answer state to link, not new poll answer post
+        // + update root comment reply stats (otherwise replies not visible on unique post page)
 
         // before updates:
         // + remove mediaTypes & originSpaceId from Post model
@@ -1060,6 +1060,7 @@ router.get('/target-from-text', authenticateToken, async (req, res) => {
 router.get('/post-comments', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId, offset } = req.query
+    console.log(999, postId, offset, accountId)
     const limits = [10, 10, 10, 10, 10] // number of comments to inlcude per generation (length of array determines max depth)
     const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
     let rootPostId = +postId
@@ -1092,7 +1093,13 @@ router.get('/post-comments', authenticateToken, async (req, res) => {
                     where: { itemBType: 'comment', relationship: 'parent', state: 'active' },
                 },
                 joinTableAttributes: [],
-                include: [creator(['flagImagePath'])],
+                include: [
+                    {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                    },
+                ],
                 limit: limits[depth],
                 offset: depth ? 0 : +offset,
                 order: [
@@ -1141,12 +1148,10 @@ router.get('/poll-data', async (req, res) => {
         attributes: ['id', 'type', 'answersLocked'],
     })
     const answers = await poll.getAnswers({
-        attributes: ['id', 'mediaTypes', 'text', 'state', 'createdAt'],
-        through: {
-            // relationship 'parent' not required?
-            where: { itemBType: 'poll-answer', state: 'active' },
-        },
-        joinTableAttributes: [],
+        where: { state: 'active' },
+        attributes: ['id', 'mediaTypes', 'text', 'createdAt'],
+        through: { where: { itemBType: 'poll-answer', state: ['active', 'done'] } },
+        joinTableAttributes: ['state'],
         include: [
             {
                 model: User,
@@ -3056,7 +3061,13 @@ router.post('/add-like', authenticateToken, async (req, res) => {
     else {
         // get item data
         let model
-        let include = [creator(['email', 'emailsDisabled'])]
+        let include = [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
+            },
+        ]
         if (['post', 'comment'].includes(type)) model = Post
         if (type === 'link') model = Link
         if (type === 'post') {
@@ -4013,7 +4024,7 @@ router.post('/delete-comment', authenticateToken, async (req, res) => {
 
 router.post('/respond-to-event', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { userName, userEmail, postId, eventId, startTime, response } = req.body
+    const { postId, eventId, startTime, response } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -4064,6 +4075,7 @@ router.post('/respond-to-event', authenticateToken, async (req, res) => {
     }
 })
 
+// todo: update governance actions
 router.post('/vote-on-poll', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { userName, userHandle, spaceId, postId, voteData } = req.body
@@ -4111,6 +4123,7 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
                   voteData.map(
                       (answer) =>
                           new Promise(async (resolve1) => {
+                              // todo: use posts instead
                               const pollAnswer = await PollAnswer.findOne({
                                   where: { id: answer.id },
                                   attributes: ['id', 'text', 'state'],
@@ -4238,42 +4251,26 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
     }
 })
 
-router.post('/new-poll-answer', authenticateToken, async (req, res) => {
-    const accountId = req.user ? req.user.id : null
-    const { pollId, newAnswer } = req.body
-
-    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
-    else {
-        PollAnswer.create({
-            pollId,
-            creatorId: accountId,
-            text: newAnswer,
-            state: 'active',
-        })
-            .then((pollAnswer) => res.status(200).json({ pollAnswer }))
-            .catch((error) => res.status(500).json({ error }))
-    }
-})
-
 router.post('/remove-poll-answer', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { id } = req.body
-
+    const { answerId } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        PollAnswer.update({ state: 'removed' }, { where: { id } })
+        Link.update(
+            { state: 'removed' },
+            { where: { itemBId: answerId, itemBType: 'poll-answer' } }
+        )
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ error }))
     }
 })
 
-// todo: change link state to done, not poll answer
 router.post('/toggle-poll-answer-done', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { answerId, newState } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        PollAnswer.update({ state: newState }, { where: { id: answerId } })
+        Link.update({ state: newState }, { where: { itemBId: answerId, itemBType: 'poll-answer' } })
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ error }))
     }
@@ -4315,12 +4312,6 @@ router.post('/glass-bead-game-comment', (req, res) => {
     })
         .then(() => res.status(200).send({ message: 'Success' }))
         .catch((error) => res.status(500).json({ error }))
-
-    // GlassBeadGameComment.create({
-    //     gameId,
-    //     userId,
-    //     text,
-    // }).then(res.status(200).send({ message: 'Success' }))
 })
 
 router.post('/save-glass-bead-game-settings', async (req, res) => {
