@@ -145,6 +145,7 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
     }
 })
 
+// todo: use new createPost function
 router.post('/gbg-audio-upload', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId, moveNumber } = req.query

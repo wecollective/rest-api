@@ -1,7 +1,7 @@
 require('dotenv').config()
 console.log(`Node environment: ${process.env.NODE_ENV}`)
 const config = require('./Config')
-const passport = require('passport')
+// const passport = require('passport')
 const { v4: uuidv4 } = require('uuid')
 const fs = require('fs')
 const path = require('path')
@@ -9,7 +9,7 @@ var morgan = require('morgan')
 const express = require('express')
 const app = express()
 const axios = require('axios')
-const ScheduledTasks = require('./ScheduledTasks')
+const { initializeScheduledTasks } = require('./ScheduledTasks')
 
 // set up cors with url whitelist
 const cors = require('cors')
@@ -59,7 +59,7 @@ app.use('/', require('./routes/User'))
 app.use('/', require('./routes/Upload'))
 
 // set up scheduled tasks
-ScheduledTasks.initialize()
+initializeScheduledTasks()
 
 const port = 5000
 app.listen(port, () => console.log(`Listening on port ${port}`))

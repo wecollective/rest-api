@@ -1,4 +1,8 @@
+const fs = require('fs')
 const { appURL } = require('./Config')
+const db = require('./models/index')
+const { Op, QueryTypes, literal } = require('sequelize')
+const { scheduleGBGMoveJobs } = require('./ScheduledTasks')
 const {
     Space,
     User,
@@ -17,9 +21,6 @@ const {
     SpacePost,
     GlassBeadGame,
 } = require('./models')
-const fs = require('fs')
-const { Op, QueryTypes, literal } = require('sequelize')
-const db = require('./models/index')
 
 var aws = require('aws-sdk')
 var multer = require('multer')
@@ -1443,6 +1444,7 @@ async function uploadFiles(req, res, accountId) {
 // todo: combine below functions into createAndLinkPost function?
 // linkData: { itemAType, itemAId, itemBType, itemBId }
 // linkDefaults: { state: 'active', totalLikes: 0, totalComments: 0, totalRatings: 0 }
+// or maybe set up createLink function instead?
 function createPollAnswer(answer, accountId, pollId, files) {
     return new Promise(async (resolve) => {
         const { post: newAnswer } = await createPost(answer, files, accountId)
@@ -1856,6 +1858,66 @@ async function createPost(data, files, accountId) {
     })
 }
 
+function scheduleNextBeadDeadline(postId, settings, players) {
+    return new Promise(async (resolve) => {
+        const { movesPerPlayer, totalBeads, moveTimeWindow, playerOrder } = settings
+        const gameFinished = movesPerPlayer && totalBeads + 1 >= movesPerPlayer * players.length
+        if (gameFinished) {
+            GlassBeadGame.update(
+                { state: 'finished', nextMoveDeadline: null },
+                { where: { postId } }
+            )
+                .then(() => resolve())
+                .catch(() => resolve())
+        } else {
+            const newDeadline = new Date(new Date().getTime() + moveTimeWindow * 60 * 1000)
+            const updateDeadline = await GlassBeadGame.update(
+                { nextMoveDeadline: newDeadline },
+                { where: { postId } }
+            )
+            // notify next player
+            const order = playerOrder.split(',')
+            const nextPlayerId = +order[(totalBeads + 1) % players.length]
+            const nextPlayer = players.find((p) => p.id === nextPlayerId)
+            const createMoveNotification = await Notification.create({
+                type: 'gbg-move',
+                ownerId: nextPlayer.id,
+                postId,
+                seen: false,
+            })
+            const sendMoveEmail = nextPlayer.emailsDisabled
+                ? null
+                : await sgMail.send({
+                      to: nextPlayer.email,
+                      from: { email: 'admin@weco.io', name: 'we { collective }' },
+                      subject: 'New notification',
+                      text: `
+                            Hi ${nextPlayer.name}, it's your move!
+                            Add a new bead to the glass bead game: https://${config.appURL}/p/${postId}
+                        `,
+                      html: `
+                            <p>
+                                Hi ${nextPlayer.name},
+                                <br/>
+                                It's your move!
+                                <br/>
+                                Add a new bead to the <a href='${config.appURL}/p/${postId}'>glass bead game</a>.
+                            </p>
+                        `,
+                  })
+            const scheduleReminders = await scheduleGBGMoveJobs(
+                postId,
+                nextPlayer,
+                totalBeads + 2,
+                newDeadline
+            )
+            Promise.all([updateDeadline, createMoveNotification, sendMoveEmail, scheduleReminders])
+                .then(() => resolve(newDeadline))
+                .catch(() => resolve())
+        }
+    })
+}
+
 // database operations
 async function updateAllSpaceStats(res) {
     // calculate and update all space stats
@@ -1975,6 +2037,7 @@ module.exports = {
     accountLink,
     uploadFiles,
     createPost,
+    scheduleNextBeadDeadline,
     // database operations
     updateAllSpaceStats,
     updateAllSpaceUserStats,

@@ -231,121 +231,123 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
     }
 }
 
-module.exports = {
-    initialize: async () => {
-        // events
-        const upcomingEvents = await Event.findAll({
-            where: { startTime: { [Op.gte]: new Date() }, state: 'active' },
-            include: [
-                {
-                    model: User,
-                    as: 'Going',
-                    attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
-                    through: {
-                        where: { relationship: 'going', state: 'active' },
-                        attributes: ['id'],
-                    },
+async function initializeScheduledTasks() {
+    // events
+    const upcomingEvents = await Event.findAll({
+        where: { startTime: { [Op.gte]: new Date() }, state: 'active' },
+        include: [
+            {
+                model: User,
+                as: 'Going',
+                attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
+                through: {
+                    where: { relationship: 'going', state: 'active' },
+                    attributes: ['id'],
                 },
-                {
-                    model: User,
-                    as: 'Interested',
-                    attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
-                    through: {
-                        where: { relationship: 'interested', state: 'active' },
-                        attributes: ['id'],
-                    },
-                },
-            ],
-        })
-        upcomingEvents.forEach((event) => {
-            event.Going.forEach((user) =>
-                scheduleEventNotification({
-                    type: 'going',
-                    postId: event.postId,
-                    eventId: event.id,
-                    userEventId: user.UserEvent.id,
-                    startTime: event.startTime,
-                    userId: user.id,
-                    userName: user.name,
-                    userEmail: user.email,
-                    emailsDisabled: user.emailsDisabled,
-                })
-            )
-            event.Interested.forEach((user) =>
-                scheduleEventNotification({
-                    type: 'interested',
-                    postId: event.postId,
-                    eventId: event.id,
-                    userEventId: user.UserEvent.id,
-                    startTime: event.startTime,
-                    userId: user.id,
-                    userName: user.name,
-                    userEmail: user.email,
-                    emailsDisabled: user.emailsDisabled,
-                })
-            )
-        })
-        // weave moves
-        // todo: only grab games with nextMoveDeadline
-        const gbgPosts = await Post.findAll({
-            where: {
-                state: 'visible',
-                type: 'glass-bead-game',
-                '$GlassBeadGame.nextMoveDeadline$': { [Op.not]: null },
             },
-            attributes: ['id'],
-            include: [
-                {
-                    model: GlassBeadGame,
-                    attributes: [
-                        // 'privacy',
-                        'state',
-                        'movesPerPlayer',
-                        'moveTimeWindow',
-                        'nextMoveDeadline',
-                        'playerOrder',
-                    ],
+            {
+                model: User,
+                as: 'Interested',
+                attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
+                through: {
+                    where: { relationship: 'interested', state: 'active' },
+                    attributes: ['id'],
                 },
-                {
-                    model: User,
-                    as: 'Players',
-                    attributes: ['id', 'name', 'email', 'emailsDisabled'],
-                    through: {
-                        where: { type: 'glass-bead-game' },
-                        attributes: ['index'],
-                    },
+            },
+        ],
+    })
+    upcomingEvents.forEach((event) => {
+        event.Going.forEach((user) =>
+            scheduleEventNotification({
+                type: 'going',
+                postId: event.postId,
+                eventId: event.id,
+                userEventId: user.UserEvent.id,
+                startTime: event.startTime,
+                userId: user.id,
+                userName: user.name,
+                userEmail: user.email,
+                emailsDisabled: user.emailsDisabled,
+            })
+        )
+        event.Interested.forEach((user) =>
+            scheduleEventNotification({
+                type: 'interested',
+                postId: event.postId,
+                eventId: event.id,
+                userEventId: user.UserEvent.id,
+                startTime: event.startTime,
+                userId: user.id,
+                userName: user.name,
+                userEmail: user.email,
+                emailsDisabled: user.emailsDisabled,
+            })
+        )
+    })
+    // weave moves
+    // todo: only grab games with nextMoveDeadline
+    const gbgPosts = await Post.findAll({
+        where: {
+            state: 'visible',
+            type: 'glass-bead-game',
+            '$GlassBeadGame.nextMoveDeadline$': { [Op.not]: null },
+        },
+        attributes: ['id'],
+        include: [
+            {
+                model: GlassBeadGame,
+                attributes: [
+                    // 'privacy',
+                    'state',
+                    'movesPerPlayer',
+                    'moveTimeWindow',
+                    'nextMoveDeadline',
+                    'playerOrder',
+                ],
+            },
+            {
+                model: User,
+                as: 'Players',
+                attributes: ['id', 'name', 'email', 'emailsDisabled'],
+                through: {
+                    where: { type: 'glass-bead-game' },
+                    attributes: ['index'],
                 },
-                {
-                    model: Post,
-                    as: 'Beads',
-                    required: false,
-                    through: {
-                        where: { state: 'visible' },
-                        attributes: [],
-                    },
+            },
+            {
+                model: Post,
+                as: 'Beads',
+                required: false,
+                through: {
+                    where: { state: 'visible' },
+                    attributes: [],
                 },
-            ],
-        })
-        gbgPosts.forEach((gbg) => {
-            const { id, Beads, Players } = gbg
-            const { state, movesPerPlayer, moveTimeWindow, nextMoveDeadline, playerOrder } =
-                gbg.GlassBeadGame
-            const movesLeft = !movesPerPlayer || Beads.length < Players.length * movesPerPlayer
-            if (
-                state === 'active' &&
-                Players.length > 0 &&
-                moveTimeWindow &&
-                movesLeft &&
-                new Date(nextMoveDeadline) > new Date()
-            ) {
-                const order = playerOrder.split(',')
-                const nextPlayerId = +order[Beads.length % Players.length]
-                const nextPlayer = Players.find((p) => p.id === nextPlayerId)
-                const moveNumber = Beads.length + 1
-                if (nextPlayer) scheduleGBGMoveJobs(id, nextPlayer, moveNumber, nextMoveDeadline)
-            }
-        })
-    },
+            },
+        ],
+    })
+    gbgPosts.forEach((gbg) => {
+        const { id, Beads, Players } = gbg
+        const { state, movesPerPlayer, moveTimeWindow, nextMoveDeadline, playerOrder } =
+            gbg.GlassBeadGame
+        const movesLeft = !movesPerPlayer || Beads.length < Players.length * movesPerPlayer
+        if (
+            state === 'active' &&
+            Players.length > 0 &&
+            moveTimeWindow &&
+            movesLeft &&
+            new Date(nextMoveDeadline) > new Date()
+        ) {
+            const order = playerOrder.split(',')
+            const nextPlayerId = +order[Beads.length % Players.length]
+            const nextPlayer = Players.find((p) => p.id === nextPlayerId)
+            const moveNumber = Beads.length + 1
+            if (nextPlayer) scheduleGBGMoveJobs(id, nextPlayer, moveNumber, nextMoveDeadline)
+        }
+    })
+}
+
+module.exports = {
+    initializeScheduledTasks,
     scheduleEventNotification,
     scheduleGBGMoveJobs,
 }
