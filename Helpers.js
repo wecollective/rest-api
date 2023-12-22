@@ -15,6 +15,7 @@ const {
     SpaceAncestor,
     Notification,
     SpacePost,
+    GlassBeadGame,
 } = require('./models')
 const fs = require('fs')
 const { Op, QueryTypes, literal } = require('sequelize')
@@ -1440,6 +1441,8 @@ async function uploadFiles(req, res, accountId) {
 }
 
 // todo: combine below functions into createAndLinkPost function?
+// linkData: { itemAType, itemAId, itemBType, itemBId }
+// linkDefaults: { state: 'active', totalLikes: 0, totalComments: 0, totalRatings: 0 }
 function createPollAnswer(answer, accountId, pollId, files) {
     return new Promise(async (resolve) => {
         const { post: newAnswer } = await createPost(answer, files, accountId)
@@ -1479,6 +1482,26 @@ function createBead(bead, index, accountId, postId, files) {
     })
 }
 
+function createCardFace(cardFace, index, accountId, postId, files) {
+    new Promise(async (resolve) => {
+        const { post: newCardFace } = await createPost(cardFace, files, accountId)
+        Link.create({
+            creatorId: accountId,
+            itemAType: 'post',
+            itemBType: 'card-face',
+            itemAId: postId,
+            itemBId: newCardFace.id,
+            index,
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+            .then(() => resolve())
+            .catch((error) => resolve(error))
+    })
+}
+
 function sendGBGInvite(player, postId, creator, settings) {
     return new Promise(async (resolve) => {
         const {
@@ -1499,7 +1522,6 @@ function sendGBGInvite(player, postId, creator, settings) {
             state: 'pending',
         })
 
-        const creatorLink = `<a href='${appURL}/u/${creator.handle}'>${creator.name}</a>`
         const sendEmail = player.emailsDisabled
             ? null
             : await sgMail.send({
@@ -1514,14 +1536,14 @@ function sendGBGInvite(player, postId, creator, settings) {
                         <p>
                             Hi ${player.name},
                             <br/>
-                            ${creatorLink} just invited you to join a <a href='${appURL}/p/${postId}'>game</a> on weco.
+                            <a href='${appURL}/u/${creator.handle}'>${creator.name}</a> 
+                            just invited you to join a 
+                            <a href='${appURL}/p/${postId}'>game</a> on weco.
                             <br/>
                             Log in and go to your notifications to accept or reject the invitation.
-                            <br/>
-                            <br/>
+                            <br/><br/>
                             Game settings:
-                            <br/>
-                            <br/>
+                            <br/><br/>
                             Player order: ${players.map((p) => p.name).join(' → ')}
                             <br/>
                             Turns (moves per player): ${movesPerPlayer}
@@ -1582,7 +1604,6 @@ function addGBGPlayers(postId, creator, settings) {
 }
 
 // todo:
-// + handle gbgs
 // + check notifyMentions is adding the correct notification type
 // + handle source post links (move to create-post route)
 async function createPost(data, files, accountId) {
@@ -1624,7 +1645,7 @@ async function createPost(data, files, accountId) {
             lastActivity: new Date(),
         })
 
-        // todo: check this is adding the correct notification type
+        // todo: add the correct notification type
         const notifyMentions = mentions.length
             ? await new Promise(async (resolve) => {
                   const users = await User.findAll({
@@ -1682,22 +1703,18 @@ async function createPost(data, files, accountId) {
         const createGBG = glassBeadGame
             ? await new Promise(async (resolve) => {
                   const { settings, topicImage, topicGroup, beads, sourcePostId } = glassBeadGame
-                  const topicImageFile = files.find((file) => file.originalname === topicImage.id)
-
+                  const imageFile = files.find((file) => file.originalname === topicImage.id)
+                  const { players } = settings
                   const createGame = await GlassBeadGame.create({
-                      postId,
+                      postId: post.id,
                       state: 'active',
                       locked: false,
                       topicGroup,
-                      topicImage: topicImageFile
-                          ? topicImageFile.url
-                          : topicImage.Image.url || null,
+                      topicImage: imageFile ? imageFile.url : topicImage.Image.url || null,
                       synchronous: settings.synchronous,
                       multiplayer: settings.multiplayer,
                       allowedBeadTypes: settings.allowedBeadTypes.join(',').toLowerCase(),
-                      playerOrder: settings.players.length
-                          ? settings.players.map((p) => p.id).join(',')
-                          : null,
+                      playerOrder: players.length ? players.map((p) => p.id).join(',') : null,
                       totalMoves: settings.totalMoves || null,
                       movesPerPlayer: settings.movesPerPlayer || null,
                       moveDuration: settings.moveDuration || null,
@@ -1774,7 +1791,7 @@ async function createPost(data, files, accountId) {
                   )
 
                   const addPlayers =
-                      settings.multiplayer && settings.players.length > 0
+                      settings.multiplayer && !!players.length
                           ? await addGBGPlayers(post.id, creator, settings)
                           : null
 
@@ -1792,29 +1809,8 @@ async function createPost(data, files, accountId) {
 
         const createCard = card
             ? await Promise.all(
-                  [card.front, card.back].map(
-                      (cardFace, index) =>
-                          new Promise(async (resolve) => {
-                              const { post: newCardFace } = await createPost(
-                                  cardFace,
-                                  files,
-                                  accountId
-                              )
-                              Link.create({
-                                  creatorId: accountId,
-                                  itemAType: 'post',
-                                  itemBType: 'card-face',
-                                  itemAId: post.id,
-                                  itemBId: newCardFace.id,
-                                  index,
-                                  state: 'active',
-                                  totalLikes: 0,
-                                  totalComments: 0,
-                                  totalRatings: 0,
-                              })
-                                  .then(() => resolve())
-                                  .catch((error) => resolve(error))
-                          })
+                  [card.front, card.back].map((cardFace, index) =>
+                      createCardFace(cardFace, index, accountId, post.id, files)
                   )
               )
             : null
