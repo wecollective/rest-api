@@ -1473,7 +1473,7 @@ function createBead(bead, index, accountId, postId, files) {
             itemBType: 'bead',
             itemAId: postId,
             itemBId: newBead.id,
-            index: index + 1,
+            index,
             state: 'active',
             totalLikes: 0,
             totalComments: 0,

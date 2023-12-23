@@ -1545,7 +1545,7 @@ router.post('/create-poll-answer', authenticateToken, async (req, res) => {
     }
 })
 
-router.post('/create-next-bead', authenticateToken, async (req, res) => {
+router.post('/create-bead', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -1577,7 +1577,7 @@ router.post('/create-next-bead', authenticateToken, async (req, res) => {
                     model: Post,
                     as: 'Beads',
                     required: false,
-                    through: { where: { state: 'visible' }, attributes: ['index'] },
+                    through: { where: { state: 'active' }, attributes: ['index'] },
                     include: {
                         model: User,
                         as: 'Creator',
@@ -1593,7 +1593,7 @@ router.post('/create-next-bead', authenticateToken, async (req, res) => {
             itemBType: 'bead',
             itemAId: parent.id,
             itemBId: newBead.id,
-            index: gamePost.Beads.length + 1,
+            index: gamePost.GlassBeadGame.totalBeads,
             state: 'active',
             totalLikes: 0,
             totalComments: 0,
@@ -1686,7 +1686,7 @@ router.post('/create-next-bead', authenticateToken, async (req, res) => {
         )
 
         Promise.all([createLink, notifyPlayers, incrementTotalBeads, updateLastPostActivity])
-            .then((data) => res.status(200).json({ newDeadline: data[1] }))
+            .then((data) => res.status(200).json({ newBead, newDeadline: data[1] }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
