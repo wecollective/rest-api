@@ -1,5 +1,5 @@
 require('dotenv').config()
-const config = require('../Config')
+const { appURL } = require('../Config')
 const express = require('express')
 const router = express.Router()
 const sequelize = require('sequelize')
@@ -1463,15 +1463,15 @@ router.post('/create-space', authenticateToken, async (req, res) => {
                                         <p>
                                             Hi ${mod.name},
                                             <br/>
-                                            <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                            <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                                             wants to make
-                                            <a href='${config.appURL}/s/${handle}'>${name}</a>
+                                            <a href='${appURL}/s/${handle}'>${name}</a>
                                             a child space of
-                                            <a href='${config.appURL}/s/${parentSpace.handle}'>${parentSpace.name}</a>
+                                            <a href='${appURL}/s/${parentSpace.handle}'>${parentSpace.name}</a>
                                             on weco.
                                             <br/>
                                             Log in and go to your
-                                            <a href='${config.appURL}/u/${mod.handle}/notifications'>notifications</a>
+                                            <a href='${appURL}/u/${mod.handle}/notifications'>notifications</a>
                                             to accept or reject the request.
                                         </p>
                                     `,
@@ -1573,16 +1573,16 @@ router.post('/invite-space-users', authenticateToken, async (req, res) => {
                                   },
                                   subject: 'New notification',
                                   text: `
-                                Hi ${user.name}, ${accountName} just invited you to join ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
+                                Hi ${user.name}, ${accountName} just invited you to join ${spaceName}: ${appURL}/s/${spaceHandle} on weco.
                                 Log in and go to your notifications to accept the request.
                             `,
                                   html: `
                                 <p>
                                     Hi ${user.name},
                                     <br/>
-                                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                    <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                                     just invited you to join
-                                    <a href='${config.appURL}/s/${spaceHandle}'>${spaceName}</a>
+                                    <a href='${appURL}/s/${spaceHandle}'>${spaceName}</a>
                                     on weco.
                                     <br/>
                                     Log in and go to your notifications to accept the request.
@@ -1672,15 +1672,15 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
                       },
                       subject: 'New notification',
                       text: `
-                    Hi ${inviteCreator.name}, ${accountName} just ${response} your invite to join ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
+                    Hi ${inviteCreator.name}, ${accountName} just ${response} your invite to join ${spaceName}: ${appURL}/s/${spaceHandle} on weco.
                 `,
                       html: `
                     <p>
                         Hi ${inviteCreator.name},
                         <br/>
-                        <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                        <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                         just ${response} your invite to join
-                        <a href='${config.appURL}/s/${spaceHandle}'>${spaceName}</a>
+                        <a href='${appURL}/s/${spaceHandle}'>${spaceName}</a>
                         on weco.
                         <br/>
                     </p>
@@ -1743,16 +1743,16 @@ router.post('/request-space-access', authenticateToken, async (req, res) => {
                                   },
                                   subject: 'New notification',
                                   text: `
-                                Hi ${mod.name}, ${accountName} just requested access to ${space.name}: ${config.appURL}/s/${space.handle} on weco.
+                                Hi ${mod.name}, ${accountName} just requested access to ${space.name}: ${appURL}/s/${space.handle} on weco.
                                 Log in and go to your notifications to respond to the request.
                             `,
                                   html: `
                                 <p>
                                     Hi ${mod.name},
                                     <br/>
-                                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                    <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                                     just requested access to
-                                    <a href='${config.appURL}/s/${space.handle}'>${space.name}</a>
+                                    <a href='${appURL}/s/${space.handle}'>${space.name}</a>
                                     on weco.
                                     <br/>
                                     Log in and go to your notifications to respond to the request.
@@ -1846,15 +1846,15 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
                       },
                       subject: 'New notification',
                       text: `
-                    Hi ${requestCreator.name}, ${accountName} just ${response} your request to access ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
+                    Hi ${requestCreator.name}, ${accountName} just ${response} your request to access ${spaceName}: ${appURL}/s/${spaceHandle} on weco.
                 `,
                       html: `
                     <p>
                         Hi ${requestCreator.name},
                         <br/>
-                        <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                        <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                         just ${response} your request to access
-                        <a href='${config.appURL}/s/${spaceHandle}'>${spaceName}</a>
+                        <a href='${appURL}/s/${spaceHandle}'>${spaceName}</a>
                         on weco.
                         <br/>
                     </p>
@@ -1952,16 +1952,16 @@ router.post('/invite-space-moderator', authenticateToken, async (req, res) => {
                   },
                   subject: 'New notification',
                   text: `
-                Hi ${user.name}, ${accountName} just invited you to moderate ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
+                Hi ${user.name}, ${accountName} just invited you to moderate ${spaceName}: ${appURL}/s/${spaceHandle} on weco.
                 Log in and go to your notifications to accept the request.
             `,
                   html: `
                 <p>
                     Hi ${user.name},
                     <br/>
-                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                    <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                     just invited you to moderate
-                    <a href='${config.appURL}/s/${spaceHandle}'>${spaceName}</a>
+                    <a href='${appURL}/s/${spaceHandle}'>${spaceName}</a>
                     on weco.
                     <br/>
                     Log in and go to your notifications to accept the request.
@@ -2011,15 +2011,15 @@ router.post('/remove-space-moderator', authenticateToken, async (req, res) => {
                   },
                   subject: 'New notification',
                   text: `
-                Hi ${user.name}, ${accountName} just removed you from moderating ${spaceName}: ${config.appURL}/s/${spaceHandle} on weco.
+                Hi ${user.name}, ${accountName} just removed you from moderating ${spaceName}: ${appURL}/s/${spaceHandle} on weco.
             `,
                   html: `
                 <p>
                     Hi ${user.name},
                     <br/>
-                    <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                    <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                     just removed you from moderating
-                    <a href='${config.appURL}/s/${spaceHandle}'>${spaceName}</a>
+                    <a href='${appURL}/s/${spaceHandle}'>${spaceName}</a>
                     on weco.
                     <br/>
                 </p>
@@ -2127,15 +2127,15 @@ router.post('/send-parent-space-request', authenticateToken, async (req, res) =>
                                         <p>
                                             Hi ${mod.name},
                                             <br/>
-                                            <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                                            <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                                             wants to make
-                                            <a href='${config.appURL}/s/${childHandle}'>${childName}</a>
+                                            <a href='${appURL}/s/${childHandle}'>${childName}</a>
                                             a child space of
-                                            <a href='${config.appURL}/s/${parent.handle}'>${parent.name}</a>
+                                            <a href='${appURL}/s/${parent.handle}'>${parent.name}</a>
                                             on weco.
                                             <br/>
                                             Log in and navigate to your
-                                            <a href='${config.appURL}/u/${mod.handle}/notifications'>notifications</a>
+                                            <a href='${appURL}/u/${mod.handle}/notifications'>notifications</a>
                                             to accept or reject the request.
                                         </p>
                                     `,

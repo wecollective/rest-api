@@ -1,6 +1,5 @@
 require('dotenv').config()
-// todo: const { appUrl, etc. } = require('../Config')
-const config = require('../Config')
+const { appURL } = require('../Config')
 const express = require('express')
 const router = express.Router()
 const sgMail = require('@sendgrid/mail')
@@ -8,7 +7,6 @@ const { scheduleEventNotification } = require('../ScheduledTasks')
 const { v4: uuidv4 } = require('uuid')
 const puppeteer = require('puppeteer')
 const aws = require('aws-sdk')
-const multer = require('multer')
 const authenticateToken = require('../middleware/authenticateToken')
 const sequelize = require('sequelize')
 const { Op, QueryTypes } = sequelize
@@ -1645,15 +1643,15 @@ router.post('/create-next-bead', authenticateToken, async (req, res) => {
                                                 subject: 'New notification',
                                                 text: `
                                                     Hi ${p.name}, ${creator.name} just added a new bead.
-                                                    https://${config.appURL}/p/${parent.id}
+                                                    https://${appURL}/p/${parent.id}
                                                 `,
                                                 html: `
                                                     <p>
                                                         Hi ${p.name},
                                                         <br/>
-                                                        <a href='${config.appURL}/u/${creator.handle}'>${creator.name}</a>
+                                                        <a href='${appURL}/u/${creator.handle}'>${creator.name}</a>
                                                         just added a new 
-                                                        <a href='${config.appURL}/p/${parent.id}'>bead</a>.
+                                                        <a href='${appURL}/p/${parent.id}'>bead</a>.
                                                     </p>
                                                 `,
                                             })
@@ -1789,15 +1787,15 @@ router.post('/update-post', authenticateToken, async (req, res) => {
                                       subject: 'New notification',
                                       text: `
                                         Hi ${user.name}, ${post.Creator.name} just mentioned you in a ${mentionType} on weco:
-                                        http://${config.appURL}/p/${postId}
+                                        http://${appURL}/p/${postId}
                                     `,
                                       html: `
                                         <p>
                                             Hi ${user.name},
                                             <br/>
-                                            <a href='${config.appURL}/u/${post.Creator.handle}'>${post.Creator.name}</a>
+                                            <a href='${appURL}/u/${post.Creator.handle}'>${post.Creator.name}</a>
                                             just mentioned you in a 
-                                            <a href='${config.appURL}/p/${postId}'>${mentionType}</a>
+                                            <a href='${appURL}/p/${postId}'>${mentionType}</a>
                                             on weco
                                         </p>
                                     `,
@@ -1865,15 +1863,15 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                   subject: 'New notification',
                   text: `
                         Hi ${post.Creator.name}, ${accountName} just reposted your post on weco:
-                        http://${config.appURL}/p/${postId}
+                        http://${appURL}/p/${postId}
                     `,
                   html: `
                         <p>
                             Hi ${post.Creator.name},
                             <br/>
-                            <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                            <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                             just reposted your
-                            <a href='${config.appURL}/p/${postId}'>post</a>
+                            <a href='${appURL}/p/${postId}'>post</a>
                             on weco
                         </p>
                     `,
@@ -2139,9 +2137,9 @@ router.post('/add-like', authenticateToken, async (req, res) => {
               })
 
         let itemUrl
-        if (type === 'post') itemUrl = `${config.appURL}/p/${id}`
-        if (type === 'comment') itemUrl = `${config.appURL}/p/${rootId}?commentId=${id}`
-        if (type === 'link') itemUrl = `${config.appURL}/linkmap?item=${sourceType}&id=${sourceId}`
+        if (type === 'post') itemUrl = `${appURL}/p/${id}`
+        if (type === 'comment') itemUrl = `${appURL}/p/${rootId}?commentId=${id}`
+        if (type === 'link') itemUrl = `${appURL}/linkmap?item=${sourceType}&id=${sourceId}`
 
         const { handle, name } = await User.findOne({
             where: { id: accountId },
@@ -2161,7 +2159,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                         <p>
                             Hi ${item.Creator.name},
                             <br/>
-                            <a href='${config.appURL}/u/${handle}'>${name}</a>
+                            <a href='${appURL}/u/${handle}'>${name}</a>
                             just liked your
                             <a href='${itemUrl}'>${type}</a>
                             on weco
@@ -2303,9 +2301,8 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
               })
 
         let itemUrl
-        if (itemType === 'post') itemUrl = `${config.appURL}/p/${itemId}`
-        if (itemType === 'comment')
-            itemUrl = `${config.appURL}/p/${parentItemId}?commentId=${itemId}`
+        if (itemType === 'post') itemUrl = `${appURL}/p/${itemId}`
+        if (itemType === 'comment') itemUrl = `${appURL}/p/${parentItemId}?commentId=${itemId}`
 
         const sendEmail = skipEmail
             ? null
@@ -2321,7 +2318,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
                         <p>
                             Hi ${item.Creator.name},
                             <br/>
-                            <a href='${config.appURL}/u/${accountHandle}'>${accountName}</a>
+                            <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                             just rated your
                             <a href='${itemUrl}'>${itemType}</a>
                             on weco
@@ -2475,7 +2472,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                             })
                             const skipEmail =
                                 emailsDisabled || (await accountMuted(accountId, recipient))
-                            const url = `${config.appURL}/linkmap?item=${type}&id=${item.id}`
+                            const url = `${appURL}/linkmap?item=${type}&id=${item.id}`
                             const sendEmail = skipEmail
                                 ? null
                                 : await sgMail.send({
@@ -2494,9 +2491,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                                     <p>
                                         Hi ${name},
                                         <br/>
-                                        <a href='${
-                                            config.appURL
-                                        }/u/${accountHandle}'>${accountName}</a>
+                                        <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                                         just linked ${
                                             type === 'user'
                                                 ? `<a href='${url}'>you</a>`
@@ -2723,15 +2718,15 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                             subject: 'New notification',
                             text: `
                             Hi ${post.Creator.name}, ${account.name} just commented on your post on weco:
-                            http://${config.appURL}/p/${postId}?commentId=${newComment.id}
+                            http://${appURL}/p/${postId}?commentId=${newComment.id}
                         `,
                             html: `
                             <p>
                                 Hi ${post.Creator.name},
                                 <br/>
-                                <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
+                                <a href='${appURL}/u/${account.handle}'>${account.name}</a>
                                 just commented on your
-                                <a href='${config.appURL}/p/${postId}?commentId=${newComment.id}'>post</a>
+                                <a href='${appURL}/p/${postId}?commentId=${newComment.id}'>post</a>
                                 on weco
                             </p>
                         `,
@@ -2764,15 +2759,15 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                             subject: 'New notification',
                             text: `
                             Hi ${comment.Creator.name}, ${account.name} just replied to your comment on weco:
-                            http://${config.appURL}/p/${postId}?commentId=${newComment.id}
+                            http://${appURL}/p/${postId}?commentId=${newComment.id}
                         `,
                             html: `
                             <p>
                                 Hi ${comment.Creator.name},
                                 <br/>
-                                <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
+                                <a href='${appURL}/u/${account.handle}'>${account.name}</a>
                                 just replied to your
-                                <a href='${config.appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
+                                <a href='${appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
                                 on weco
                             </p>
                         `,
@@ -2804,15 +2799,15 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                             subject: 'New notification',
                             text: `
                               Hi ${reply.Creator.name}, ${account.name} just replied to your comment on weco:
-                              http://${config.appURL}/p/${postId}?commentId=${newComment.id}
+                              http://${appURL}/p/${postId}?commentId=${newComment.id}
                           `,
                             html: `
                               <p>
                                   Hi ${reply.Creator.name},
                                   <br/>
-                                  <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
+                                  <a href='${appURL}/u/${account.handle}'>${account.name}</a>
                                   just replied to your
-                                  <a href='${config.appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
+                                  <a href='${appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
                                   on weco
                               </p>
                           `,
@@ -2846,15 +2841,15 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                                       subject: 'New notification',
                                       text: `
                                     Hi ${user.name}, ${account.name} just mentioned you in a comment on weco:
-                                    http://${config.appURL}/p/${postId}?commentId=${newComment.id}
+                                    http://${appURL}/p/${postId}?commentId=${newComment.id}
                                 `,
                                       html: `
                                     <p>
                                         Hi ${user.name},
                                         <br/>
-                                        <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
+                                        <a href='${appURL}/u/${account.handle}'>${account.name}</a>
                                         just mentioned you in a
-                                        <a href='${config.appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
+                                        <a href='${appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
                                         on weco
                                     </p>
                                 `,
@@ -2940,15 +2935,15 @@ router.post('/update-comment', authenticateToken, async (req, res) => {
                                           subject: 'New notification',
                                           text: `
                                         Hi ${user.name}, ${account.name} just mentioned you in a comment on weco:
-                                        http://${config.appURL}/p/${postId}?commentId=${commentId}
+                                        http://${appURL}/p/${postId}?commentId=${commentId}
                                     `,
                                           html: `
                                         <p>
                                             Hi ${user.name},
                                             <br/>
-                                            <a href='${config.appURL}/u/${account.handle}'>${account.name}</a>
+                                            <a href='${appURL}/u/${account.handle}'>${account.name}</a>
                                             just mentioned you in a
-                                            <a href='${config.appURL}/p/${postId}?commentId=${commentId}'>comment</a>
+                                            <a href='${appURL}/p/${postId}?commentId=${commentId}'>comment</a>
                                             on weco
                                         </p>
                                     `,
@@ -3203,15 +3198,15 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
                   subject: 'New notification',
                   text: `
                         Hi ${post.Creator.name}, ${userName} just voted on your Poll:
-                        http://${config.appURL}/p/${postId}
+                        http://${appURL}/p/${postId}
                     `,
                   html: `
                         <p>
                             Hi ${post.Creator.name},
                             <br/>
-                            <a href='${config.appURL}/u/${userHandle}'>${userName}</a>
+                            <a href='${appURL}/u/${userHandle}'>${userName}</a>
                             just voted on your
-                            <a href='${config.appURL}/p/${postId}'>Poll</a>
+                            <a href='${appURL}/p/${postId}'>Poll</a>
                         </p>
                     `,
               })
@@ -3473,16 +3468,16 @@ router.post('/remove-post', authenticateToken, async (req, res) => {
                   subject: 'New notification',
                   text: `
                 Hi ${post.Creator.name}, your post was just removed from s/${spaceHandle} by its mods:
-                http://${config.appURL}/p/${postId}
+                http://${appURL}/p/${postId}
             `,
                   html: `
                 <p>
                     Hi ${post.Creator.name},
                     <br/>
                     Your 
-                    <a href='${config.appURL}/p/${postId}'>post</a>
+                    <a href='${appURL}/p/${postId}'>post</a>
                     was just removed from 
-                    <a href='${config.appURL}/s/${spaceHandle}'>s/${spaceHandle}</a>
+                    <a href='${appURL}/s/${spaceHandle}'>s/${spaceHandle}</a>
                     by its mods
                 </p>
             `,

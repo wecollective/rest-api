@@ -1,5 +1,5 @@
 require('dotenv').config()
-const config = require('../Config')
+const { appURL } = require('../Config')
 const express = require('express')
 const router = express.Router()
 const sequelize = require('sequelize')
@@ -785,12 +785,12 @@ router.post('/help-message', authenticateToken, async (req, res) => {
                 from: { email: 'admin@weco.io', name: 'we { collective }' },
                 subject: 'Help request',
                 text: `
-                    Help request sent from ${user.name}: https://${config.appURL}/u/${user.handle} (email: ${user.email})
+                    Help request sent from ${user.name}: https://${appURL}/u/${user.handle} (email: ${user.email})
                     Message: "${message}"
                 `,
                 html: `
                     <div>
-                        <p>Help request sent from <a href='${config.appURL}/u/${user.handle}'>${user.name}</a> (email: ${user.email})</p>
+                        <p>Help request sent from <a href='${appURL}/u/${user.handle}'>${user.name}</a> (email: ${user.email})</p>
                         <p>Message:</p>
                         <p>"${message}"</p>
                     </div>
@@ -927,14 +927,14 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                                               subject: 'New notification',
                                               text: `
                                         Hi ${p.name}, ${respondingPlayer.name} has rejected their invitation to weave so the game is now cancelled.
-                                        https://${config.appURL}/p/${postId}
+                                        https://${appURL}/p/${postId}
                                     `,
                                               html: `
                                         <p>
                                             Hi ${p.name},
                                             <br/>
-                                            <a href='${config.appURL}/u/${respondingPlayer.handle}'>${respondingPlayer.name}</a> has rejected 
-                                            their invitation to weave so <a href='${config.appURL}/p/${postId}'>the game</a> is now cancelled.
+                                            <a href='${appURL}/u/${respondingPlayer.handle}'>${respondingPlayer.name}</a> has rejected 
+                                            their invitation to weave so <a href='${appURL}/p/${postId}'>the game</a> is now cancelled.
                                         </p>
                                     `,
                                           })
@@ -964,14 +964,14 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                               subject: 'New notification',
                               text: `
                                 Hi ${post.Creator.name}, ${respondingPlayer.name} has accepted their invitation to your Weave.
-                                https://${config.appURL}/p/${postId}
+                                https://${appURL}/p/${postId}
                             `,
                               html: `
                             <p>
                                 Hi ${post.Creator.name},
                                 <br/>
-                                <a href='${config.appURL}/u/${respondingPlayer.handle}'>${respondingPlayer.name}</a> has accepted 
-                                their invitation to your <a href='${config.appURL}/p/${postId}'>Weave</a>.
+                                <a href='${appURL}/u/${respondingPlayer.handle}'>${respondingPlayer.name}</a> has accepted 
+                                their invitation to your <a href='${appURL}/p/${postId}'>Weave</a>.
                             </p>
                         `,
                           })
@@ -1012,7 +1012,7 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                                       subject: 'New notification',
                                       text: `
                                         Hi ${players[0].name}, it's your move!
-                                        Add a new bead to the weave on weco: https://${config.appURL}/p/${postId}
+                                        Add a new bead to the weave on weco: https://${appURL}/p/${postId}
                                     `,
                                       html: `
                                         <p>
@@ -1020,7 +1020,7 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
                                             <br/>
                                             It's your move!
                                             <br/>
-                                            Add a new bead to the <a href='${config.appURL}/p/${postId}'>weave</a> on weco.
+                                            Add a new bead to the <a href='${appURL}/p/${postId}'>weave</a> on weco.
                                         </p>
                                     `,
                                   })
