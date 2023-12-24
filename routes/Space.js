@@ -535,7 +535,7 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
     // const postType = findPostType(type)
     const order = findPostOrder(filter, sortBy)
     const through = findPostThrough(depth)
-    const where = findPostWhere('space', spaceId, startDate, type, searchQuery, mutedUsers)
+    const where = findPostWhere('space', spaceId, startDate, type, 'post', searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 
@@ -610,7 +610,7 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
     // const postType = findPostType(type)
     const order = findPostOrder(filter, sortBy)
     const through = findPostThrough(depth)
-    const where = findPostWhere('space', spaceId, startDate, type, searchQuery, mutedUsers)
+    const where = findPostWhere('space', spaceId, startDate, type, 'post', searchQuery, mutedUsers)
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 
@@ -636,31 +636,54 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
         where: { id: emptyPosts.rows.map((post) => post.id) },
         attributes: fullAttributes,
         order,
-        include: [
-            {
-                model: Link,
-                as: 'OutgoingPostLinks',
-                attributes: ['id', 'description'],
-                where: { state: 'visible', type: 'post-post' },
-                required: false,
-                include: {
-                    model: Post,
-                    as: 'OutgoingPost',
-                    attributes: ['id'],
-                },
+        include: {
+            model: Link,
+            as: 'OutgoingPostLinks',
+            attributes: ['id', 'description'],
+            where: { state: 'active', itemAType: 'post', itemBType: 'post' },
+            required: false,
+            include: {
+                model: Post,
+                as: 'OutgoingPost',
+                attributes: ['id'],
             },
-            {
-                model: Image,
-                required: false,
-                attributes: ['url'],
-                limit: 1,
-                order: [['index', 'ASC']],
-            },
-        ],
+        },
         required: false,
     })
 
-    res.status(200).json({ totalPosts: emptyPosts.count, posts: postsWithData })
+    // add images
+    Promise.all(
+        postsWithData.map(
+            (post) =>
+                new Promise(async (resolve) => {
+                    if (post.mediaTypes.includes('image')) {
+                        const [imageBlock] = await post.getBlocks({
+                            attributes: [],
+                            through: { where: { itemBType: 'image', state: 'active' } },
+                            joinTableAttributes: ['index'],
+                            include: [{ model: Image, attributes: ['url'] }],
+                            order: [[sequelize.col('Link.index'), 'ASC']],
+                            limit: 1,
+                        })
+                        if (imageBlock) post.setDataValue('imageUrl', imageBlock.Image.url)
+                        resolve()
+                    } else if (post.mediaTypes.includes('url')) {
+                        const [urlBlock] = await post.getBlocks({
+                            attributes: [],
+                            through: { where: { itemBType: 'url', state: 'active' } },
+                            joinTableAttributes: ['index'],
+                            include: [{ model: Url, attributes: ['image'] }],
+                            order: [[sequelize.col('Link.index'), 'ASC']],
+                            limit: 1,
+                        })
+                        if (urlBlock) post.setDataValue('imageUrl', urlBlock.Url.image)
+                        resolve()
+                    } else resolve()
+                })
+        )
+    )
+        .then(() => res.status(200).json({ totalPosts: emptyPosts.count, posts: postsWithData }))
+        .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
 router.post('/space-spaces', authenticateToken, (req, res) => {

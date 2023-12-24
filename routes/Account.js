@@ -717,11 +717,7 @@ router.post('/delete-account', authenticateToken, async (req, res) => {
             {
                 state: 'account-deleted',
                 text: null,
-                url: null,
-                urlImage: null,
-                urlDomain: null,
-                urlTitle: null,
-                urlDescription: null,
+                searchableText: null,
                 color: null,
             },
             { where: { creatorId: accountId } }

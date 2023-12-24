@@ -20,6 +20,7 @@ const {
     Notification,
     SpacePost,
     GlassBeadGame,
+    UserPost,
 } = require('./models')
 
 var aws = require('aws-sdk')
@@ -1009,18 +1010,27 @@ function findPostThrough(depth) {
     return { where: { state: 'active', relationship }, attributes: [] }
 }
 
-function findPostWhere(location, id, startDate, type, searchQuery, mutedUsers, spaceAccessList) {
+function findPostWhere(
+    location,
+    id,
+    startDate,
+    mediaTypes,
+    type,
+    searchQuery,
+    mutedUsers,
+    spaceAccessList
+) {
     const query = searchQuery || ''
     const where = {
         // state: 'visible',
         state: 'active',
         createdAt: { [Op.between]: [startDate, Date.now()] },
         // mediaTypes: { [Op.like]: `%${type}%` },
-        // type,
+        type,
     }
-    if (type !== 'All Types') {
-        const formattedType = type.replace(/\s+/g, '-').toLowerCase()
-        if (type === 'Text') where.mediaTypes = 'text'
+    if (mediaTypes !== 'All Types') {
+        const formattedType = mediaTypes.replace(/\s+/g, '-').toLowerCase()
+        if (mediaTypes === 'Text') where.mediaTypes = 'text'
         else where.mediaTypes = { [Op.like]: `%${formattedType}%` }
     }
     if (location === 'space') {
@@ -1544,11 +1554,11 @@ function sendGBGInvite(player, postId, creator, settings) {
                             <br/>
                             Log in and go to your notifications to accept or reject the invitation.
                             <br/><br/>
-                            Game settings:
-                            <br/><br/>
+                            <b>Game settings:</b>
+                            <br/>
                             Player order: ${players.map((p) => p.name).join(' → ')}
                             <br/>
-                            Turns (moves per player): ${movesPerPlayer}
+                            Moves per player: ${movesPerPlayer}
                             <br/>
                             Allowed bead types: ${allowedBeadTypes.join(',')}
                             <br/>
