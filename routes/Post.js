@@ -1410,7 +1410,7 @@ router.post('/create-post', authenticateToken, async (req, res) => {
         // upload files and create post
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post, event } = await createPost(postData, files, accountId)
-        const { spaceIds } = postData
+        const { spaceIds, source } = postData
         // store spaceIds and update with ancestors for response
         const allSpaceIds = [...spaceIds]
         // add spaces
@@ -1451,7 +1451,33 @@ router.post('/create-post', authenticateToken, async (req, res) => {
               })
             : null
 
-        Promise.all([addSpaces])
+        // todo: notify source creator
+        const addLink = source
+            ? await new Promise(async (resolve) => {
+                  const createNewLink = await Link.create({
+                      state: 'active',
+                      creatorId: accountId,
+                      itemAType: source.type,
+                      itemBType: 'post',
+                      itemAId: source.id,
+                      itemBId: post.id,
+                      description: source.linkDescription,
+                      totalLikes: 0,
+                      totalComments: 0,
+                      totalRatings: 0,
+                  })
+                  const updateSourceLinks = await Post.increment('totalLinks', {
+                      where: { id: source.id },
+                      silent: true,
+                  })
+                  const updateTargetLinks = await post.update({ totalLinks: 1 }, { silent: true })
+                  Promise.all([createNewLink, updateSourceLinks, updateTargetLinks])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
+              })
+            : null
+
+        Promise.all([addSpaces, addLink])
             .then(() => res.status(200).json({ post, allSpaceIds, event }))
             .catch((error) => res.status(500).json(error))
     }

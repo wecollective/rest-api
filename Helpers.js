@@ -1617,7 +1617,6 @@ function addGBGPlayers(postId, creator, settings) {
 
 // todo:
 // + check notifyMentions is adding the correct notification type
-// + handle source post links (move to create-post route)
 async function createPost(data, files, accountId) {
     return new Promise(async (resolveA) => {
         const {
@@ -1637,7 +1636,6 @@ async function createPost(data, files, accountId) {
             color,
             watermark,
         } = data
-        // todo: include sourceId, sourceCreatorId, description etc. in link
 
         const creator = await User.findOne({
             where: { id: accountId },
@@ -1826,34 +1824,6 @@ async function createPost(data, files, accountId) {
                   )
               )
             : null
-
-        // const createLink = sourceId
-        //     ? await new Promise(async (resolve) => {
-        //           // todo: handle other source types when needed
-        //           const createNewLink = await Link.create({
-        //               state: 'visible',
-        //               type: `${sourceType}-post`,
-        //               creatorId: accountId,
-        //               itemAId: sourceId,
-        //               itemBId: post.id,
-        //               description: linkDescription,
-        //               totalLikes: 0,
-        //               totalComments: 0,
-        //               totalRatings: 0,
-        //           })
-        //           const updateSourceLinks = await Post.increment('totalLinks', {
-        //               where: { id: sourceId },
-        //               silent: true,
-        //           })
-        //           const updateTargetLinks = await post.update(
-        //               { totalLinks: 1 },
-        //               { where: { id: post.id }, silent: true }
-        //           )
-        //           Promise.all([createNewLink, updateSourceLinks, updateTargetLinks])
-        //               .then(() => resolve())
-        //               .catch((error) => resolve(error))
-        //       })
-        //     : null
 
         Promise.all([
             notifyMentions,
