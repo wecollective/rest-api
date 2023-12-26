@@ -1289,19 +1289,10 @@ async function getFullLinkedItem(type, id, accountId) {
     let model
     let attributes = []
     let include = null
-    if (type === 'post') {
+    if (['post', 'comment'].includes(type)) {
         model = Post
         attributes = [sourcePostId(), ...findFullPostAttributes('Post', accountId)]
         include = findPostInclude(accountId)
-    }
-    if (type === 'comment') {
-        model = Comment
-        attributes = findCommentAttributes('Comment', accountId)
-        include = {
-            model: User,
-            as: 'Creator',
-            attributes: ['id', 'handle', 'name', 'flagImagePath'],
-        }
     }
     if (type === 'user') {
         model = User
