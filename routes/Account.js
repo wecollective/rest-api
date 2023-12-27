@@ -429,7 +429,7 @@ router.post('/stream-posts', authenticateToken, async (req, res) => {
                   }
                 : null
             const where = {
-                state: 'visible',
+                state: 'active',
                 // type: findPostType(postType),
                 createdAt: { [Op.between]: [findStartDate(timeRange), Date.now()] },
             }
