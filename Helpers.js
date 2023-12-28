@@ -46,6 +46,7 @@ const defaultPostValues = {
     watermark: false,
     totalLikes: 0,
     totalComments: 0,
+    totalChildComments: 0,
     totalReposts: 0,
     totalRatings: 0,
     totalLinks: 0,

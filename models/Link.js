@@ -10,15 +10,16 @@ module.exports = (sequelize, DataTypes) => {
             },
             state: DataTypes.STRING,
             creatorId: DataTypes.INTEGER,
-            type: DataTypes.STRING, // todo: remove
-            itemAType: DataTypes.STRING,
+            type: DataTypes.STRING, // todo: remove after updates
+            itemAType: DataTypes.STRING, // 'user', 'space', posts: ('post', 'comment', 'bead', 'poll-answer', 'card-face', media block: 'url', 'image', 'audio')
             itemBType: DataTypes.STRING,
             itemAId: DataTypes.INTEGER,
             itemBId: DataTypes.INTEGER,
-            index: DataTypes.INTEGER,
-            relationship: DataTypes.STRING,
-            role: DataTypes.STRING,
-            description: DataTypes.TEXT,
+            index: DataTypes.INTEGER, // used to order media blocks, card faces, and GBG beads
+            relationship: DataTypes.STRING, // 'link', 'parent', or 'root' ('link' used for horizontal user created links, 'parent' used for links that connect child items to their parents, 'root' used to connect descendents to their root (i.e the source post for a deeply nested comment))
+            role: DataTypes.STRING, // null or prompt ('prompt' used on GBG's when a post is linked as the starting bead of a new game)
+            description: DataTypes.TEXT, // user entered text description of the link
+            // todo: potentially wrap links in posts and get the below tally values there?
             totalLikes: DataTypes.INTEGER,
             totalComments: DataTypes.INTEGER,
             totalRatings: DataTypes.INTEGER,

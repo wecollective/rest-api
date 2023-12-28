@@ -1,7 +1,7 @@
 'use strict'
 module.exports = (sequelize, DataTypes) => {
-    const PostAncestors = sequelize.define(
-        'PostAncestors',
+    const PostAncestor = sequelize.define(
+        'PostAncestor',
         {
             id: {
                 primaryKey: true,
@@ -14,8 +14,8 @@ module.exports = (sequelize, DataTypes) => {
         },
         {}
     )
-    PostAncestors.associate = function (models) {
+    PostAncestor.associate = function (models) {
         // associations can be defined here
     }
-    return PostAncestors
+    return PostAncestor
 }
