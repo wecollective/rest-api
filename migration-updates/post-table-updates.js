@@ -22,6 +22,14 @@ module.exports = {
                     },
                     { transaction: t }
                 ),
+                queryInterface.addColumn(
+                    'Posts',
+                    'totalChildComments',
+                    {
+                        type: Sequelize.DataTypes.INTEGER,
+                    },
+                    { transaction: t }
+                ),
             ])
         })
     },

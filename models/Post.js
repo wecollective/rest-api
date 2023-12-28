@@ -19,6 +19,7 @@ module.exports = (sequelize, DataTypes) => {
             originSpaceId: DataTypes.INTEGER,
             state: DataTypes.STRING,
             totalLikes: DataTypes.INTEGER,
+            totalChildComments: DataTypes.INTEGER,
             totalComments: DataTypes.INTEGER,
             totalLinks: DataTypes.INTEGER,
             totalReposts: DataTypes.INTEGER,

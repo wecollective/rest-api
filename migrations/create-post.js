@@ -41,6 +41,9 @@ module.exports = {
             totalLikes: {
                 type: Sequelize.INTEGER,
             },
+            totalChildComments: {
+                type: Sequelize.INTEGER,
+            },
             totalComments: {
                 type: Sequelize.INTEGER,
             },
