@@ -73,14 +73,6 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
-        // todo:
-        // + update comment and poll answer notification ids when migrated (comments done)
-        // + update comment link ids when migrated (done)
-        // + update toybox item comment ids (done)
-        // + update post ancestors table for comments
-        // + apply poll answer state to link, not new poll answer post
-        // + update root comment reply stats (otherwise replies not visible on unique post page) (done)
-
         // before updates:
         // + remove mediaTypes, originSpaceId, & totalChildComments from Post model
         // + change postId back to itemId and hasOne to hasMany on Post --> Url, Audio, Image relationships
@@ -167,9 +159,9 @@ router.get('/test', async (req, res) => {
         //     .catch((error) => res.status(500).json(error))
 
         // run post-table-updates migration
-        // add back in mediaTypes & originSpaceId values on Post model
+        // add back in mediaTypes, originSpaceId, & totalChildComments values on Post model
 
-        // // post table media type updates (long operation, nothing printed in console for ~ 30 secs, wait!)
+        // // post table media type updates (long operation, nothing printed in console for ~30 secs, wait!)
         // const posts = await Post.findAll({
         //     attributes: ['id', 'text', 'title', 'type'],
         //     include: [
@@ -520,7 +512,7 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
 
-        // // switch db instance to t3 to enable unlimited burst (long operation)
+        // // switch db instance to t3 to enable unlimited burst (long operation: ~26mins on t3.micro)
         // // migrate root comments to post table
         // const comments = await Comment.findAll()
 
@@ -813,58 +805,58 @@ router.get('/test', async (req, res) => {
 
         // update Post model hasMany --> hasOne
 
-        // add user ids to old mentions
-        const regex = `(?<=mention":{).*?(?=})`
-        const posts = await Post.findAll({
-            where: { text: { [Op.not]: null } },
-            attributes: ['id', 'text'],
-        })
-        Promise.all(
-            posts.map(
-                (post) =>
-                    new Promise(async (resolve) => {
-                        const matches = [...post.text.matchAll(regex)].map((t) =>
-                            JSON.parse(`{${t[0]}}`)
-                        )
-                        if (!matches.length) resolve()
-                        else {
-                            const mentions = []
-                            Promise.all(
-                                matches.map(
-                                    async (match) =>
-                                        new Promise((resolve2) => {
-                                            if (match.id) resolve2()
-                                            else {
-                                                User.findOne({
-                                                    where: { handle: match.link },
-                                                    attributes: ['id'],
-                                                }).then((user) => {
-                                                    mentions.push({ link: match.link, id: user.id })
-                                                    resolve2()
-                                                })
-                                            }
-                                        })
-                                )
-                            )
-                                .then(() => {
-                                    let newText = `${post.text}`
-                                    for (mention of mentions) {
-                                        newText = newText.replace(
-                                            `"link":"${mention.link}"`,
-                                            `"id":${mention.id},"link":"${mention.link}"`
-                                        )
-                                    }
-                                    post.update({ text: newText }, { silent: true })
-                                        .then(() => resolve())
-                                        .catch((error) => resolve(error))
-                                })
-                                .catch((error) => resolve(error))
-                        }
-                    })
-            )
-        )
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json(error))
+        // // add user ids to old mentions
+        // const regex = `(?<=mention":{).*?(?=})`
+        // const posts = await Post.findAll({
+        //     where: { text: { [Op.not]: null } },
+        //     attributes: ['id', 'text'],
+        // })
+        // Promise.all(
+        //     posts.map(
+        //         (post) =>
+        //             new Promise(async (resolve) => {
+        //                 const matches = [...post.text.matchAll(regex)].map((t) =>
+        //                     JSON.parse(`{${t[0]}}`)
+        //                 )
+        //                 if (!matches.length) resolve()
+        //                 else {
+        //                     const mentions = []
+        //                     Promise.all(
+        //                         matches.map(
+        //                             async (match) =>
+        //                                 new Promise((resolve2) => {
+        //                                     if (match.id) resolve2()
+        //                                     else {
+        //                                         User.findOne({
+        //                                             where: { handle: match.link },
+        //                                             attributes: ['id'],
+        //                                         }).then((user) => {
+        //                                             mentions.push({ link: match.link, id: user.id })
+        //                                             resolve2()
+        //                                         })
+        //                                     }
+        //                                 })
+        //                         )
+        //                     )
+        //                         .then(() => {
+        //                             let newText = `${post.text}`
+        //                             for (mention of mentions) {
+        //                                 newText = newText.replace(
+        //                                     `"link":"${mention.link}"`,
+        //                                     `"id":${mention.id},"link":"${mention.link}"`
+        //                                 )
+        //                             }
+        //                             post.update({ text: newText }, { silent: true })
+        //                                 .then(() => resolve())
+        //                                 .catch((error) => resolve(error))
+        //                         })
+        //                         .catch((error) => resolve(error))
+        //                 }
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
     }
 })
 
@@ -1188,7 +1180,6 @@ router.get('/target-from-text', authenticateToken, async (req, res) => {
 router.get('/post-comments', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId, offset } = req.query
-    console.log(999, postId, offset, accountId)
     const limits = [10, 10, 10, 10, 10] // number of comments to inlcude per generation (length of array determines max depth)
     const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
     let rootPostId = +postId
@@ -1513,6 +1504,52 @@ router.get('/post-audio', async (req, res) => {
               where: { itemAType: 'post', itemAId: postId, itemBType: 'image', state: 'active' },
           })
     res.status(200).json({ blocks, total })
+})
+
+router.get('/post-preview-data', async (req, res) => {
+    const { postId } = req.query
+    const post = await Post.findOne({ where: { id: postId }, attributes: ['id', 'mediaTypes'] })
+    const urlBlock = post.mediaTypes.includes('url')
+        ? await post.getBlocks({
+              attributes: ['id'],
+              through: { where: { itemBType: 'url', state: 'active' } },
+              joinTableAttributes: [],
+              include: [
+                  {
+                      model: Url,
+                      attributes: ['url', 'image', 'title', 'description'],
+                  },
+              ],
+              order: [[sequelize.col('Link.index'), 'ASC']],
+              limit: 1,
+          })
+        : null
+    const imageBlock = post.mediaTypes.includes('image')
+        ? await post.getBlocks({
+              attributes: ['id'],
+              through: { where: { itemBType: 'image', state: 'active' } },
+              joinTableAttributes: [],
+              include: [{ model: Image, attributes: ['url'] }],
+              order: [[sequelize.col('Link.index'), 'ASC']],
+              limit: 1,
+          })
+        : null
+    const audioBlock = post.mediaTypes.includes('audio')
+        ? await post.getBlocks({
+              attributes: ['id'],
+              through: { where: { itemBType: 'audio', state: 'active' } },
+              joinTableAttributes: [],
+              include: [{ model: Audio, attributes: ['id', 'url'] }],
+              order: [[sequelize.col('Link.index'), 'ASC']],
+              limit: 1,
+              required: false,
+          })
+        : null
+    res.status(200).json({
+        url: urlBlock ? urlBlock[0].Url : null,
+        image: imageBlock ? imageBlock[0].Image : null,
+        audio: audioBlock ? audioBlock[0].Audio : null,
+    })
 })
 
 router.get('/card-faces', async (req, res) => {
