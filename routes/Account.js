@@ -28,6 +28,7 @@ const {
     Image,
     ToyBoxRow,
     ToyBoxItem,
+    Audio,
 } = require('../models')
 const {
     totalSpaceFollowers,
@@ -252,41 +253,39 @@ router.post('/account-notifications', authenticateToken, async (req, res) => {
                         },
                         {
                             model: Url,
-                            where: { state: 'active' },
-                            attributes: ['url', 'image', 'title', 'description', 'domain'],
-                            limit: 1,
-                            required: false,
+                            attributes: ['url', 'image', 'title', 'description'],
                         },
                         {
                             model: Image,
-                            attributes: ['id', 'index', 'url', 'caption'],
-                            limit: 6,
-                            required: false,
+                            attributes: ['url'],
+                        },
+                        {
+                            model: Audio,
+                            attributes: ['url'],
                         },
                         {
                             model: GlassBeadGame,
                             attributes: ['topicImage', 'state'],
-                            required: false,
                         },
-                        {
-                            model: Post,
-                            as: 'CardSides',
-                            attributes: ['id'],
-                            through: {
-                                where: { type: 'card-post', state: ['visible', 'account-deleted'] },
-                                attributes: [],
-                            },
-                            include: {
-                                model: Image,
-                                attributes: ['id', 'url'],
-                                required: false,
-                            },
-                            required: false,
-                        },
+                        // {
+                        //     model: Post,
+                        //     as: 'CardSides',
+                        //     attributes: ['id'],
+                        //     through: {
+                        //         where: { type: 'card-post', state: ['visible', 'account-deleted'] },
+                        //         attributes: [],
+                        //     },
+                        //     include: {
+                        //         model: Image,
+                        //         attributes: ['id', 'url'],
+                        //         required: false,
+                        //     },
+                        //     required: false,
+                        // },
                     ],
                 },
                 {
-                    model: Comment,
+                    model: Post,
                     as: 'relatedComment',
                     include: {
                         model: User,
@@ -640,6 +639,19 @@ router.post('/toggle-notification-seen', authenticateToken, (req, res) => {
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         Notification.update({ seen }, { where: { id, ownerId: accountId }, silent: true })
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/mark-all-notifications-seen', authenticateToken, (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        Notification.update(
+            { seen: true },
+            { where: { ownerId: accountId, seen: false }, silent: true }
+        )
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
