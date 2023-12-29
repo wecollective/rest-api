@@ -520,7 +520,8 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
 
-        // // migrate root comments to post table (long operation: ~4 mins 40 seconds)
+        // // switch db instance to t3 to enable unlimited burst (long operation)
+        // // migrate root comments to post table
         // const comments = await Comment.findAll()
 
         // const rootCommentMappings = []
@@ -757,60 +758,113 @@ router.get('/test', async (req, res) => {
 
         // // todo: add searchable text to comments using front end after migration
 
-        // migrate poll answers (add root link to post too?)
-        const pollAnswers = await PollAnswer.findAll()
+        // // migrate poll answers (add root link to post too?)
+        // const pollAnswers = await PollAnswer.findAll()
+        // Promise.all(
+        //     pollAnswers.map(
+        //         (answer) =>
+        //             new Promise(async (resolve) => {
+        //                 // create new post
+        //                 const newPost = await Post.create(
+        //                     {
+        //                         ...defaultPostValues,
+        //                         type: 'poll-answer',
+        //                         text: answer.text,
+        //                         searchableText: answer.text,
+        //                         mediaTypes: 'text',
+        //                         creatorId: answer.creatorId,
+        //                         createdAt: answer.createdAt,
+        //                         updatedAt: answer.updatedAt,
+        //                         lastActivity: answer.createdAt,
+        //                     },
+        //                     { silent: true }
+        //                 )
+        //                 // create link to poll
+        //                 const createLink = await Link.create(
+        //                     {
+        //                         creatorId: answer.creatorId,
+        //                         itemAType: 'poll',
+        //                         itemBType: 'poll-answer',
+        //                         itemAId: answer.pollId,
+        //                         itemBId: newPost.id,
+        //                         relationship: 'parent',
+        //                         state: answer.state,
+        //                         totalLikes: 0,
+        //                         totalComments: 0,
+        //                         totalRatings: 0,
+        //                         createdAt: answer.createdAt,
+        //                         updatedAt: answer.createdAt,
+        //                     },
+        //                     { silent: true }
+        //                 )
+        //                 // update reactions
+        //                 const updateReactions = await Reaction.update(
+        //                     { itemId: newPost.id },
+        //                     { where: { type: 'vote', itemId: answer.id }, silent: true }
+        //                 )
+        //                 Promise.all([createLink, updateReactions])
+        //                     .then(() => resolve())
+        //                     .catch((error) => resolve(error))
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // update Post model hasMany --> hasOne
+
+        // add user ids to old mentions
+        const regex = `(?<=mention":{).*?(?=})`
+        const posts = await Post.findAll({
+            where: { text: { [Op.not]: null } },
+            attributes: ['id', 'text'],
+        })
         Promise.all(
-            pollAnswers.map(
-                (answer) =>
+            posts.map(
+                (post) =>
                     new Promise(async (resolve) => {
-                        // create new post
-                        const newPost = await Post.create(
-                            {
-                                ...defaultPostValues,
-                                type: 'poll-answer',
-                                text: answer.text,
-                                searchableText: answer.text,
-                                mediaTypes: 'text',
-                                creatorId: answer.creatorId,
-                                createdAt: answer.createdAt,
-                                updatedAt: answer.updatedAt,
-                                lastActivity: answer.createdAt,
-                            },
-                            { silent: true }
+                        const matches = [...post.text.matchAll(regex)].map((t) =>
+                            JSON.parse(`{${t[0]}}`)
                         )
-                        // create link to poll
-                        const createLink = await Link.create(
-                            {
-                                creatorId: answer.creatorId,
-                                itemAType: 'poll',
-                                itemBType: 'poll-answer',
-                                itemAId: answer.pollId,
-                                itemBId: newPost.id,
-                                relationship: 'parent',
-                                state: answer.state,
-                                totalLikes: 0,
-                                totalComments: 0,
-                                totalRatings: 0,
-                                createdAt: answer.createdAt,
-                                updatedAt: answer.createdAt,
-                            },
-                            { silent: true }
-                        )
-                        // update reactions
-                        const updateReactions = await Reaction.update(
-                            { itemId: newPost.id },
-                            { where: { type: 'vote', itemId: answer.id }, silent: true }
-                        )
-                        Promise.all([createLink, updateReactions])
-                            .then(() => resolve())
-                            .catch((error) => resolve(error))
+                        if (!matches.length) resolve()
+                        else {
+                            const mentions = []
+                            Promise.all(
+                                matches.map(
+                                    async (match) =>
+                                        new Promise((resolve2) => {
+                                            if (match.id) resolve2()
+                                            else {
+                                                User.findOne({
+                                                    where: { handle: match.link },
+                                                    attributes: ['id'],
+                                                }).then((user) => {
+                                                    mentions.push({ link: match.link, id: user.id })
+                                                    resolve2()
+                                                })
+                                            }
+                                        })
+                                )
+                            )
+                                .then(() => {
+                                    let newText = `${post.text}`
+                                    for (mention of mentions) {
+                                        newText = newText.replace(
+                                            `"link":"${mention.link}"`,
+                                            `"id":${mention.id},"link":"${mention.link}"`
+                                        )
+                                    }
+                                    post.update({ text: newText }, { silent: true })
+                                        .then(() => resolve())
+                                        .catch((error) => resolve(error))
+                                })
+                                .catch((error) => resolve(error))
+                        }
                     })
             )
         )
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json(error))
-
-        // update Post model hasMany --> hasOne
     }
 })
 
