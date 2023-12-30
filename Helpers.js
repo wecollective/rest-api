@@ -211,7 +211,8 @@ function uploadBeadFile(file, accountId) {
     })
 }
 
-function createImage(accountId, postId, image, index, files) {
+// todo: add state to media?
+function createImage(accountId, postId, postType, image, index, files) {
     return new Promise(async (resolve) => {
         const newPost = await Post.create({
             ...defaultPostValues,
@@ -230,7 +231,7 @@ function createImage(accountId, postId, image, index, files) {
         })
         const addLink = await Link.create({
             creatorId: accountId,
-            itemAType: 'post',
+            itemAType: postType,
             itemBType: 'image',
             itemAId: postId,
             itemBId: newPost.id,
@@ -247,7 +248,7 @@ function createImage(accountId, postId, image, index, files) {
     })
 }
 
-function createAudio(accountId, postId, audio, index, files) {
+function createAudio(accountId, postId, postType, audio, index, files) {
     return new Promise(async (resolve) => {
         const newPost = await Post.create({
             ...defaultPostValues,
@@ -265,7 +266,7 @@ function createAudio(accountId, postId, audio, index, files) {
         })
         const addLink = await Link.create({
             creatorId: accountId,
-            itemAType: 'post',
+            itemAType: postType,
             itemBType: 'audio',
             itemAId: postId,
             itemBId: newPost.id,
@@ -282,7 +283,7 @@ function createAudio(accountId, postId, audio, index, files) {
     })
 }
 
-function createUrl(accountId, postId, urlData, index) {
+function createUrl(accountId, postId, postType, urlData, index) {
     return new Promise(async (resolve) => {
         const { url, title, description, domain, image, searchableText } = urlData
         const newPost = await Post.create({
@@ -304,7 +305,7 @@ function createUrl(accountId, postId, urlData, index) {
         })
         const addLink = await Link.create({
             creatorId: accountId,
-            itemAType: 'post',
+            itemAType: postType,
             itemBType: 'url',
             itemAId: postId,
             itemBId: newPost.id,
@@ -949,9 +950,9 @@ const totalUserPosts = [
     literal(`(
         SELECT COUNT(*)
         FROM Posts
-        WHERE Posts.state = 'visible'
+        WHERE Posts.state = 'active'
         AND Posts.creatorId = User.id
-        AND Posts.type IN ('text', 'url', 'image', 'audio', 'event', 'poll', 'glass-bead-game')
+        AND Posts.type = 'post'
     )`),
     'totalPosts',
 ]
@@ -982,6 +983,24 @@ function findInitialPostAttributes(sortBy) {
     return attributes
 }
 
+const fullPostAttributes = [
+    'id',
+    'type',
+    'mediaTypes',
+    'state',
+    'title',
+    'text',
+    'createdAt',
+    'updatedAt',
+    'lastActivity',
+    'totalLikes',
+    'totalComments',
+    'totalReposts',
+    'totalRatings',
+    'totalLinks',
+]
+
+// todo: replace all use cases with const fullPostAttributes above
 function findFullPostAttributes(model, accountId) {
     return [
         'id',
@@ -1184,7 +1203,7 @@ async function getToyboxItem(type, id) {
     let model
     let include = []
     let attributes = []
-    if (type === 'post') {
+    if (['post', 'comment'].includes(type)) {
         model = Post
         attributes = [
             'id',
@@ -1238,15 +1257,6 @@ async function getToyboxItem(type, id) {
                 attributes: ['startTime', 'endTime'],
             },
         ]
-    }
-    if (type === 'comment') {
-        model = Comment
-        attributes = ['id', 'text', 'state', 'itemId']
-        include = {
-            model: User,
-            as: 'Creator',
-            attributes: ['name', 'flagImagePath'],
-        }
     }
     if (type === 'user') {
         model = User
@@ -1661,18 +1671,18 @@ async function createPost(data, files, accountId) {
             : null
 
         const createUrls = urls
-            ? await Promise.all(urls.map((url, i) => createUrl(accountId, post.id, url, i)))
+            ? await Promise.all(urls.map((url, i) => createUrl(accountId, post.id, type, url, i)))
             : null
 
         const createImages = images
             ? await Promise.all(
-                  images.map((image, i) => createImage(accountId, post.id, image, i, files))
+                  images.map((image, i) => createImage(accountId, post.id, image, i, type, files))
               )
             : null
 
         const createAudios = audios
             ? await Promise.all(
-                  audios.map((audio, i) => createAudio(accountId, post.id, audio, i, files))
+                  audios.map((audio, i) => createAudio(accountId, post.id, audio, i, type, files))
               )
             : null
 
@@ -1955,6 +1965,7 @@ module.exports = {
     imageMBLimit,
     audioMBLimit,
     defaultPostValues,
+    fullPostAttributes,
     totalUsers,
     totalSpaceUsers,
     totalSpaceFollowers,

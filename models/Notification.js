@@ -37,7 +37,7 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'postId',
             as: 'relatedPost',
         })
-        Notification.belongsTo(models.Comment, {
+        Notification.belongsTo(models.Post, {
             foreignKey: 'commentId',
             as: 'relatedComment',
         })

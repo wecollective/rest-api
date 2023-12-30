@@ -1768,7 +1768,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             silent: true,
         })
         // increment space stats
-        const incrementSpaceStats = root
+        const incrementSpaceStats = rootPost
             ? await Promise.all(
                   rootPost.AllPostSpaces.map((space) =>
                       space.increment('totalComments', { silent: true })
@@ -2086,7 +2086,7 @@ router.post('/update-post', authenticateToken, async (req, res) => {
                                 .then(() => resolve())
                                 .catch((error) => resolve(error))
                         } else {
-                            createUrl(accountId, id, newUrl, index)
+                            createUrl(accountId, id, post.type, newUrl, index)
                                 .then(() => resolve())
                                 .catch((error) => resolve(error))
                         }
