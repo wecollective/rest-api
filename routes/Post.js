@@ -161,6 +161,26 @@ router.get('/test', async (req, res) => {
         // run post-table-updates migration
         // add back in mediaTypes, originSpaceId, & totalChildComments values on Post model
 
+        // tally total child comments for existing posts
+        // const posts = await Post.findAll({ attributes: ['id', 'totalComments'] })
+        // Promise.all(
+        //     posts.map(
+        //         (post) =>
+        //             new Promise(async (resolve) => {
+        //                 if (post.totalComments) {
+        //                     const totalChildComments = await Comment.count({
+        //                         where: { itemType: 'post', itemId: post.id, parentCommentId: null },
+        //                     })
+        //                     post.update({ totalChildComments }, { silent: true })
+        //                         .then(() => resolve())
+        //                         .catch((error) => resolve(error))
+        //                 } else resolve()
+        //             })
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
+
         // // post table media type updates (long operation, nothing printed in console for ~30 secs, wait!)
         // const posts = await Post.findAll({
         //     attributes: ['id', 'text', 'title', 'type'],
@@ -525,7 +545,7 @@ router.get('/test', async (req, res) => {
         //             (comment) =>
         //                 new Promise(async (resolve) => {
         //                     // count total child comments
-        //                     const totalChildComments = await Comment.count({
+        //                     const totalComments = await Comment.count({
         //                         where: { parentCommentId: comment.id, state: 'visible' },
         //                     })
         //                     // create new post
@@ -541,7 +561,8 @@ router.get('/test', async (req, res) => {
         //                             totalLikes: comment.totalLikes,
         //                             totalLinks: comment.totalLinks,
         //                             totalRatings: comment.totalRatings,
-        //                             totalChildComments,
+        //                             totalComments,
+        //                             totalChildComments: totalComments,
         //                             createdAt: comment.createdAt,
         //                             updatedAt: comment.updatedAt,
         //                             lastActivity: comment.createdAt,
@@ -1587,7 +1608,7 @@ router.post('/create-post', authenticateToken, async (req, res) => {
         const { spaceIds, source } = postData
         // store spaceIds and update with ancestors for response
         const allSpaceIds = [...spaceIds]
-        // add spaces
+        // add spaces and increment space stats
         const addSpaces = spaceIds
             ? await new Promise(async (resolve) => {
                   const addDirectSpaces = await Promise.all(
@@ -1619,7 +1640,12 @@ router.post('/create-post', authenticateToken, async (req, res) => {
                           createSpacePost(accountId, spaceId, post.id, 'post', 'indirect')
                       )
                   )
-                  Promise.all([addDirectSpaces, addIndirectSpaces])
+                  // increment space stats
+                  const incrementSpaceStats = await Space.increment('totalPosts', {
+                      where: { id: allSpaceIds },
+                      silent: true,
+                  })
+                  Promise.all([addDirectSpaces, addIndirectSpaces, incrementSpaceStats])
                       .then(() => resolve())
                       .catch((error) => resolve(error))
               })
@@ -1657,63 +1683,151 @@ router.post('/create-post', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: notify parent owner
 router.post('/create-comment', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post } = await createPost(postData, files, accountId)
-        // add comment links
         const { parent, root } = postData.link
-        const addLinks = await new Promise(async (resolve) => {
-            const addParentLink = await Link.create({
-                creatorId: accountId,
-                itemAType: parent.type,
-                itemBType: 'comment',
-                itemAId: parent.id,
-                itemBId: post.id,
-                relationship: 'parent',
-                state: 'active',
-                totalLikes: 0,
-                totalComments: 0,
-                totalRatings: 0,
+        // link comment to parent and root
+        const addParentLink = await Link.create({
+            creatorId: accountId,
+            itemAType: parent.type,
+            itemBType: 'comment',
+            itemAId: parent.id,
+            itemBId: post.id,
+            relationship: 'parent',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        const addRootLink = root
+            ? await Link.create({
+                  creatorId: accountId,
+                  itemAType: root.type,
+                  itemBType: 'comment',
+                  itemAId: root.id,
+                  itemBId: post.id,
+                  relationship: 'root',
+                  state: 'active',
+                  totalLikes: 0,
+                  totalComments: 0,
+                  totalRatings: 0,
+              })
+            : null
+        // increment comment tallies
+        const incrementParentsChildComments = await Post.increment('totalChildComments', {
+            where: { id: parent.id },
+            silent: true,
+        })
+        const ancestors = await PostAncestor.findAll({
+            where: { descendentId: parent.id },
+            attributes: ['ancestorId'],
+        })
+        const ancestorIds = [parent.id, ...ancestors.map((a) => a.ancestorId)]
+        const incrementAncestorsTotalComments = await Post.increment('totalComments', {
+            where: { id: ancestorIds },
+            silent: true,
+        })
+        // increment space stats
+        const rootPost = await Post.findOne({
+            where: { id: root ? root.id : parent.id },
+            attributes: ['id'],
+            include: {
+                model: Space,
+                as: 'AllPostSpaces',
+                where: { state: 'active' },
+                required: false,
+                attributes: ['id'],
+                through: { where: { state: 'active' }, attributes: [] },
+            },
+        })
+        const incrementSpaceStats = await Promise.all(
+            rootPost.AllPostSpaces.map((space) =>
+                space.increment('totalComments', { silent: true })
+            )
+        )
+        // update ancestors lastActivity
+        const updateLastActivity = await Post.update(
+            { lastActivity: new Date() },
+            { where: { id: ancestorIds }, silent: true }
+        )
+        // create new comment ancestors
+        const createCommentAncestors = await Promise.all(
+            ancestorIds.map((id) =>
+                PostAncestor.create({ ancestorId: id, descendentId: post.id, state: 'active' })
+            )
+        )
+        // notify parent owner
+        const notifyParentOwner = await new Promise(async (resolve) => {
+            const account = await User.findOne({
+                where: { id: accountId },
+                attributes: ['name', 'handle'],
             })
-            const incrementParentComments = await Post.increment('totalComments', {
+            const parentPost = await Post.findOne({
                 where: { id: parent.id },
-                silent: true,
+                attributes: ['id', 'type'],
+                include: {
+                    model: User,
+                    as: 'Creator',
+                    attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
+                },
             })
-            const addRootLink = root
-                ? await Link.create({
-                      creatorId: accountId,
-                      itemAType: root.type,
-                      itemBType: 'comment',
-                      itemAId: root.id,
-                      itemBId: post.id,
-                      relationship: 'root',
-                      state: 'active',
-                      totalLikes: 0,
-                      totalComments: 0,
-                      totalRatings: 0,
+            const isOwnPost = parentPost.Creator.id === accountId
+            const muted = await accountMuted(accountId, parentPost.Creator)
+            const skipNotification = isOwnPost || muted
+            const createNotification = skipNotification
+                ? null
+                : await Notification.create({
+                      ownerId: parentPost.Creator.id,
+                      type: parentPost.type === 'comment' ? 'comment-reply' : 'post-comment',
+                      seen: false,
+                      spaceAId: postData.originSpaceId,
+                      userId: accountId,
+                      postId: parent.id,
+                      commentId: post.id,
                   })
-                : null
-            const incrementRootComments = root
-                ? await Post.increment('totalComments', {
-                      where: { id: root.id },
-                      silent: true,
+            const skipEmail = skipNotification || parentPost.Creator.emailsDisabled
+            const messageText =
+                parentPost.type === 'comment' ? 'replied to your' : 'commented on your'
+            const sendEmail = skipEmail
+                ? null
+                : await sgMail.send({
+                      to: parentPost.Creator.email,
+                      from: { email: 'admin@weco.io', name: 'we { collective }' },
+                      subject: 'New notification',
+                      text: `
+                        Hi ${parentPost.Creator.name}, ${account.name} just ${messageText} ${parentPost.type} on weco:
+                        http://${appURL}/p/${post.id}
+                    `,
+                      html: `
+                        <p>
+                            Hi ${parentPost.Creator.name},
+                            <br/>
+                            <a href='${appURL}/u/${account.handle}'>${account.name}</a>
+                            just ${messageText}
+                            <a href='${appURL}/p/${post.id}'>${parentPost.type}</a>
+                            on weco
+                        </p>
+                    `,
                   })
-                : null
-            Promise.all([
-                addParentLink,
-                incrementParentComments,
-                addRootLink,
-                incrementRootComments,
-            ])
+            Promise.all([createNotification, sendEmail])
                 .then(() => resolve())
                 .catch((error) => resolve(error))
         })
-        // todo: notify parent owner
-        Promise.all([addLinks])
+
+        Promise.all([
+            addParentLink,
+            addRootLink,
+            incrementParentsChildComments,
+            incrementAncestorsTotalComments,
+            incrementSpaceStats,
+            updateLastActivity,
+            createCommentAncestors,
+            notifyParentOwner,
+        ])
             .then(() => res.status(200).json(post))
             .catch((error) => res.status(500).json(error))
     }
@@ -2771,7 +2885,7 @@ router.post('/delete-link', authenticateToken, async (req, res) => {
 })
 
 // todo: remove
-router.post('/create-comment', authenticateToken, async (req, res) => {
+router.post('/create-comment-old', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { text, postId, commentId, replyId, spaceId, mentions } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
