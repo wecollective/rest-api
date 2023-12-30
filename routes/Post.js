@@ -28,6 +28,7 @@ const {
     uploadFiles,
     createPost,
     scheduleNextBeadDeadline,
+    fullPostAttributes,
     defaultPostValues,
 } = require('../Helpers')
 const {
@@ -72,6 +73,8 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
+
+        // todo: add root links to parent comments
 
         // before updates:
         // + remove mediaTypes, originSpaceId, & totalChildComments from Post model
@@ -572,7 +575,24 @@ router.get('/test', async (req, res) => {
         //                     // add comment mapping
         //                     rootCommentMappings.push({ commentId: comment.id, postId: newPost.id })
         //                     // create link to post
-        //                     const createLink = await Link.create(
+        //                     const createRootLink = await Link.create(
+        //                         {
+        //                             creatorId: comment.creatorId,
+        //                             itemAType: comment.itemType,
+        //                             itemBType: 'comment',
+        //                             itemAId: comment.itemId,
+        //                             itemBId: newPost.id,
+        //                             relationship: 'root',
+        //                             state: 'active',
+        //                             totalLikes: 0,
+        //                             totalComments: 0,
+        //                             totalRatings: 0,
+        //                             createdAt: comment.createdAt,
+        //                             updatedAt: comment.createdAt,
+        //                         },
+        //                         { silent: true }
+        //                     )
+        //                     const createParentLink = await Link.create(
         //                         {
         //                             creatorId: comment.creatorId,
         //                             itemAType: comment.itemType, // 'post' or 'glass-bead-game'
@@ -629,7 +649,8 @@ router.get('/test', async (req, res) => {
         //                               })
         //                             : null
         //                     Promise.all([
-        //                         createLink,
+        //                         createRootLink,
+        //                         createParentLink,
         //                         updateReactions,
         //                         updateNotifications,
         //                         updateSourceLinks,
@@ -1198,37 +1219,34 @@ router.get('/target-from-text', authenticateToken, async (req, res) => {
     }
 })
 
-router.get('/post-comments', authenticateToken, async (req, res) => {
-    const accountId = req.user ? req.user.id : null
-    const { postId, offset } = req.query
-    const limits = [10, 10, 10, 10, 10] // number of comments to inlcude per generation (length of array determines max depth)
-    const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
-    let rootPostId = +postId
-    // get root post id for comments and poll answers
-    if (['comment', 'poll-answer'].includes(post.type)) {
-        const [{ itemAId }] = await db.sequelize.query(
-            `
-                SELECT itemAId AS root FROM Links
-                WHERE itemBId = :postId
-                AND relationship = 'root'
-                AND state = 'active'
-            `,
-            { replacements: { postId }, type: QueryTypes.SELECT }
-        )
-        if (itemAId) rootPostId = itemAId
-    }
-
-    // todo: count total children on first level
-    // const total = +offset
-    // ? null
-    // : await Link.count({
-    //       where: { itemAType: 'post', itemAId: postId, itemBType: 'image', state: 'active' },
-    //   })
+router.get('/post-comments', async (req, res) => {
+    const { postId, offset, filter } = req.query
+    const limits = [5, 4, 3, 2, 1] // number of comments to inlcude per generation (length of array determines max depth)
+    const post = await Post.findOne({
+        where: { id: postId },
+        attributes: ['id', 'totalChildComments'],
+    })
+    let order = [
+        // default 'top'
+        ['totalLikes', 'DESC'],
+        ['createdAt', 'ASC'],
+        ['id', 'ASC'],
+    ]
+    if (filter === 'new')
+        order = [
+            ['createdAt', 'DESC'],
+            ['id', 'ASC'],
+        ]
+    if (filter === 'old')
+        order = [
+            ['createdAt', 'ASC'],
+            ['id', 'ASC'],
+        ]
 
     async function getChildComments(root, depth) {
         return new Promise(async (resolve) => {
             const comments = await root.getBlocks({
-                attributes: findFullPostAttributes('Post', accountId),
+                attributes: [...fullPostAttributes, 'totalChildComments'],
                 through: {
                     where: { itemBType: 'comment', relationship: 'parent', state: 'active' },
                 },
@@ -1242,15 +1260,10 @@ router.get('/post-comments', authenticateToken, async (req, res) => {
                 ],
                 limit: limits[depth],
                 offset: depth ? 0 : +offset,
-                order: [
-                    ['totalLikes', 'DESC'],
-                    ['createdAt', 'ASC'],
-                    ['id', 'ASC'],
-                ],
+                order,
             })
             comments.forEach((c) => c.setDataValue('Comments', []))
             root.setDataValue('Comments', comments)
-            root.setDataValue('rootPostId', rootPostId)
             if (!limits[depth + 1]) resolve()
             else {
                 Promise.all(
@@ -1263,7 +1276,12 @@ router.get('/post-comments', authenticateToken, async (req, res) => {
     }
 
     getChildComments(post, 0)
-        .then(() => res.status(200).json(post.dataValues.Comments))
+        .then(() =>
+            res.status(200).json({
+                totalChildren: post.totalChildComments,
+                comments: post.dataValues.Comments,
+            })
+        )
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
@@ -1598,6 +1616,7 @@ router.get('/card-faces', async (req, res) => {
     res.status(200).json(cardBlocks)
 })
 
+// todo: notify source creator
 router.post('/create-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
@@ -1683,13 +1702,31 @@ router.post('/create-post', authenticateToken, async (req, res) => {
     }
 })
 
+// todo: root not being passed up on comment post page (get here instead?)
 router.post('/create-comment', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post } = await createPost(postData, files, accountId)
-        const { parent, root } = postData.link
+        const { parent } = postData.link
+        // find the root
+        const rootLink = await Link.findOne({
+            where: { itemBId: parent.id, itemBType: parent.type, relationship: 'root' },
+            attributes: ['itemAId', 'itemAType'],
+        })
+        const rootPost = await Post.findOne({
+            where: { id: rootLink ? rootLink.itemAId : parent.id },
+            attributes: ['id', 'type'],
+            include: {
+                model: Space,
+                as: 'AllPostSpaces',
+                where: { state: 'active' },
+                required: false,
+                attributes: ['id'],
+                through: { where: { state: 'active' }, attributes: [] },
+            },
+        })
         // link comment to parent and root
         const addParentLink = await Link.create({
             creatorId: accountId,
@@ -1703,20 +1740,18 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             totalComments: 0,
             totalRatings: 0,
         })
-        const addRootLink = root
-            ? await Link.create({
-                  creatorId: accountId,
-                  itemAType: root.type,
-                  itemBType: 'comment',
-                  itemAId: root.id,
-                  itemBId: post.id,
-                  relationship: 'root',
-                  state: 'active',
-                  totalLikes: 0,
-                  totalComments: 0,
-                  totalRatings: 0,
-              })
-            : null
+        const addRootLink = await Link.create({
+            creatorId: accountId,
+            itemAType: rootPost.type,
+            itemBType: 'comment',
+            itemAId: rootPost.id,
+            itemBId: post.id,
+            relationship: 'root',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
         // increment comment tallies
         const incrementParentsChildComments = await Post.increment('totalChildComments', {
             where: { id: parent.id },
@@ -1732,23 +1767,13 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             silent: true,
         })
         // increment space stats
-        const rootPost = await Post.findOne({
-            where: { id: root ? root.id : parent.id },
-            attributes: ['id'],
-            include: {
-                model: Space,
-                as: 'AllPostSpaces',
-                where: { state: 'active' },
-                required: false,
-                attributes: ['id'],
-                through: { where: { state: 'active' }, attributes: [] },
-            },
-        })
-        const incrementSpaceStats = await Promise.all(
-            rootPost.AllPostSpaces.map((space) =>
-                space.increment('totalComments', { silent: true })
-            )
-        )
+        const incrementSpaceStats = root
+            ? await Promise.all(
+                  rootPost.AllPostSpaces.map((space) =>
+                      space.increment('totalComments', { silent: true })
+                  )
+              )
+            : null
         // update ancestors lastActivity
         const updateLastActivity = await Post.update(
             { lastActivity: new Date() },
@@ -2349,8 +2374,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
 
 router.post('/add-like', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { type, id, rootId, sourceType, sourceId, spaceId } = req.body
-    // rootId used for comment notification and url
+    const { type, id, sourceType, sourceId, spaceId } = req.body
     // sourceType and sourceId used to generate link map url
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -2423,7 +2447,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         let spaceAId = spaceId
         if (type === 'post') postId = id
         if (type === 'comment') {
-            postId = rootId
+            // postId = rootId
             commentId = id
         }
         if (type === 'link') {
@@ -2451,8 +2475,8 @@ router.post('/add-like', authenticateToken, async (req, res) => {
               })
 
         let itemUrl
-        if (type === 'post') itemUrl = `${appURL}/p/${id}`
-        if (type === 'comment') itemUrl = `${appURL}/p/${rootId}?commentId=${id}`
+        if (['post', 'comment'].includes(type)) itemUrl = `${appURL}/p/${id}`
+        // if (type === 'comment') itemUrl = `${appURL}/p/${rootId}?commentId=${id}`
         if (type === 'link') itemUrl = `${appURL}/linkmap?item=${sourceType}&id=${sourceId}`
 
         const { handle, name } = await User.findOne({
