@@ -28,6 +28,7 @@ const {
     uploadFiles,
     createPost,
     scheduleNextBeadDeadline,
+    createUrl,
     fullPostAttributes,
     defaultPostValues,
 } = require('../Helpers')
@@ -1859,6 +1860,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
 })
 
 // todo: notify parent owner
+// todo: update post last activity
 router.post('/create-poll-answer', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
@@ -1877,6 +1879,7 @@ router.post('/create-poll-answer', authenticateToken, async (req, res) => {
             totalComments: 0,
             totalRatings: 0,
         })
+        // todo: update post last activity
         // todo: notify parent owner
         Promise.all([addParentLink])
             .then(() => res.status(200).json(post))
@@ -2033,87 +2036,90 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
 // todo: handle comments
 router.post('/update-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { postId, title, text, searchableText, mentions, urls } = req.body
+    const { id, mediaTypes, title, text, searchableText, mentions, urls: newUrls } = req.body
     const post = await Post.findOne({
-        where: { id: postId },
-        attributes: ['id', 'type'],
+        where: { id, creatorId: accountId },
+        attributes: ['id', 'type', 'mediaTypes'],
         include: {
             model: User,
             as: 'Creator',
             attributes: ['id', 'name', 'handle'],
         },
     })
-    if (post.Creator.id !== accountId) res.status(401).json({ message: 'Unauthorized' })
+    if (!post) res.status(401).json({ message: 'Unauthorized' })
     else {
+        // update urls
+        const oldUrls = await post.getBlocks({
+            attributes: ['id'],
+            through: { where: { itemBType: 'url', state: 'active' } },
+            joinTableAttributes: ['id'],
+            include: [
+                {
+                    model: Url,
+                    attributes: ['id', 'url'],
+                },
+            ],
+        })
+
+        const removeOldUrls = await Promise.all(
+            oldUrls.map(
+                (oldUrl) =>
+                    new Promise((resolve) => {
+                        const match = newUrls.find((newUrl) => newUrl.url === oldUrl.Url.url)
+                        if (match) resolve()
+                        else {
+                            Link.update({ state: 'deleted' }, { where: { id: oldUrl.Link.id } })
+                                .then(() => resolve())
+                                .catch((error) => resolve(error))
+                        }
+                    })
+            )
+        )
+
+        const addNewUrls = await Promise.all(
+            newUrls.map(
+                (newUrl, index) =>
+                    new Promise((resolve) => {
+                        const match = oldUrls.find((oldUrl) => oldUrl.Url.url === newUrl.url)
+                        if (match) {
+                            Link.update({ index }, { where: { id: match.Link.id } })
+                                .then(() => resolve())
+                                .catch((error) => resolve(error))
+                        } else {
+                            createUrl(accountId, id, newUrl, index)
+                                .then(() => resolve())
+                                .catch((error) => resolve(error))
+                        }
+                    })
+            )
+        )
+
+        // notify mentions
         const mentionedUsers = await User.findAll({
             where: { handle: mentions, state: 'active' },
             attributes: ['id', 'name', 'email', 'emailsDisabled'],
         })
 
-        // todo: handle sub-post types
-        let postType = post.type
-        if (post.type === 'text' && urls.filter((u) => u.removed).length) postType = 'url'
-        if (post.type === 'url' && urls.filter((u) => u.removed).length > 0) postType = 'text'
-
-        const updatePost = await Post.update(
-            { type: postType, title: title || null, text: text || null, searchableText },
-            { where: { id: postId, creatorId: accountId } }
-        )
-
-        const updateUrls = await Promise.all(
-            urls.map(
-                (url) =>
-                    new Promise(async (resolve) => {
-                        const remove =
-                            !url.new && url.removed
-                                ? await Url.update(
-                                      {
-                                          state: 'removed',
-                                      },
-                                      { where: { id: url.id } }
-                                  )
-                                : null
-                        const add =
-                            url.new && !url.removed
-                                ? await Url.create({
-                                      type: 'post',
-                                      state: 'active',
-                                      itemId: postId,
-                                      url: url.url,
-                                      image: url.image,
-                                      title: url.title,
-                                      description: url.description,
-                                      domain: url.domain,
-                                  })
-                                : null
-                        Promise.all([remove, add])
-                            .then(() => resolve())
-                            .catch((error) => resolve(error))
-                    })
-            )
-        )
-
         const notifyMentions = await Promise.all(
             mentionedUsers.map(
                 (user) =>
                     new Promise(async (resolve) => {
-                        const mentionType = postType.includes('string-') ? 'bead' : 'post'
                         const alreadySent = await Notification.findOne({
                             where: {
                                 ownerId: user.id,
-                                type: `${mentionType}-mention`,
+                                type: `${post.type}-mention`, // post, comment, or bead (todo: poll-answer)
                                 userId: accountId,
-                                postId,
+                                postId: id,
                             },
                         })
                         if (alreadySent) resolve()
                         else {
                             const sendNotification = await Notification.create({
                                 ownerId: user.id,
-                                type: `${mentionType}-mention`,
+                                type: `${post.type}-mention`,
                                 seen: false,
                                 userId: accountId,
-                                postId,
+                                postId: id,
                             })
                             const sendEmail = user.emailsDisabled
                                 ? null
@@ -2125,8 +2131,8 @@ router.post('/update-post', authenticateToken, async (req, res) => {
                                       },
                                       subject: 'New notification',
                                       text: `
-                                        Hi ${user.name}, ${post.Creator.name} just mentioned you in a ${mentionType} on weco:
-                                        http://${appURL}/p/${postId}
+                                        Hi ${user.name}, ${post.Creator.name} just mentioned you in a ${post.type} on weco:
+                                        http://${appURL}/p/${id}
                                     `,
                                       html: `
                                         <p>
@@ -2134,7 +2140,7 @@ router.post('/update-post', authenticateToken, async (req, res) => {
                                             <br/>
                                             <a href='${appURL}/u/${post.Creator.handle}'>${post.Creator.name}</a>
                                             just mentioned you in a 
-                                            <a href='${appURL}/p/${postId}'>${mentionType}</a>
+                                            <a href='${appURL}/p/${id}'>${post.type}</a>
                                             on weco
                                         </p>
                                     `,
@@ -2147,8 +2153,13 @@ router.post('/update-post', authenticateToken, async (req, res) => {
             )
         )
 
-        Promise.all([updatePost, updateUrls, notifyMentions])
-            .then(() => res.status(200).json({ message: 'Success' }))
+        const updatePost = await Post.update(
+            { mediaTypes, title, text, searchableText },
+            { where: { id, creatorId: accountId } }
+        )
+
+        Promise.all([updatePost, removeOldUrls, addNewUrls, notifyMentions])
+            .then(() => res.status(200).json(updatePost))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
