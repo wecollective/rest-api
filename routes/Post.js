@@ -3431,7 +3431,7 @@ router.post('/delete-bead', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: needs thinking through (remove links?)
+// todo: needs thinking through (remove links too?)
 router.post('/delete-block', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.body
@@ -3443,18 +3443,20 @@ router.post('/delete-block', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: revisit
 router.post('/remove-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId, spaceId, spaceHandle } = req.body
-
     const isMod = await SpaceUser.findOne({
         where: { userId: accountId, spaceId, relationship: 'moderator' },
         attributes: ['id'],
     })
-
     if (!accountId || !isMod) res.status(401).json({ message: 'Unauthorized' })
     else {
+        const updatePostEntry = await SpacePost.update(
+            { state: 'removed-by-mod' },
+            { where: { postId, spaceId } }
+        )
+        // get post stats and creator info
         const post = await Post.findOne({
             where: { id: postId },
             attributes: ['totalLikes', 'totalComments'],
@@ -3464,75 +3466,69 @@ router.post('/remove-post', authenticateToken, async (req, res) => {
                 attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
             },
         })
-
-        const updatePostEntry = await SpacePost.update(
-            { state: 'removed-by-mod' },
-            { where: { postId, spaceId } }
-        )
-
-        const space = await Space.findOne({
+        // decrement space stats
+        const decrementTotalPosts = await Space.decrement('totalPosts', {
             where: { id: spaceId },
-            attributes: ['totalPostLikes', 'totalComments', 'totalPosts'],
+            silent: true,
         })
-        const updateSpaceStats = await Space.update(
-            {
-                totalPostLikes: space.totalPostLikes - post.totalLikes,
-                totalComments: space.totalComments - post.totalComments,
-                totalPosts: space.totalPosts - 1,
-            },
-            { where: { id: spaceId }, silent: true }
-        )
-
-        const spaceUserStat = await SpaceUserStat.findOne({
+        const decrementTotalPostLikes = await Space.decrement('totalPostLikes', {
+            by: post.totalLikes,
+            where: { id: spaceId },
+            silent: true,
+        })
+        const decrementTotalComments = await Space.decrement('totalComments', {
+            by: post.totalComments,
+            where: { id: spaceId },
+            silent: true,
+        })
+        const decrementSpaceUserStat = await SpaceUserStat.decrement('totalPostLikes', {
+            by: post.totalLikes,
             where: { spaceId, userId: post.Creator.id },
-            attributes: ['id', 'totalPostLikes'],
         })
-        const updateSpaceUserStat = spaceUserStat
-            ? await spaceUserStat.update({
-                  totalPostLikes: spaceUserStat.totalPostLikes - post.totalLikes,
-              })
-            : null
 
-        const skipNotification = post.Creator.id === accountId
-        const skipEmail = skipNotification || post.Creator.emailsDisabled
-        const sendNotification = skipNotification
-            ? null
-            : await Notification.create({
-                  ownerId: post.Creator.id,
-                  type: 'post-removed-by-mods',
-                  seen: false,
-                  postId,
-                  spaceAId: spaceId,
-              })
-        const sendEmail = skipEmail
-            ? null
-            : await sgMail.send({
-                  to: post.Creator.email,
-                  from: { email: 'admin@weco.io', name: 'we { collective }' },
-                  subject: 'New notification',
-                  text: `
-                Hi ${post.Creator.name}, your post was just removed from s/${spaceHandle} by its mods:
-                http://${appURL}/p/${postId}
-            `,
-                  html: `
-                <p>
-                    Hi ${post.Creator.name},
-                    <br/>
-                    Your 
-                    <a href='${appURL}/p/${postId}'>post</a>
-                    was just removed from 
-                    <a href='${appURL}/s/${spaceHandle}'>s/${spaceHandle}</a>
-                    by its mods
-                </p>
-            `,
-              })
+        // // notify post creator (?)
+        // const skipNotification = post.Creator.id === accountId
+        // const skipEmail = skipNotification || post.Creator.emailsDisabled
+        // const sendNotification = skipNotification
+        //     ? null
+        //     : await Notification.create({
+        //           ownerId: post.Creator.id,
+        //           type: 'post-removed-by-mods',
+        //           seen: false,
+        //           postId,
+        //           spaceAId: spaceId,
+        //       })
+        // const sendEmail = skipEmail
+        //     ? null
+        //     : await sgMail.send({
+        //           to: post.Creator.email,
+        //           from: { email: 'admin@weco.io', name: 'we { collective }' },
+        //           subject: 'New notification',
+        //           text: `
+        //         Hi ${post.Creator.name}, your post was just removed from s/${spaceHandle} by its mods:
+        //         http://${appURL}/p/${postId}
+        //     `,
+        //           html: `
+        //         <p>
+        //             Hi ${post.Creator.name},
+        //             <br/>
+        //             Your
+        //             <a href='${appURL}/p/${postId}'>post</a>
+        //             was just removed from
+        //             <a href='${appURL}/s/${spaceHandle}'>s/${spaceHandle}</a>
+        //             by its mods
+        //         </p>
+        //     `,
+        //       })
 
         Promise.all([
             updatePostEntry,
-            updateSpaceStats,
-            updateSpaceUserStat,
-            sendNotification,
-            sendEmail,
+            decrementTotalPosts,
+            decrementTotalPostLikes,
+            decrementTotalComments,
+            decrementSpaceUserStat,
+            // sendNotification,
+            // sendEmail,
         ])
             .then(() => res.status(200).json({ message: 'Success' }))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
