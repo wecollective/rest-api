@@ -76,6 +76,7 @@ router.get('/test', async (req, res) => {
         testIndex += 1
 
         // todo: add root links to parent comments
+        // todo: always add relationship: 'parent' on links between beads, poll answers, card-faces
 
         // before updates:
         // + remove mediaTypes, originSpaceId, & totalChildComments from Post model
@@ -1767,7 +1768,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             where: { id: ancestorIds },
             silent: true,
         })
-        // increment space stats
+        // increment space stats (skip if?)
         const incrementSpaceStats = rootPost
             ? await Promise.all(
                   rootPost.AllPostSpaces.map((space) =>
@@ -1936,6 +1937,7 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
             itemAId: parent.id,
             itemBId: newBead.id,
             index: gamePost.GlassBeadGame.totalBeads,
+            relationship: 'parent',
             state: 'active',
             totalLikes: 0,
             totalComments: 0,
@@ -2033,7 +2035,6 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: handle comments
 router.post('/update-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { id, mediaTypes, title, text, searchableText, mentions, urls: newUrls } = req.body
@@ -2919,436 +2920,6 @@ router.post('/delete-link', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: remove
-router.post('/create-comment-old', authenticateToken, async (req, res) => {
-    const accountId = req.user ? req.user.id : null
-    const { text, postId, commentId, replyId, spaceId, mentions } = req.body
-    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
-    else {
-        const account = await User.findOne({
-            where: { id: accountId },
-            attributes: ['name', 'handle'],
-        })
-
-        const post = await Post.findOne({
-            where: { id: postId },
-            attributes: ['id'],
-            include: [
-                {
-                    model: User,
-                    as: 'Creator',
-                    attributes: [
-                        'id',
-                        'handle',
-                        'name',
-                        'flagImagePath',
-                        'email',
-                        'emailsDisabled',
-                    ],
-                },
-                {
-                    model: Space,
-                    as: 'AllPostSpaces',
-                    where: { state: 'active' },
-                    required: false,
-                    attributes: ['id'],
-                    through: { where: { state: 'active' }, attributes: [] },
-                },
-            ],
-        })
-
-        const incrementTotalComments = await post.increment('totalComments', { silent: true })
-
-        const updateLastPostActivity = await post.update(
-            { lastActivity: new Date() },
-            { silent: true }
-        )
-
-        const updateSpaceStats = await Promise.all(
-            post.AllPostSpaces.map((space) => space.increment('totalComments', { silent: true }))
-        )
-
-        const comment = commentId
-            ? await Comment.findOne({
-                  where: { id: commentId },
-                  attributes: [],
-                  include: {
-                      model: User,
-                      as: 'Creator',
-                      attributes: [
-                          'id',
-                          'handle',
-                          'name',
-                          'flagImagePath',
-                          'email',
-                          'emailsDisabled',
-                      ],
-                  },
-              })
-            : null
-
-        const reply = replyId
-            ? await Comment.findOne({
-                  where: { id: replyId },
-                  attributes: [],
-                  include: {
-                      model: User,
-                      as: 'Creator',
-                      attributes: [
-                          'id',
-                          'handle',
-                          'name',
-                          'flagImagePath',
-                          'email',
-                          'emailsDisabled',
-                      ],
-                  },
-              })
-            : null
-
-        const mentionedUsers = await User.findAll({
-            where: { handle: mentions, state: 'active' },
-            attributes: ['id', 'name', 'email', 'emailsDisabled'],
-        })
-
-        const newComment = await Comment.create({
-            state: 'visible',
-            creatorId: accountId,
-            text,
-            itemType: 'post',
-            itemId: postId,
-            parentCommentId: commentId,
-            spaceId,
-            totalLikes: 0,
-            totalRatings: 0,
-            totalLinks: 0,
-            totalReposts: 0,
-            totalGlassBeadGames: 0,
-        })
-
-        // the following logic ensures only one notification/email is sent to each user and own account is always skipped
-        const commentCreatorId = comment ? comment.Creator.id : null
-        const replyCreatorId = reply ? reply.Creator.id : null
-        const mentionedUsersIds = mentionedUsers.map((u) => u.id)
-        // skip notifying post creator if own account, comment owner, reply owner, or in mentions
-        const skipPostCreator = [
-            accountId,
-            commentCreatorId,
-            replyCreatorId,
-            ...mentionedUsersIds,
-        ].includes(post.Creator.id)
-        // skip notifying comment creator if no comment, own account, reply owner, or in mentions
-        const skipCommentCreator =
-            !comment ||
-            [accountId, replyCreatorId, ...mentionedUsersIds].includes(comment.Creator.id)
-        // skip notifying reply creator if no reply, own account, or in mentions
-        const skipReplyCreator =
-            !reply || [accountId, ...mentionedUsersIds].includes(reply.Creator.id)
-
-        const notifyPostCreator = skipPostCreator
-            ? null
-            : new Promise(async (resolve) => {
-                  const createNotification = await Notification.create({
-                      ownerId: post.Creator.id,
-                      type: 'post-comment',
-                      seen: false,
-                      spaceAId: spaceId,
-                      userId: accountId,
-                      postId,
-                      commentId: newComment.id,
-                  })
-                  const skipEmail =
-                      post.Creator.emailsDisabled || (await accountMuted(accountId, post.Creator))
-                  const sendEmail = skipEmail
-                      ? null
-                      : await sgMail.send({
-                            to: post.Creator.email,
-                            from: { email: 'admin@weco.io', name: 'we { collective }' },
-                            subject: 'New notification',
-                            text: `
-                            Hi ${post.Creator.name}, ${account.name} just commented on your post on weco:
-                            http://${appURL}/p/${postId}?commentId=${newComment.id}
-                        `,
-                            html: `
-                            <p>
-                                Hi ${post.Creator.name},
-                                <br/>
-                                <a href='${appURL}/u/${account.handle}'>${account.name}</a>
-                                just commented on your
-                                <a href='${appURL}/p/${postId}?commentId=${newComment.id}'>post</a>
-                                on weco
-                            </p>
-                        `,
-                        })
-                  Promise.all([createNotification, sendEmail])
-                      .then(() => resolve())
-                      .catch((error) => resolve(error))
-              })
-
-        const notifyCommentCreator = skipCommentCreator
-            ? null
-            : new Promise(async (resolve) => {
-                  const createNotification = await Notification.create({
-                      ownerId: comment.Creator.id,
-                      type: 'comment-reply',
-                      seen: false,
-                      spaceAId: spaceId,
-                      userId: accountId,
-                      postId,
-                      commentId: newComment.id,
-                  })
-                  const skipEmail =
-                      comment.Creator.emailsDisabled ||
-                      (await accountMuted(accountId, comment.Creator))
-                  const sendEmail = skipEmail
-                      ? null
-                      : await sgMail.send({
-                            to: comment.Creator.email,
-                            from: { email: 'admin@weco.io', name: 'we { collective }' },
-                            subject: 'New notification',
-                            text: `
-                            Hi ${comment.Creator.name}, ${account.name} just replied to your comment on weco:
-                            http://${appURL}/p/${postId}?commentId=${newComment.id}
-                        `,
-                            html: `
-                            <p>
-                                Hi ${comment.Creator.name},
-                                <br/>
-                                <a href='${appURL}/u/${account.handle}'>${account.name}</a>
-                                just replied to your
-                                <a href='${appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
-                                on weco
-                            </p>
-                        `,
-                        })
-                  Promise.all([createNotification, sendEmail])
-                      .then(() => resolve())
-                      .catch((error) => resolve(error))
-              })
-
-        const notifyReplyCreator = skipReplyCreator
-            ? null
-            : new Promise(async (resolve) => {
-                  const createNotification = await Notification.create({
-                      ownerId: reply.Creator.id,
-                      type: 'comment-reply',
-                      seen: false,
-                      spaceAId: spaceId,
-                      userId: accountId,
-                      postId,
-                      commentId: newComment.id,
-                  })
-                  const skipEmail =
-                      reply.Creator.emailsDisabled || (await accountMuted(accountId, reply.Creator))
-                  const sendEmail = skipEmail
-                      ? null
-                      : await sgMail.send({
-                            to: reply.Creator.email,
-                            from: { email: 'admin@weco.io', name: 'we { collective }' },
-                            subject: 'New notification',
-                            text: `
-                              Hi ${reply.Creator.name}, ${account.name} just replied to your comment on weco:
-                              http://${appURL}/p/${postId}?commentId=${newComment.id}
-                          `,
-                            html: `
-                              <p>
-                                  Hi ${reply.Creator.name},
-                                  <br/>
-                                  <a href='${appURL}/u/${account.handle}'>${account.name}</a>
-                                  just replied to your
-                                  <a href='${appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
-                                  on weco
-                              </p>
-                          `,
-                        })
-                  Promise.all([createNotification, sendEmail])
-                      .then(() => resolve())
-                      .catch((error) => resolve(error))
-              })
-
-        const notifyMentions = await Promise.all(
-            mentionedUsers
-                .filter((u) => u.id !== accountId)
-                .map(
-                    (user) =>
-                        new Promise(async (resolve) => {
-                            const sendNotification = await Notification.create({
-                                ownerId: user.id,
-                                type: 'comment-mention',
-                                seen: false,
-                                userId: accountId,
-                                postId,
-                                commentId: newComment.id,
-                            })
-                            const skipEmail =
-                                user.emailsDisabled || (await accountMuted(accountId, user))
-                            const sendEmail = skipEmail
-                                ? null
-                                : await sgMail.send({
-                                      to: user.email,
-                                      from: { email: 'admin@weco.io', name: 'we { collective }' },
-                                      subject: 'New notification',
-                                      text: `
-                                    Hi ${user.name}, ${account.name} just mentioned you in a comment on weco:
-                                    http://${appURL}/p/${postId}?commentId=${newComment.id}
-                                `,
-                                      html: `
-                                    <p>
-                                        Hi ${user.name},
-                                        <br/>
-                                        <a href='${appURL}/u/${account.handle}'>${account.name}</a>
-                                        just mentioned you in a
-                                        <a href='${appURL}/p/${postId}?commentId=${newComment.id}'>comment</a>
-                                        on weco
-                                    </p>
-                                `,
-                                  })
-
-                            Promise.all([sendNotification, sendEmail])
-                                .then(() => resolve())
-                                .catch((error) => resolve(error))
-                        })
-                )
-        )
-
-        Promise.all([
-            incrementTotalComments,
-            updateLastPostActivity,
-            updateSpaceStats,
-            notifyPostCreator,
-            notifyCommentCreator,
-            notifyReplyCreator,
-            notifyMentions,
-        ])
-            .then(() => res.status(200).json(newComment))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
-    }
-})
-
-// todo: remove
-router.post('/update-comment', authenticateToken, async (req, res) => {
-    const accountId = req.user ? req.user.id : null
-    const { postId, commentId, text, mentions } = req.body
-
-    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
-    else {
-        const account = await User.findOne({
-            where: { id: accountId },
-            attributes: ['name', 'handle'],
-        })
-
-        const mentionedUsers = await User.findAll({
-            where: { handle: mentions, state: 'active' },
-            attributes: ['id', 'name', 'email', 'emailsDisabled'],
-        })
-
-        const updateComment = await Comment.update(
-            { text: text || null },
-            { where: { id: commentId, creatorId: accountId } }
-        )
-
-        const notifyMentions = await Promise.all(
-            mentionedUsers
-                .filter((u) => u.id !== accountId)
-                .map(
-                    (user) =>
-                        new Promise(async (resolve) => {
-                            const alreadySent = await Notification.findOne({
-                                where: {
-                                    ownerId: user.id,
-                                    type: 'comment-mention',
-                                    userId: accountId,
-                                    postId,
-                                    commentId,
-                                },
-                            })
-                            if (alreadySent) resolve()
-                            else {
-                                const sendNotification = await Notification.create({
-                                    ownerId: user.id,
-                                    type: 'comment-mention',
-                                    seen: false,
-                                    userId: accountId,
-                                    postId,
-                                    commentId,
-                                })
-
-                                const sendEmail = user.emailsDisabled
-                                    ? null
-                                    : await sgMail.send({
-                                          to: user.email,
-                                          from: {
-                                              email: 'admin@weco.io',
-                                              name: 'we { collective }',
-                                          },
-                                          subject: 'New notification',
-                                          text: `
-                                        Hi ${user.name}, ${account.name} just mentioned you in a comment on weco:
-                                        http://${appURL}/p/${postId}?commentId=${commentId}
-                                    `,
-                                          html: `
-                                        <p>
-                                            Hi ${user.name},
-                                            <br/>
-                                            <a href='${appURL}/u/${account.handle}'>${account.name}</a>
-                                            just mentioned you in a
-                                            <a href='${appURL}/p/${postId}?commentId=${commentId}'>comment</a>
-                                            on weco
-                                        </p>
-                                    `,
-                                      })
-
-                                Promise.all([sendNotification, sendEmail])
-                                    .then(() => resolve())
-                                    .catch((error) => resolve(error))
-                            }
-                        })
-                )
-        )
-
-        Promise.all([updateComment, notifyMentions])
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
-    }
-})
-
-// todo: decrement link tally of connected items
-router.post('/delete-comment', authenticateToken, async (req, res) => {
-    const accountId = req.user ? req.user.id : null
-    const { postId, commentId } = req.body
-
-    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
-    else {
-        const post = await Post.findOne({
-            where: { id: postId },
-            attributes: ['id'],
-            include: {
-                model: Space,
-                as: 'AllPostSpaces',
-                where: { state: 'active' },
-                required: false,
-                attributes: ['id'],
-                through: { where: { state: 'active' }, attributes: [] },
-            },
-        })
-
-        const updateTotalComments = await post.decrement('totalComments', { silent: true })
-
-        const updateSpaceStats = await Promise.all(
-            post.AllPostSpaces.map((space) => space.decrement('totalComments', { silent: true }))
-        )
-
-        const removeComment = await Comment.update(
-            { state: 'deleted' },
-            { where: { id: commentId, creatorId: accountId } }
-        )
-
-        Promise.all([updateTotalComments, updateSpaceStats, removeComment])
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
-    }
-})
-
 router.post('/respond-to-event', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId, eventId, startTime, response } = req.body
@@ -3711,7 +3282,12 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
                 },
             ],
         })
-        const removePost = await Post.update({ state: 'deleted' }, { where: { id: postId } })
+
+        const removePost = await Post.update(
+            { state: 'deleted' },
+            { where: { id: postId, creatorId: accountId } }
+        )
+
         const updateSpaceStats = await Promise.all(
             post.AllPostSpaces.map(
                 (space) =>
@@ -3739,6 +3315,7 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
                     })
             )
         )
+
         const removeEvent = post.Event
             ? await Event.update({ state: 'deleted' }, { where: { id: post.Event.id } })
             : null
@@ -3749,6 +3326,124 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
     }
 })
 
+router.post('/delete-comment', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        // remove comment
+        const removeComment = await Post.update(
+            { state: 'deleted' },
+            { where: { id: postId, creatorId: accountId } }
+        )
+        // get root and parent links for tally updates
+        const rootLink = await Link.findOne({
+            where: { itemBId: postId, itemBType: 'comment', relationship: 'root' },
+            attributes: ['itemAId', 'itemAType'],
+        })
+        const parentLink = await Link.findOne({
+            where: { itemBId: postId, itemBType: 'comment', relationship: 'parent' },
+            attributes: ['itemAId'],
+        })
+        // decrement comment tallies
+        const decrementParentsChildComments = await Post.decrement('totalChildComments', {
+            where: { id: parentLink.itemAId },
+            silent: true,
+        })
+        const ancestors = await PostAncestor.findAll({
+            where: { descendentId: parentLink.itemAId },
+            attributes: ['ancestorId'],
+        })
+        const ancestorIds = [parentLink.itemAId, ...ancestors.map((a) => a.ancestorId)]
+        const decrementAncestorsTotalComments = await Post.decrement('totalComments', {
+            where: { id: ancestorIds },
+            silent: true,
+        })
+        // decrement space tallies
+        const rootPost = await Post.findOne({
+            where: { id: rootLink.itemAId },
+            attributes: ['id', 'totalLikes', 'totalComments'],
+            include: [
+                {
+                    model: Space,
+                    as: 'AllPostSpaces',
+                    where: { state: 'active' },
+                    required: false,
+                    attributes: ['id'],
+                    through: { where: { state: 'active' }, attributes: [] },
+                },
+            ],
+        })
+        const decrementSpaceStats = await Promise.all(
+            rootPost.AllPostSpaces.map((space) =>
+                space.decrement('totalComments', { silent: true })
+            )
+        )
+
+        Promise.all([
+            removeComment,
+            decrementParentsChildComments,
+            decrementAncestorsTotalComments,
+            decrementSpaceStats,
+        ])
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/delete-bead', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        // delete the bead
+        const removeBead = await Post.update(
+            { state: 'deleted' },
+            { where: { id: postId, creatorId: accountId } }
+        )
+        // find link to root post
+        const parentLink = await Link.findOne({
+            where: { itemBId: postId, itemBType: 'bead', relationship: 'parent' },
+            attributes: ['id', 'itemAId', 'index'],
+        })
+        const rootPostId = parentLink.itemAId
+        // decrement the games total bead tally
+        const decrementTotalBeads = await GlassBeadGame.decrement('totalBeads', {
+            where: { postId: rootPostId },
+            silent: true,
+        })
+        // decrement the index of later beads
+        const decrementOtherBeadIndexes = await Link.decrement('index', {
+            where: {
+                itemAType: 'post',
+                itemAId: rootPostId,
+                itemBType: 'bead',
+                relationship: 'parent',
+                index: { [Op.gte]: parentLink.index },
+            },
+        })
+        // remove the link to the game
+        const removeLink = await parentLink.update({ state: 'deleted' })
+
+        Promise.all([removeBead, decrementTotalBeads, decrementOtherBeadIndexes, removeLink])
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+// todo: needs thinking through (remove links?)
+router.post('/delete-block', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId } = req.body
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        Post.update({ state: 'deleted' }, { where: { id: postId, creatorId: accountId } })
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+// todo: revisit
 router.post('/remove-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId, spaceId, spaceHandle } = req.body

@@ -1466,6 +1466,7 @@ function createPollAnswer(answer, accountId, pollId, files) {
             itemBType: 'poll-answer',
             itemAId: pollId,
             itemBId: newAnswer.id,
+            relationship: 'parent',
             state: 'active',
             totalLikes: 0,
             totalComments: 0,
@@ -1486,6 +1487,7 @@ function createBead(bead, index, accountId, postId, files) {
             itemAId: postId,
             itemBId: newBead.id,
             index,
+            relationship: 'parent',
             state: 'active',
             totalLikes: 0,
             totalComments: 0,
@@ -1506,6 +1508,7 @@ function createCardFace(cardFace, index, accountId, postId, files) {
             itemAId: postId,
             itemBId: newCardFace.id,
             index,
+            relationship: 'parent',
             state: 'active',
             totalLikes: 0,
             totalComments: 0,
@@ -1676,13 +1679,13 @@ async function createPost(data, files, accountId) {
 
         const createImages = images
             ? await Promise.all(
-                  images.map((image, i) => createImage(accountId, post.id, image, i, type, files))
+                  images.map((image, i) => createImage(accountId, post.id, type, image, i, files))
               )
             : null
 
         const createAudios = audios
             ? await Promise.all(
-                  audios.map((audio, i) => createAudio(accountId, post.id, audio, i, type, files))
+                  audios.map((audio, i) => createAudio(accountId, post.id, type, audio, i, files))
               )
             : null
 
