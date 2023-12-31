@@ -1162,7 +1162,7 @@ function findSpaceSpacesInclude(depth) {
 async function getLinkedItem(type, id) {
     let model
     let attributes = []
-    if (type === 'post') {
+    if (['post', 'comment'].includes(type)) {
         model = Post
         attributes = [
             'id',
@@ -1175,10 +1175,6 @@ async function getLinkedItem(type, id) {
             'updatedAt',
             'lastActivity',
         ]
-    }
-    if (type === 'comment') {
-        model = Comment
-        attributes = ['id', 'text', 'totalLikes', 'totalLinks', 'createdAt', 'updatedAt']
     }
     if (type === 'user') {
         model = User

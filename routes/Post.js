@@ -907,7 +907,9 @@ router.get('/test', async (req, res) => {
 // GET
 router.get('/post-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { postId } = req.query
+    const { postId, type } = req.query
+    const where = { id: postId, state: 'active' }
+    if (type) where.type = type
     const post = await Post.findOne({
         where: { id: postId, state: 'active' },
         include: findPostInclude(accountId),
@@ -959,34 +961,6 @@ router.get('/comment-links', async (req, res) => {
         { replacements: { postId }, type: QueryTypes.SELECT }
     )
     res.status(200).json({ parentId, rootId: root[0] ? root[0].rootId : null })
-})
-
-router.get('/comment-data', authenticateToken, async (req, res) => {
-    // todo: add access check
-    const accountId = req.user ? req.user.id : null
-    const { commentId } = req.query
-    const comment = await Comment.findOne({
-        where: { id: commentId, state: 'visible' },
-        attributes: [
-            'id',
-            'text',
-            'itemId',
-            'parentCommentId',
-            'createdAt',
-            'updatedAt',
-            'totalLikes',
-            'totalLinks',
-        ],
-        include: {
-            model: User,
-            as: 'Creator',
-            attributes: ['id', 'handle', 'name', 'flagImagePath'],
-        },
-    })
-    if (!comment) res.status(404).json({ message: 'Comment not found' })
-    // else if (!post.dataValues.access) res.status(401).json({ message: 'Access denied' })
-    // else if (post.state === 'deleted') res.status(401).json({ message: 'Post deleted' })
-    else res.status(200).json(comment)
 })
 
 router.get('/likes', async (req, res) => {
@@ -1084,6 +1058,7 @@ router.get('/links', authenticateToken, async (req, res) => {
                         [Op.or]: [
                             {
                                 // incoming
+                                relationship: 'link',
                                 itemBType: modelType,
                                 itemBId: id,
                                 itemAType: findTypes(),
@@ -1091,6 +1066,7 @@ router.get('/links', authenticateToken, async (req, res) => {
                             },
                             {
                                 // outgoing
+                                relationship: 'link',
                                 itemAType: modelType,
                                 itemAId: id,
                                 itemBType: findTypes(),
@@ -1166,9 +1142,11 @@ router.get('/link-data', authenticateToken, async (req, res) => {
             'description',
             'itemAId',
             'itemBId',
+            'itemAType',
+            'itemBType',
             'totalLikes',
             'createdAt',
-            accountLike('link', 'Link', accountId),
+            // accountLike('link', 'Link', accountId),
         ],
         include: {
             model: User,
@@ -1176,49 +1154,27 @@ router.get('/link-data', authenticateToken, async (req, res) => {
             attributes: ['id', 'handle', 'name', 'flagImagePath'],
         },
     })
-    const types = link.type.split('-')
-    const source = await getFullLinkedItem(types[0], link.itemAId, accountId)
-    const target = await getFullLinkedItem(types[1], link.itemBId, accountId)
+    const source = await getFullLinkedItem(link.itemAType, link.itemAId, accountId)
+    const target = await getFullLinkedItem(link.itemBType, link.itemBId, accountId)
     res.status(200).json({ source, link, target })
 })
 
 router.get('/target-from-text', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { type, sourceId, text, userId } = req.query
-
-    if (type === 'Post') {
-        const where = {
-            state: 'visible',
-            [Op.or]: [{ text: { [Op.like]: `%${text}%` } }, { title: { [Op.like]: `%${text}%` } }],
-        }
-        if (sourceId) where[Op.not] = { id: sourceId }
-        if (userId) where.creatorId = userId
-        const matchingPosts = await Post.findAll({
-            where,
-            limit: 10,
-            include: findPostInclude(accountId),
-        })
-        res.status(200).json(matchingPosts)
+    const where = {
+        type: type.toLowerCase(),
+        state: 'active',
+        [Op.or]: [{ text: { [Op.like]: `%${text}%` } }, { title: { [Op.like]: `%${text}%` } }],
     }
-
-    if (type === 'Comment') {
-        const where = {
-            state: 'visible',
-            text: { [Op.like]: `%${text}%` },
-        }
-        if (sourceId) where[Op.not] = { id: sourceId }
-        if (userId) where.creatorId = userId
-        const matchingComments = await Comment.findAll({
-            where,
-            limit: 10,
-            include: {
-                model: User,
-                as: 'Creator',
-                attributes: ['id', 'handle', 'name', 'flagImagePath'],
-            },
-        })
-        res.status(200).json(matchingComments)
-    }
+    if (sourceId) where[Op.not] = { id: sourceId }
+    if (userId) where.creatorId = userId
+    const matchingPosts = await Post.findAll({
+        where,
+        limit: 10,
+        include: findPostInclude(accountId),
+    })
+    res.status(200).json(matchingPosts)
 })
 
 router.get('/post-comments', async (req, res) => {
@@ -2737,13 +2693,9 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             as: 'Moderators',
             attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
         }
-        if (type === 'post') {
+        if (['post', 'comment'].includes(type)) {
             model = Post
             attributes = ['id']
-            include = creator
-        } else if (type === 'comment') {
-            model = Comment
-            attributes = ['id', 'itemId']
             include = creator
         } else if (type === 'user') {
             model = User
@@ -2765,8 +2717,10 @@ router.post('/add-link', authenticateToken, async (req, res) => {
     else {
         const createLink = await Link.create({
             creatorId: accountId,
-            state: 'visible',
-            type: `${sourceType}-${targetType}`,
+            state: 'active',
+            relationship: 'link',
+            itemAType: sourceType,
+            itemBType: targetType,
             description,
             itemAId: sourceId,
             itemBId: targetId,
