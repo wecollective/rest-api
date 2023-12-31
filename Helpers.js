@@ -1200,100 +1200,104 @@ async function getLinkedItem(type, id) {
 }
 
 async function getToyboxItem(type, id) {
-    let model
-    let include = []
-    let attributes = []
-    if (['post', 'comment'].includes(type)) {
-        model = Post
-        attributes = [
-            'id',
-            'mediaTypes',
-            'title',
-            'text',
-            'color',
-            'totalLikes',
-            'totalComments',
-            'totalLinks',
-            'state',
-        ]
-        include = [
-            {
-                model: User,
-                as: 'Creator',
-                attributes: ['name', 'flagImagePath'],
-            },
-            {
-                model: Image,
-                attributes: ['url'],
-                required: false,
-            },
-            {
-                model: Url,
-                required: false,
-                attributes: ['image', 'title', 'description', 'domain'],
-            },
-            {
-                model: Audio,
-                required: false,
-                attributes: ['url'],
-            },
-            {
-                model: Post,
-                as: 'CardSides',
-                attributes: ['id'],
-                through: {
-                    where: { type: 'card-post', state: ['visible', 'account-deleted'] },
-                    attributes: [],
+    return new Promise(async (resolve) => {
+        let model
+        let include = []
+        let attributes = []
+        if (['post', 'comment'].includes(type)) {
+            model = Post
+            attributes = [
+                'id',
+                'mediaTypes',
+                'title',
+                'text',
+                'color',
+                'totalLikes',
+                'totalComments',
+                'totalLinks',
+                'state',
+            ]
+            include = [
+                {
+                    model: User,
+                    as: 'Creator',
+                    attributes: ['name', 'flagImagePath'],
                 },
-                include: {
-                    model: Image,
-                    attributes: ['url'],
-                    required: false,
-                },
-                required: false,
-            },
-            {
-                model: Event,
-                attributes: ['startTime', 'endTime'],
-            },
-        ]
-    }
-    if (type === 'user') {
-        model = User
-        attributes = [
-            'id',
-            'handle',
-            'name',
-            'flagImagePath',
-            'coverImagePath',
-            'bio',
-            totalUserPosts,
-            totalUserComments,
-            'state',
-        ]
-    }
-    if (type === 'space') {
-        model = Space
-        attributes = [
-            'id',
-            'handle',
-            'name',
-            'flagImagePath',
-            'coverImagePath',
-            'description',
-            'totalPosts',
-            'totalComments',
-            'totalPostLikes',
-            'totalFollowers',
-            'state',
-        ]
-    }
-    const item = await model.findOne({
-        where: { id },
-        attributes,
-        include,
+            ]
+        }
+        if (type === 'user') {
+            model = User
+            attributes = [
+                'id',
+                'handle',
+                'name',
+                'flagImagePath',
+                'coverImagePath',
+                'bio',
+                totalUserPosts,
+                totalUserComments,
+                'state',
+            ]
+        }
+        if (type === 'space') {
+            model = Space
+            attributes = [
+                'id',
+                'handle',
+                'name',
+                'flagImagePath',
+                'coverImagePath',
+                'description',
+                'totalPosts',
+                'totalComments',
+                'totalPostLikes',
+                'totalFollowers',
+                'state',
+            ]
+        }
+        const item = await model.findOne({
+            where: { id },
+            attributes,
+            include,
+        })
+        if (type !== 'post') resolve({ type, data: item })
+        else {
+            // grab preview images for url and image posts
+            const mediaTypes = item.mediaTypes.split(',')
+            const mediaType = mediaTypes[mediaTypes.length - 1]
+            if (mediaType === 'url') {
+                const urlBlocks = await item.getBlocks({
+                    attributes: ['id'],
+                    through: { where: { itemBType: 'url', state: 'active' } },
+                    joinTableAttributes: [],
+                    include: [
+                        {
+                            model: Url,
+                            attributes: ['image'],
+                        },
+                    ],
+                    limit: 1,
+                })
+                item.setDataValue('image', urlBlocks[0].Url.image)
+                resolve({ type, data: item })
+            } else if (mediaType === 'image') {
+                const imageBlocks = await item.getBlocks({
+                    attributes: ['id'],
+                    through: { where: { itemBType: 'image', state: 'active' } },
+                    joinTableAttributes: [],
+                    include: [
+                        {
+                            model: Image,
+                            attributes: ['url'],
+                        },
+                    ],
+                    limit: 1,
+                })
+                item.setDataValue('image', imageBlocks[0].Image.url)
+                resolve({ type, data: item })
+            } else resolve({ type, data: item })
+        }
     })
-    return { type, data: item }
 }
 
 async function getFullLinkedItem(type, id, accountId) {
@@ -1453,10 +1457,8 @@ async function uploadFiles(req, res, accountId) {
     })
 }
 
-// todo: combine below functions into createAndLinkPost function?
-// linkData: { itemAType, itemAId, itemBType, itemBId }
-// linkDefaults: { state: 'active', totalLikes: 0, totalComments: 0, totalRatings: 0 }
-// or maybe set up createLink function instead?
+// todo: beads link to post (not game) but poll answers link to poll (not post)
+// which way is better?
 function createPollAnswer(answer, accountId, pollId, files) {
     return new Promise(async (resolve) => {
         const { post: newAnswer } = await createPost(answer, files, accountId)
@@ -1467,7 +1469,7 @@ function createPollAnswer(answer, accountId, pollId, files) {
             itemAId: pollId,
             itemBId: newAnswer.id,
             relationship: 'parent',
-            state: 'active',
+            state: answer.Link ? answer.Link.state : 'active',
             totalLikes: 0,
             totalComments: 0,
             totalRatings: 0,
