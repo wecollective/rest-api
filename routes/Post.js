@@ -1871,7 +1871,7 @@ router.post('/create-poll-answer', authenticateToken, async (req, res) => {
         const { parent } = postData.link
         const addParentLink = await Link.create({
             creatorId: accountId,
-            itemAType: parent.type,
+            itemAType: 'poll',
             itemBType: 'poll-answer',
             itemAId: parent.id,
             itemBId: post.id,
@@ -2973,7 +2973,6 @@ router.post('/respond-to-event', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: update governance actions
 router.post('/vote-on-poll', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { userName, userHandle, spaceId, postId, voteData } = req.body
@@ -2990,7 +2989,7 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
                 },
                 {
                     model: Poll,
-                    attributes: ['type', 'action', 'threshold', 'spaceId'],
+                    attributes: ['id', 'type', 'action', 'threshold', 'spaceId'],
                 },
             ],
         })
@@ -3015,16 +3014,17 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
             )
         )
 
+        // currently only used for space creation
         const { type, action, threshold } = post.Poll
         const executeAction = action
             ? Promise.all(
                   voteData.map(
                       (answer) =>
                           new Promise(async (resolve1) => {
-                              // todo: use posts instead
-                              const pollAnswer = await PollAnswer.findOne({
+                              // find poll answer
+                              const pollAnswer = await Post.findOne({
                                   where: { id: answer.id },
-                                  attributes: ['id', 'text', 'state'],
+                                  attributes: ['id', 'text'],
                                   include: {
                                       model: Reaction,
                                       where: { type: 'vote', state: 'active' },
@@ -3032,7 +3032,16 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
                                       attributes: ['value'],
                                   },
                               })
-                              const { text, state, Reactions } = pollAnswer
+                              const answerLink = await Link.findOne({
+                                  where: {
+                                      itemAId: post.Poll.id,
+                                      itemAType: 'poll',
+                                      itemBId: answer.id,
+                                      itemBType: 'poll-answer',
+                                  },
+                                  attributes: ['id', 'state'],
+                              })
+                              const { text, Reactions } = pollAnswer
                               let totalVotes
                               if (type === 'weighted-choice')
                                   totalVotes =
@@ -3041,10 +3050,10 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
                               else totalVotes = Reactions.length
                               const createSpace =
                                   action === 'Create spaces' &&
-                                  state !== 'done' &&
+                                  answerLink.state !== 'done' &&
                                   totalVotes >= threshold
                                       ? new Promise(async (resolve2) => {
-                                            const markAnswerDone = await pollAnswer.update({
+                                            const markAnswerDone = await answerLink.update({
                                                 state: 'done',
                                             })
                                             const newSpace = await Space.create({
