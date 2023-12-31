@@ -90,6 +90,13 @@ module.exports = (sequelize, DataTypes) => {
 
         Post.belongsToMany(models.Post, {
             through: models.Link,
+            as: 'Answers',
+            foreignKey: 'itemAId',
+            otherKey: 'itemBId',
+        })
+
+        Post.belongsToMany(models.Post, {
+            through: models.Link,
             as: 'CardSides',
             foreignKey: 'itemAId',
             otherKey: 'itemBId',

@@ -235,7 +235,7 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
 
     const posts = await Post.findAll({
         where: {
-            state: 'visible',
+            state: 'active',
             type: ['image', 'url'],
         },
         order: [['createdAt', 'DESC']],
@@ -245,12 +245,10 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
             {
                 model: Url,
                 attributes: ['image'],
-                limit: 1,
             },
             {
                 model: Image,
                 attributes: ['url'],
-                limit: 1,
             },
         ],
     })
@@ -281,8 +279,8 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
     res.status(200).json({
         totals,
         posts: posts.map((p) => {
-            if (p.type === 'image') return p.Images[0].url
-            return p.Urls[0].image
+            if (p.type === 'image') return p.Image.url
+            return p.Url.image
         }),
         spaces: spaces.map((s) => s.flagImagePath),
         users: users.map((u) => u.flagImagePath),

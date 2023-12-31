@@ -75,6 +75,7 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
+        // todo: connect gbg comments to post? no
         // todo: add root links to parent comments
         // todo: always add relationship: 'parent' on links between beads, poll answers, card-faces
 
@@ -794,6 +795,7 @@ router.get('/test', async (req, res) => {
 
         // // todo: add searchable text to comments using front end after migration
 
+        // todo: get poll post id and link answers to post instead of poll (should be ready below)
         // // migrate poll answers (add root link to post too?)
         // const pollAnswers = await PollAnswer.findAll()
         // Promise.all(
@@ -815,13 +817,14 @@ router.get('/test', async (req, res) => {
         //                     },
         //                     { silent: true }
         //                 )
-        //                 // create link to poll
+        //                 // create link to post
+        //                 const poll = await Poll.findOne({ where: { id: answer.pollId }, attributes: ['postId'] })
         //                 const createLink = await Link.create(
         //                     {
         //                         creatorId: answer.creatorId,
-        //                         itemAType: 'poll',
+        //                         itemAType: 'post',
         //                         itemBType: 'poll-answer',
-        //                         itemAId: answer.pollId,
+        //                         itemAId: poll.postId,
         //                         itemBId: newPost.id,
         //                         relationship: 'parent',
         //                         state: answer.state,
@@ -913,11 +916,7 @@ router.get('/post-data', authenticateToken, async (req, res) => {
     const post = await Post.findOne({
         where: { id: postId, state: 'active' },
         include: findPostInclude(accountId),
-        attributes: [
-            postAccess(accountId),
-            sourcePostId(),
-            ...findFullPostAttributes('Post', accountId),
-        ],
+        attributes: [postAccess(accountId), ...findFullPostAttributes('Post', accountId)],
     })
     if (!post) res.status(404).json({ message: 'Post not found' })
     else if (!post.dataValues.access) res.status(401).json({ message: 'Access denied' })
@@ -942,12 +941,11 @@ router.get('/account-reactions', authenticateToken, async (req, res) => {
     res.status(200).json({ liked, rated, reposted, commented, linked })
 })
 
-router.get('/comment-links', async (req, res) => {
+router.get('/parent-links', async (req, res) => {
     const { postId } = req.query
     const [{ parentId }] = await db.sequelize.query(
         `SELECT itemAId AS parentId FROM Links
         WHERE itemBId = :postId
-        AND itemBType = 'comment'
         AND relationship = 'parent'
         AND state = 'active'`,
         { replacements: { postId }, type: QueryTypes.SELECT }
@@ -955,7 +953,6 @@ router.get('/comment-links', async (req, res) => {
     const root = await db.sequelize.query(
         `SELECT itemAId AS rootId FROM Links
         WHERE itemBId = :postId
-        AND itemBType = 'comment'
         AND relationship = 'root'
         AND state = 'active'`,
         { replacements: { postId }, type: QueryTypes.SELECT }
@@ -1261,11 +1258,12 @@ router.get('/post-indirect-spaces', async (req, res) => {
 
 router.get('/poll-data', async (req, res) => {
     const { postId } = req.query
+    const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
     const poll = await Poll.findOne({
         where: { postId: postId },
         attributes: ['id', 'type', 'answersLocked'],
     })
-    const answers = await poll.getAnswers({
+    const answers = await post.getAnswers({
         where: { state: 'active' },
         attributes: ['id', 'mediaTypes', 'text', 'createdAt'],
         through: { where: { itemBType: 'poll-answer', state: ['active', 'done'] } },
@@ -1295,7 +1293,7 @@ router.get('/poll-data', async (req, res) => {
 
 router.get('/gbg-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { postId } = req.query
+    const { postId, noLimit } = req.query
     const post = await Post.findOne({
         where: { id: postId },
         attributes: ['id'],
@@ -1304,7 +1302,7 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
     const beads = await post.getBeads({
         attributes: [...findFullPostAttributes('Post', accountId), 'color'],
         through: { where: { itemBType: 'bead', state: ['active', 'account-deleted'] } },
-        joinTableAttributes: ['state'],
+        joinTableAttributes: ['state', 'index'],
         include: [
             {
                 model: User,
@@ -1313,7 +1311,7 @@ router.get('/gbg-data', authenticateToken, async (req, res) => {
             },
         ],
         order: [[sequelize.col('Link.index'), 'ASC']],
-        limit: 3,
+        limit: noLimit ? null : 3,
     })
     const players = await post.getPlayers({
         attributes: ['id', 'handle', 'name', 'flagImagePath', 'state'],
@@ -1432,20 +1430,27 @@ router.get('/scrape-url', authenticateToken, async (req, res) => {
     }
 })
 
-router.get('/glass-bead-game-comments', (req, res) => {
-    const { gameId } = req.query
-    Comment.findAll({
-        where: { itemType: 'glass-bead-game', itemId: gameId },
-        order: [['createdAt', 'ASC']],
-        attributes: ['id', 'itemId', 'text', 'state', 'createdAt', 'updatedAt'],
-        include: {
-            model: User,
-            as: 'Creator',
-            attributes: ['id', 'handle', 'name', 'flagImagePath'],
+router.get('/glass-bead-game-comments', async (req, res) => {
+    const { postId } = req.query
+    const game = await GlassBeadGame.findOne({ where: { postId } })
+    const comments = await game.getBlocks({
+        attributes: fullPostAttributes,
+        through: {
+            where: { itemBType: 'comment', relationship: 'parent', state: 'active' },
         },
+        joinTableAttributes: [],
+        include: [
+            {
+                model: User,
+                as: 'Creator',
+                attributes: ['id', 'handle', 'name', 'flagImagePath'],
+            },
+        ],
+        order: [['createdAt', 'ASC']],
+        // limit: limits[depth],
+        // offset: depth ? 0 : +offset,
     })
-        .then((comments) => res.status(200).json(comments))
-        .catch((error) => res.status(500).json({ message: 'Error', error }))
+    res.status(200).json(comments)
 })
 
 router.get('/post-urls', async (req, res) => {
@@ -1490,7 +1495,7 @@ router.get('/post-audio', async (req, res) => {
     const post = await Post.findOne({ where: { id: postId }, attributes: ['id'] })
     const blocks = await post.getBlocks({
         attributes: ['id', 'text'],
-        through: { where: { itemBType: 'audio', state: 'active' } },
+        through: { where: { itemBType: 'audio', state: ['active', 'draft'] } },
         joinTableAttributes: ['index'],
         include: [{ model: Audio, attributes: ['id', 'url'] }],
         order: [[sequelize.col('Link.index'), 'ASC']],
@@ -1662,7 +1667,7 @@ router.post('/create-post', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: root not being passed up on comment post page (get here instead?)
+// todo: add root link from poll-answers and beads to source post (otherwise root of child comments points to answer/bead)
 router.post('/create-comment', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
@@ -1670,7 +1675,6 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post } = await createPost(postData, files, accountId)
         const { parent } = postData.link
-        // find the root
         const rootLink = await Link.findOne({
             where: { itemBId: parent.id, itemBType: parent.type, relationship: 'root' },
             attributes: ['itemAId', 'itemAType'],
@@ -1829,10 +1833,11 @@ router.post('/create-poll-answer', authenticateToken, async (req, res) => {
         const { parent } = postData.link
         const addParentLink = await Link.create({
             creatorId: accountId,
-            itemAType: 'poll',
+            itemAType: 'post',
             itemBType: 'poll-answer',
             itemAId: parent.id,
             itemBId: post.id,
+            relationship: 'parent',
             state: 'active',
             totalLikes: 0,
             totalComments: 0,
@@ -3117,7 +3122,7 @@ router.post('/save-glass-bead-game', async (req, res) => {
         { where: { postId } }
     )
     const updateLinks = await Link.update(
-        { state: 'visible' },
+        { state: 'active' },
         { where: { itemAId: postId, itemBType: 'bead', state: 'draft' } }
     )
 
@@ -3126,20 +3131,33 @@ router.post('/save-glass-bead-game', async (req, res) => {
         .catch((error) => res.status(500).json({ error }))
 })
 
-router.post('/glass-bead-game-comment', (req, res) => {
+router.post('/glass-bead-game-comment', async (req, res) => {
     const { gameId, userId, text } = req.body
-    Comment.create({
-        state: 'visible',
-        itemType: 'glass-bead-game',
-        itemId: gameId,
-        creatorId: userId,
+
+    const newComment = await Post.create({
+        ...defaultPostValues,
+        creatorId: userId || null,
+        type: 'comment',
+        mediaTypes: 'text',
         text,
-        totalLikes: 0,
-        totalRatings: 0,
-        totalLinks: 0,
-        totalReposts: 0,
-        totalGlassBeadGames: 0,
+        searchableText: text,
+        lastActivity: new Date(),
     })
+
+    const addParentLink = await Link.create({
+        creatorId: userId || null,
+        itemAType: 'glass-bead-game',
+        itemBType: 'comment',
+        itemAId: gameId,
+        itemBId: newComment.id,
+        relationship: 'parent',
+        state: 'active',
+        totalLikes: 0,
+        totalComments: 0,
+        totalRatings: 0,
+    })
+
+    Promise.all([addParentLink])
         .then(() => res.status(200).send({ message: 'Success' }))
         .catch((error) => res.status(500).json({ error }))
 })
@@ -3158,7 +3176,7 @@ router.post('/save-glass-bead-game-settings', async (req, res) => {
 
     const removeDraftBeads = await Link.update(
         { state: 'deleted' },
-        { where: { type: 'gbg-post', itemAId: postId, state: 'draft' } }
+        { where: { itemAId: postId, itemBType: 'bead', state: 'draft' } }
     )
     const updateGame = await GlassBeadGame.update(
         {

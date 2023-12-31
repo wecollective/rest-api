@@ -1110,6 +1110,7 @@ function findPostInclude(accountId) {
                 },
             ],
         },
+        // { model: GlassBeadGame },
         // for block posts
         {
             model: Image,
@@ -1204,6 +1205,7 @@ async function getToyboxItem(type, id) {
             model = Post
             attributes = [
                 'id',
+                'type',
                 'mediaTypes',
                 'title',
                 'text',
@@ -1453,16 +1455,14 @@ async function uploadFiles(req, res, accountId) {
     })
 }
 
-// todo: beads link to post (not game) but poll answers link to poll (not post)
-// which way is better?
-function createPollAnswer(answer, accountId, pollId, files) {
+function createPollAnswer(answer, accountId, postId, files) {
     return new Promise(async (resolve) => {
         const { post: newAnswer } = await createPost(answer, files, accountId)
         Link.create({
             creatorId: accountId,
-            itemAType: 'poll',
+            itemAType: 'post',
             itemBType: 'poll-answer',
-            itemAId: pollId,
+            itemAId: postId,
             itemBId: newAnswer.id,
             relationship: 'parent',
             state: answer.Link ? answer.Link.state : 'active',
@@ -1699,7 +1699,7 @@ async function createPost(data, files, accountId) {
         const createPoll = poll
             ? await new Promise(async (resolve) => {
                   const { type, answers, locked, governance, action, threshold } = poll
-                  const newPoll = await Poll.create({
+                  const createPoll = await Poll.create({
                       postId: post.id,
                       type,
                       answersLocked: locked,
@@ -1707,7 +1707,10 @@ async function createPost(data, files, accountId) {
                       action: action || null,
                       threshold: threshold || null,
                   })
-                  Promise.all(answers.map((a) => createPollAnswer(a, accountId, newPoll.id, files)))
+                  const creatAnswers = await Promise.all(
+                      answers.map((a) => createPollAnswer(a, accountId, post.id, files))
+                  )
+                  Promise.all([createPoll, creatAnswers])
                       .then(() => resolve())
                       .catch((error) => resolve(error))
               })

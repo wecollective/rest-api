@@ -6,6 +6,8 @@ var aws = require('aws-sdk')
 var multer = require('multer')
 var multerS3 = require('multer-s3')
 
+const { defaultPostValues } = require('../Helpers')
+
 const { User, Space, GlassBeadGame, Post, Link, Audio } = require('../models')
 
 const authenticateToken = require('../middleware/authenticateToken')
@@ -201,38 +203,63 @@ router.post('/gbg-audio-upload', authenticateToken, (req, res) => {
                                         // )
                                         const url = `https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`
                                         const bead = await Post.create({
-                                            type: 'gbg-audio',
-                                            state: 'visible',
+                                            ...defaultPostValues,
+                                            type: 'bead',
+                                            mediaTypes: 'audio',
+                                            state: 'active',
                                             creatorId: accountId,
                                             lastActivity: new Date(),
+                                        })
+
+                                        const linkBeadToGame = await Link.create({
+                                            state: 'draft',
+                                            itemAId: postId,
+                                            itemBId: bead.id,
+                                            itemAType: 'post',
+                                            itemBType: 'bead',
+                                            index: moveNumber,
+                                            relationship: 'parent',
+                                            creatorId: accountId,
                                             totalLikes: 0,
                                             totalComments: 0,
-                                            totalReposts: 0,
                                             totalRatings: 0,
-                                            totalLinks: 0,
-                                            totalGlassBeadGames: 0,
+                                        })
+
+                                        const audioBlock = await Post.create({
+                                            ...defaultPostValues,
+                                            type: 'audio',
+                                            mediaTypes: 'audio',
+                                            state: 'active',
+                                            creatorId: accountId,
+                                            lastActivity: new Date(),
                                         })
 
                                         const createAudio = await Audio.create({
-                                            type: 'post',
-                                            itemId: bead.id,
+                                            postId: audioBlock.id,
                                             creatorId: accountId,
                                             url,
+                                            state: 'active',
                                         })
 
-                                        const createLink = await Link.create({
-                                            state: 'draft',
-                                            type: 'gbg-post',
-                                            index: moveNumber,
+                                        const linkAudioBlockToBead = await Link.create({
+                                            state: 'active',
+                                            itemAId: bead.id,
+                                            itemBId: audioBlock.id,
+                                            itemAType: 'bead',
+                                            itemBType: 'audio',
+                                            index: 0,
+                                            relationship: 'parent',
                                             creatorId: accountId,
-                                            itemAId: postId,
-                                            itemBId: bead.id,
                                             totalLikes: 0,
                                             totalComments: 0,
                                             totalRatings: 0,
                                         })
 
-                                        Promise.all([createAudio, createLink])
+                                        Promise.all([
+                                            linkBeadToGame,
+                                            createAudio,
+                                            linkAudioBlockToBead,
+                                        ])
                                             .then(() => res.status(200).json({ id: bead.id, url }))
                                             .catch((error) => res.status(500).json({ error }))
                                     }

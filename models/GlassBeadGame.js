@@ -36,6 +36,12 @@ module.exports = (sequelize, DataTypes) => {
     )
     GlassBeadGame.associate = function (models) {
         // associations can be defined here
+        GlassBeadGame.belongsToMany(models.Post, {
+            through: models.Link,
+            as: 'Blocks',
+            foreignKey: 'itemAId',
+            otherKey: 'itemBId',
+        })
     }
     return GlassBeadGame
 }
