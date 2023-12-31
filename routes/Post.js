@@ -1131,6 +1131,7 @@ router.get('/links', authenticateToken, async (req, res) => {
     }
 })
 
+// todo: get account like after load
 router.get('/link-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { linkId } = req.query
@@ -1146,7 +1147,6 @@ router.get('/link-data', authenticateToken, async (req, res) => {
             'itemBType',
             'totalLikes',
             'createdAt',
-            // accountLike('link', 'Link', accountId),
         ],
         include: {
             model: User,
@@ -1154,6 +1154,8 @@ router.get('/link-data', authenticateToken, async (req, res) => {
             attributes: ['id', 'handle', 'name', 'flagImagePath'],
         },
     })
+    const liked = await accountReaction('like', 'link', linkId, accountId)
+    if (liked) link.setDataValue('accountLike', liked)
     const source = await getFullLinkedItem(link.itemAType, link.itemAId, accountId)
     const target = await getFullLinkedItem(link.itemBType, link.itemBId, accountId)
     res.status(200).json({ source, link, target })
@@ -2549,19 +2551,13 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: update
 router.post('/add-rating', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { itemType, itemId, parentItemId, newRating, accountHandle, accountName, spaceId } =
-        req.body
+    const { itemType, itemId, newRating, accountHandle, accountName, spaceId } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        let model
-        if (itemType === 'post') model = Post
-        if (itemType === 'comment') model = Comment
-
-        const item = await model.findOne({
+        const item = await Post.findOne({
             where: { id: itemId },
             attributes: ['id'],
             include: {
@@ -2583,10 +2579,6 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
             creatorId: accountId,
         })
 
-        let notificationPostId = null
-        if (itemType === 'post') notificationPostId = itemId
-        if (itemType === 'comment') notificationPostId = parentItemId
-
         const skipNotification = item.Creator.id === accountId
         const skipEmail =
             skipNotification ||
@@ -2601,15 +2593,10 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
                   seen: false,
                   spaceAId: spaceId,
                   userId: accountId,
-                  // todo: change to itemAId when Notifications table updated
-                  postId: notificationPostId,
-                  commentId: itemType === 'comment' ? itemId : null,
+                  postId: itemId,
               })
 
-        let itemUrl
-        if (itemType === 'post') itemUrl = `${appURL}/p/${itemId}`
-        if (itemType === 'comment') itemUrl = `${appURL}/p/${parentItemId}?commentId=${itemId}`
-
+        const itemUrl = `${appURL}/p/${itemId}`
         const sendEmail = skipEmail
             ? null
             : await sgMail.send({
@@ -2638,17 +2625,12 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: update
+// todo: set up option on front end to remove ratings
 router.post('/remove-rating', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { itemType, itemId } = req.body
-
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        let model
-        if (itemType === 'post') model = Post
-        if (itemType === 'comment') model = Comment
-
         const removeReaction = await Reaction.update(
             { state: 'removed' },
             {
@@ -2662,7 +2644,7 @@ router.post('/remove-rating', authenticateToken, async (req, res) => {
             }
         )
 
-        const updateTotalRatings = await model.decrement('totalRatings', {
+        const updateTotalRatings = await Post.decrement('totalRatings', {
             where: { id: itemId },
             silent: true,
         })
@@ -2673,7 +2655,6 @@ router.post('/remove-rating', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: update
 router.post('/add-link', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { sourceType, sourceId, targetType, targetId, description, accountHandle, accountName } =
@@ -2830,7 +2811,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: handle users and spaces, decrement link tally of connected items
+// todo: decrement link tally of connected items, handle users and spaces when totalLinks stat set up
 router.post('/delete-link', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { linkId } = req.body
@@ -2839,28 +2820,16 @@ router.post('/delete-link', authenticateToken, async (req, res) => {
     else {
         const link = await Link.findOne({
             where: { id: linkId, creatorId: accountId },
-            attributes: ['type', 'itemAId', 'itemBId'],
+            attributes: ['itemAId', 'itemAType', 'itemBId', 'itemBType'],
         })
         if (!link) res.status(404).json({ message: 'Not found' })
         else {
-            const linkTypes = link.type.split('-')
-            const sourceType = linkTypes[0]
-            const targetType = linkTypes[1]
-
-            let sourceModel
-            if (sourceType === 'post') sourceModel = Post
-            if (sourceType === 'comment') sourceModel = Comment
-
-            let targetModel
-            if (targetType === 'post') targetModel = Post
-            if (targetType === 'comment') targetModel = Comment
-
-            const updateSourceTotalLinks = await sourceModel.decrement('totalLinks', {
+            const updateSourceTotalLinks = await Post.decrement('totalLinks', {
                 where: { id: link.itemAId },
                 silent: true,
             })
 
-            const updateTargetTotalLinks = await targetModel.decrement('totalLinks', {
+            const updateTargetTotalLinks = await Post.decrement('totalLinks', {
                 where: { id: link.itemBId },
                 silent: true,
             })

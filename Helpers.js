@@ -481,18 +481,18 @@ function sourcePostId() {
     ]
 }
 
-async function accountReaction(type, postType, postId, accountId) {
+async function accountReaction(type, itemType, itemId, accountId) {
     const [{ reaction }] = await db.sequelize.query(
         `SELECT CASE WHEN EXISTS (
             SELECT id FROM Reactions
-            WHERE itemType = :postType
-            AND itemId = :postId
+            WHERE itemType = :itemType
+            AND itemId = :itemId
             AND creatorId = :accountId
             AND type = :type
             AND state = 'active'
         )
         THEN 1 ELSE 0 END AS reaction`,
-        { replacements: { type, postType, postId, accountId }, type: QueryTypes.SELECT }
+        { replacements: { type, itemType, itemId, accountId }, type: QueryTypes.SELECT }
     )
     return reaction
 }
