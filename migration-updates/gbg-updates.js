@@ -14,6 +14,7 @@ module.exports = {
                     },
                     { transaction: t }
                 ),
+                queryInterface.removeColumn('GlassBeadGames', 'oldGameId', { transaction: t }),
             ])
         })
     },
