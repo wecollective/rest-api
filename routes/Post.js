@@ -1062,24 +1062,23 @@ router.get('/account-reactions', authenticateToken, async (req, res) => {
     res.status(200).json({ liked, rated, reposted, commented, linked })
 })
 
-// todo: revisit
 router.get('/parent-links', async (req, res) => {
     const { postId } = req.query
-    const [{ rootId }] = await db.sequelize.query(
-        `SELECT itemAId AS rootId FROM Links
-        WHERE itemBId = :postId
-        AND relationship = 'root'
-        AND state = 'active'`,
-        { replacements: { postId }, type: QueryTypes.SELECT }
-    )
-    const parent = await db.sequelize.query(
+    const [{ parentId }] = await db.sequelize.query(
         `SELECT itemAId AS parentId FROM Links
         WHERE itemBId = :postId
         AND relationship = 'parent'
         AND state = 'active'`,
         { replacements: { postId }, type: QueryTypes.SELECT }
     )
-    res.status(200).json({ rootId, parentId: parent[0] ? parent[0].parentId : null })
+    const root = await db.sequelize.query(
+        `SELECT itemAId AS rootId FROM Links
+        WHERE itemBId = :postId
+        AND relationship = 'root'
+        AND state = 'active'`,
+        { replacements: { postId }, type: QueryTypes.SELECT }
+    )
+    res.status(200).json({ parentId, rootId: root[0] ? root[0].rootId : null })
 })
 
 router.get('/likes', async (req, res) => {
