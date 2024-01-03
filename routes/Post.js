@@ -87,6 +87,7 @@ router.get('/test', async (req, res) => {
         // + log out & remove getHomepageHighlights
         // + remove mediaTypes, originSpaceId, & totalChildComments from Post model
         // + change hasOne to hasMany on Post --> Url, Audio, Image relationships
+        // + add back in post assosiastions on Url, Audio, Image models
         // + ensure defaultPostValues is present in Helpers import list
 
         // run link-table-additions, gbg-updates, & post-table-updates migrations
@@ -1021,20 +1022,11 @@ router.get('/post-data', authenticateToken, async (req, res) => {
         const mediaType = post.type.split('-')[0]
         let model = Url
         let attributes = ['url', 'image', 'title', 'description', 'domain']
-        if (mediaType === 'image') {
-            model = Image
-            attributes = ['url']
-        }
-        if (mediaType === 'audio') {
-            model = Audio
-            attributes = ['url']
-        }
+        if (['image', 'audio'].includes(mediaType)) attributes = ['url']
+        if (mediaType === 'image') model = Image
+        if (mediaType === 'audio') model = Audio
         const linkToMedia = await Link.findOne({
-            where: {
-                itemAId: postId,
-                itemBType: mediaType,
-                state: 'active',
-            },
+            where: { itemAId: postId, itemBType: mediaType, state: 'active' },
             attributes: [],
             include: { model, attributes },
         })
@@ -1078,7 +1070,10 @@ router.get('/parent-links', async (req, res) => {
         AND state = 'active'`,
         { replacements: { postId }, type: QueryTypes.SELECT }
     )
-    res.status(200).json({ parentId, rootId: root[0] ? root[0].rootId : null })
+    // only pass back rootId if present and different from parentId
+    let rootId = null
+    if (root[0] && root[0].rootId !== parentId) rootId = root[0].rootId
+    res.status(200).json({ parentId, rootId })
 })
 
 router.get('/likes', async (req, res) => {
@@ -1249,7 +1244,6 @@ router.get('/links', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: get account like after load
 router.get('/link-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { linkId } = req.query
@@ -1297,6 +1291,7 @@ router.get('/target-from-text', authenticateToken, async (req, res) => {
     res.status(200).json(matchingPosts)
 })
 
+// todo: try using link approach instead of 'getBlocks' to speed up results...
 router.get('/post-comments', async (req, res) => {
     const { postId, offset, filter } = req.query
     const limits = [5, 4, 3, 2, 1] // number of comments to inlcude per generation (length of array determines max depth)
@@ -1328,7 +1323,7 @@ router.get('/post-comments', async (req, res) => {
                 through: {
                     where: {
                         itemBType: 'comment',
-                        relationship: root.type === 'post' ? 'root' : 'parent',
+                        relationship: 'parent',
                         state: 'active',
                     },
                 },
@@ -1555,27 +1550,29 @@ router.get('/scrape-url', authenticateToken, async (req, res) => {
     }
 })
 
+// test
 router.get('/glass-bead-game-comments', async (req, res) => {
     const { postId } = req.query
-    const game = await GlassBeadGame.findOne({ where: { postId } })
-    const comments = await game.getBlocks({
-        attributes: fullPostAttributes,
-        through: {
-            where: { itemBType: 'comment', relationship: 'root', state: 'active' },
+    const commentLinks = await Link.findAll({
+        where: {
+            itemAId: postId,
+            itemBType: 'gbg-room-comment',
+            relationship: 'parent',
+            state: 'active',
         },
-        joinTableAttributes: [],
-        include: [
-            {
+        attributes: [],
+        include: {
+            model: Post,
+            attributes: ['id', 'text', 'createdAt'],
+            include: {
                 model: User,
                 as: 'Creator',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
+                // required: false,
             },
-        ],
-        order: [['createdAt', 'ASC']],
-        // limit: limits[depth],
-        // offset: depth ? 0 : +offset,
+        },
     })
-    res.status(200).json(comments)
+    res.status(200).json(commentLinks.map((link) => link.Post))
 })
 
 // todo: set up pagination? (or restirct to ~5?)
@@ -1588,7 +1585,7 @@ router.get('/post-urls', async (req, res) => {
             itemBType: 'url-block',
             state: 'active',
         },
-        attributes: ['itemBId'],
+        attributes: ['index', 'itemBId'],
         order: [['index', 'ASC']],
         // offset: +offset,
         // limit: +offset ? 10 : 4,
@@ -1611,12 +1608,12 @@ router.get('/post-urls', async (req, res) => {
                             attributes: ['url', 'image', 'title', 'description', 'domain'],
                         },
                     })
-                    blocks.push({ ...link.Post.dataValues, Url: linkToUrl.Url })
+                    blocks.push({ ...link.Post.dataValues, index: link.index, Url: linkToUrl.Url })
                     resolve()
                 })
         )
     )
-        .then(() => res.status(200).json({ blocks })) // total: linksToBlocks.count
+        .then(() => res.status(200).json({ blocks: blocks.sort((a, b) => a.index - b.index) })) // total: linksToBlocks.count
         .catch((error) => res.status(500).json({ error }))
 })
 
@@ -1629,7 +1626,7 @@ router.get('/post-images', async (req, res) => {
             itemBType: 'image-block',
             state: 'active',
         },
-        attributes: ['itemBId'],
+        attributes: ['index', 'itemBId'],
         order: [['index', 'ASC']],
         offset: +offset,
         limit: +offset ? 10 : 4,
@@ -1649,12 +1646,21 @@ router.get('/post-images', async (req, res) => {
                         attributes: [],
                         include: { model: Image, attributes: ['url'] },
                     })
-                    blocks.push({ ...link.Post.dataValues, Image: linkToImage.Image })
+                    blocks.push({
+                        index: link.index,
+                        ...link.Post.dataValues,
+                        Image: linkToImage.Image,
+                    })
                     resolve()
                 })
         )
     )
-        .then(() => res.status(200).json({ blocks, total: linksToBlocks.count }))
+        .then(() =>
+            res.status(200).json({
+                blocks: blocks.sort((a, b) => a.index - b.index),
+                total: linksToBlocks.count,
+            })
+        )
         .catch((error) => res.status(500).json({ error }))
 })
 
@@ -1668,7 +1674,7 @@ router.get('/post-audio', async (req, res) => {
             itemBType: 'audio-block',
             state: 'active',
         },
-        attributes: ['itemBId'],
+        attributes: ['index', 'itemBId'],
         order: [['index', 'ASC']],
         // offset: +offset,
         // limit: +offset ? 10 : 4,
@@ -1688,59 +1694,116 @@ router.get('/post-audio', async (req, res) => {
                         attributes: [],
                         include: { model: Audio, attributes: ['url'] },
                     })
-                    blocks.push({ ...link.Post.dataValues, Audio: linkToAudio.Audio })
+                    blocks.push({
+                        ...link.Post.dataValues,
+                        index: link.index,
+                        Audio: linkToAudio.Audio,
+                    })
                     resolve()
                 })
         )
     )
-        .then(() => res.status(200).json({ blocks })) // total: linksToBlocks.count
+        .then(() => res.status(200).json({ blocks: blocks.sort((a, b) => a.index - b.index) })) // total: linksToBlocks.count
         .catch((error) => res.status(500).json({ error }))
 })
 
 router.get('/post-preview-data', async (req, res) => {
-    const { postId } = req.query
-    const post = await Post.findOne({ where: { id: postId }, attributes: ['id', 'mediaTypes'] })
-    const urlBlock = post.mediaTypes.includes('url')
-        ? await post.getBlocks({
-              attributes: ['id'],
-              through: { where: { itemBType: 'url', state: 'active' } },
-              joinTableAttributes: [],
-              include: [
-                  {
-                      model: Url,
-                      attributes: ['url', 'image', 'title', 'description'],
-                  },
-              ],
-              order: [[sequelize.col('Link.index'), 'ASC']],
-              limit: 1,
-          })
-        : null
-    const imageBlock = post.mediaTypes.includes('image')
-        ? await post.getBlocks({
-              attributes: ['id'],
-              through: { where: { itemBType: 'image', state: 'active' } },
-              joinTableAttributes: [],
-              include: [{ model: Image, attributes: ['url'] }],
-              order: [[sequelize.col('Link.index'), 'ASC']],
-              limit: 1,
-          })
-        : null
-    const audioBlock = post.mediaTypes.includes('audio')
-        ? await post.getBlocks({
-              attributes: ['id'],
-              through: { where: { itemBType: 'audio', state: 'active' } },
-              joinTableAttributes: [],
-              include: [{ model: Audio, attributes: ['id', 'url'] }],
-              order: [[sequelize.col('Link.index'), 'ASC']],
-              limit: 1,
-              required: false,
-          })
-        : null
-    res.status(200).json({
-        url: urlBlock ? urlBlock[0].Url : null,
-        image: imageBlock ? imageBlock[0].Image : null,
-        audio: audioBlock ? audioBlock[0].Audio : null,
+    const { postId, postType, mediaType } = req.query
+    new Promise(async (resolve) => {
+        if (postType.includes('block')) {
+            // get block media
+            if (mediaType === 'url') {
+                const linkToUrl = await Link.findOne({
+                    where: {
+                        itemAId: postId,
+                        itemBType: 'url',
+                        state: 'active',
+                    },
+                    attributes: [],
+                    include: { model: Url, attributes: ['url', 'image', 'title', 'description'] },
+                })
+                resolve(linkToUrl.Url)
+            } else if (mediaType === 'image') {
+                const linkToImage = await Link.findOne({
+                    where: {
+                        itemAId: postId,
+                        itemBType: 'image',
+                        state: 'active',
+                    },
+                    attributes: [],
+                    include: { model: Image, attributes: ['url'] },
+                })
+                resolve(linkToImage.Image)
+            } else if (mediaType === 'audio') {
+                const linkToAudio = await Link.findOne({
+                    where: {
+                        itemAId: postId,
+                        itemBType: 'audio',
+                        state: 'active',
+                    },
+                    attributes: [],
+                    include: { model: Audio, attributes: ['id', 'url'] },
+                })
+                resolve(linkToAudio.Audio)
+            }
+        } else {
+            // get post media
+            if (mediaType === 'url') {
+                const [linkToUrlBlock] = await Link.findAll({
+                    where: { itemAId: postId, itemBType: 'url-block', state: 'active' },
+                    attributes: ['itemBId'],
+                    order: [['index', 'ASC']],
+                    limit: 1,
+                })
+                const linkToUrl = await Link.findOne({
+                    where: {
+                        itemAId: linkToUrlBlock.itemBId,
+                        itemBType: 'url',
+                        state: 'active',
+                    },
+                    attributes: [],
+                    include: { model: Url, attributes: ['url', 'image', 'title', 'description'] },
+                })
+                resolve(linkToUrl.Url)
+            } else if (mediaType === 'image') {
+                const [linkToImageBlock] = await Link.findAll({
+                    where: { itemAId: postId, itemBType: 'image-block', state: 'active' },
+                    attributes: ['itemBId'],
+                    order: [['index', 'ASC']],
+                    limit: 1,
+                })
+                const linkToImage = await Link.findOne({
+                    where: {
+                        itemAId: linkToImageBlock.itemBId,
+                        itemBType: 'image',
+                        state: 'active',
+                    },
+                    attributes: [],
+                    include: { model: Image, attributes: ['url'] },
+                })
+                resolve(linkToImage.Image)
+            } else if (mediaType === 'audio') {
+                const [linkToAudioBlock] = await Link.findAll({
+                    where: { itemAId: postId, itemBType: 'audio-block', state: 'active' },
+                    attributes: ['itemBId'],
+                    order: [['index', 'ASC']],
+                    limit: 1,
+                })
+                const linkToAudio = await Link.findOne({
+                    where: {
+                        itemAId: linkToAudioBlock.itemBId,
+                        itemBType: 'audio',
+                        state: 'active',
+                    },
+                    attributes: [],
+                    include: { model: Audio, attributes: ['id', 'url'] },
+                })
+                resolve(linkToAudio.Audio)
+            }
+        }
     })
+        .then((data) => res.status(200).json(data))
+        .catch((error) => res.status(500).json({ error }))
 })
 
 router.get('/card-faces', async (req, res) => {
@@ -1857,6 +1920,7 @@ router.post('/create-post', authenticateToken, async (req, res) => {
                   const createNewLink = await Link.create({
                       state: 'active',
                       creatorId: accountId,
+                      relationship: 'link',
                       itemAType: source.type,
                       itemBType: 'post',
                       itemAId: source.id,
@@ -1883,7 +1947,6 @@ router.post('/create-post', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: add root link from poll-answers and beads to source post (otherwise root of child comments points to answer/bead)
 router.post('/create-comment', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
@@ -1891,14 +1954,15 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post } = await createPost(postData, files, accountId)
         const { parent } = postData.link
+        // scenarios:
+        // + adding comment on post
+        // + adding comment on comment
+        // + adding comment on bead, poll-answer, card-face, block
         const rootLink = await Link.findOne({
             where: { itemBId: parent.id, itemBType: parent.type, relationship: 'root' },
             attributes: ['itemAId', 'itemAType'],
         })
-        // scenarios:
-        // + adding comment on post (add root and parent links to post)
-        // + adding comment on comment (add root link to post and parent link to comment)
-        // + adding comment on bead, poll-answer, card-face, block (add root and parent link to item)
+        // if parent has no root link, parent = root
         const rootPost = await Post.findOne({
             where: { id: rootLink ? rootLink.itemAId : parent.id },
             attributes: ['id', 'type'],
@@ -1911,66 +1975,75 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                 through: { where: { state: 'active' }, attributes: [] },
             },
         })
-        const addRootLink = await Link.create({
-            creatorId: accountId,
-            itemAType: rootPost.type,
-            itemBType: 'comment',
-            itemAId: rootPost.id,
-            itemBId: post.id,
-            relationship: 'root',
-            state: 'active',
-            totalLikes: 0,
-            totalComments: 0,
-            totalRatings: 0,
-        })
-        // skip if comment on post
         const addParentLink = await Link.create({
             creatorId: accountId,
-            itemAType: parent.type,
-            itemBType: 'comment',
             itemAId: parent.id,
+            itemAType: parent.type,
             itemBId: post.id,
+            itemBType: 'comment',
             relationship: 'parent',
             state: 'active',
             totalLikes: 0,
             totalComments: 0,
             totalRatings: 0,
         })
-        // increment parents child comments
+        const addRootLink = await Link.create({
+            creatorId: accountId,
+            itemAId: rootPost.id,
+            itemAType: rootPost.type,
+            itemBId: post.id,
+            itemBType: 'comment',
+            relationship: 'root',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        // find ancestors
+        const ancestorLinks = await Link.findAll({
+            where: { itemBId: parent.id, itemBType: parent.type, relationship: 'ancestor' },
+            attributes: ['itemAId', 'itemAType'],
+        })
+        const ancestors = [
+            parent,
+            ...ancestorLinks.map((a) => {
+                return { id: a.itemAId, type: a.itemAType }
+            }),
+        ]
+        // create new ancestor links
+        const createAncestorLinks = await Promise.all(
+            ancestorIds.map((a) =>
+                Link.create({
+                    creatorId: accountId,
+                    itemAId: a.id,
+                    itemAType: a.type,
+                    itemBId: post.id,
+                    itemBType: 'comment',
+                    relationship: 'ancestor',
+                    state: 'active',
+                    totalLikes: 0,
+                    totalComments: 0,
+                    totalRatings: 0,
+                })
+            )
+        )
+        // increment tallies
+        const incrementAncestorsTotalComments = await Post.increment('totalComments', {
+            where: { id: ancestors.map((a) => a.id) },
+            silent: true,
+        })
         const incrementParentsChildComments = await Post.increment('totalChildComments', {
             where: { id: parent.id },
             silent: true,
         })
-        // increment ancestors total comments
-        // todo: use link table instead of PostAncestors to get ancestors ids
-        const ancestors = await PostAncestor.findAll({
-            where: { descendentId: parent.id },
-            attributes: ['ancestorId'],
-        })
-        const ancestorIds = [parent.id, ...ancestors.map((a) => a.ancestorId)]
-        const incrementAncestorsTotalComments = await Post.increment('totalComments', {
-            where: { id: ancestorIds },
+        const incrementSpaceStats = Space.increment('totalComments', {
+            where: { id: rootPost.AllPostSpaces.map((s) => s.id) },
             silent: true,
         })
-        // increment space stats (skip if?)
-        const incrementSpaceStats = rootPost
-            ? await Promise.all(
-                  rootPost.AllPostSpaces.map((space) =>
-                      space.increment('totalComments', { silent: true })
-                  )
-              )
-            : null
         // update ancestors lastActivity
         const updateLastActivity = await Post.update(
             { lastActivity: new Date() },
-            { where: { id: ancestorIds }, silent: true }
-        )
-        // create new comment ancestors
-        // todo: remove this step...
-        const createCommentAncestors = await Promise.all(
-            ancestorIds.map((id) =>
-                PostAncestor.create({ ancestorId: id, descendentId: post.id, state: 'active' })
-            )
+            { where: { id: ancestors.map((a) => a.id) }, silent: true }
         )
         // notify parent owner
         const notifyParentOwner = await new Promise(async (resolve) => {
@@ -2033,11 +2106,11 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
         Promise.all([
             addParentLink,
             addRootLink,
-            incrementParentsChildComments,
+            createAncestorLinks,
             incrementAncestorsTotalComments,
+            incrementParentsChildComments,
             incrementSpaceStats,
             updateLastActivity,
-            createCommentAncestors,
             notifyParentOwner,
         ])
             .then(() => res.status(200).json(post))
@@ -2056,11 +2129,11 @@ router.post('/create-poll-answer', authenticateToken, async (req, res) => {
         const { parent } = postData.link
         const addRootLink = await Link.create({
             creatorId: accountId,
-            itemAType: 'post',
-            itemBType: 'poll-answer',
             itemAId: parent.id,
+            itemAType: 'post',
             itemBId: post.id,
-            relationship: 'root',
+            itemBType: 'poll-answer',
+            relationship: 'parent',
             state: 'active',
             totalLikes: 0,
             totalComments: 0,
@@ -2118,12 +2191,12 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
 
         const createLink = await Link.create({
             creatorId: accountId,
-            itemAType: 'post',
-            itemBType: 'bead',
             itemAId: parent.id,
+            itemAType: 'post',
             itemBId: newBead.id,
+            itemBType: 'bead',
             index: gamePost.GlassBeadGame.totalBeads,
-            relationship: 'root',
+            relationship: 'parent',
             state: 'active',
             totalLikes: 0,
             totalComments: 0,
@@ -2221,6 +2294,7 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
     }
 })
 
+// test
 router.post('/update-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { id, mediaTypes, title, text, searchableText, mentions, urls: newUrls } = req.body
@@ -2235,41 +2309,61 @@ router.post('/update-post', authenticateToken, async (req, res) => {
     })
     if (!post) res.status(401).json({ message: 'Unauthorized' })
     else {
+        const updatePost = await Post.update(
+            { mediaTypes, title, text, searchableText },
+            { where: { id, creatorId: accountId } }
+        )
         // update urls
-        const oldUrls = await post.getBlocks({
-            attributes: ['id'],
-            through: { where: { itemBType: 'url', state: 'active' } },
-            joinTableAttributes: ['id'],
-            include: [
-                {
-                    model: Url,
-                    attributes: ['id', 'url'],
-                },
-            ],
+        const oldUrlBlockLinks = await Link.findAll({
+            where: {
+                itemAId: post.id,
+                itemAType: post.type,
+                itemBType: 'url-block',
+                state: 'active',
+            },
+            attributes: ['id', 'itemBId'],
         })
-
+        const oldUrlLinks = await Promise.all(
+            oldUrlBlockLinks.map(
+                (oldUrlBlockLink) =>
+                    new Promise(async (resolve) => {
+                        const oldUrlLink = await Link.findOne({
+                            where: {
+                                itemAId: oldUrlBlockLink.itemBId,
+                                itemAType: 'url-block',
+                                itemBType: 'url',
+                                state: 'active',
+                            },
+                            attributes: [],
+                            include: { model: Url, attributes: ['url'] },
+                        })
+                        resolve({ id: oldUrlBlockLink.id, url: oldUrlLink.Url.url })
+                    })
+            )
+        )
         const removeOldUrls = await Promise.all(
-            oldUrls.map(
-                (oldUrl) =>
-                    new Promise((resolve) => {
-                        const match = newUrls.find((newUrl) => newUrl.url === oldUrl.Url.url)
+            oldUrlLinks.map(
+                (oldUrlLink) =>
+                    new Promise(async (resolve) => {
+                        const match = newUrls.find((newUrl) => newUrl.url === oldUrlLink.url)
                         if (match) resolve()
                         else {
-                            Link.update({ state: 'deleted' }, { where: { id: oldUrl.Link.id } })
+                            Link.update({ state: 'deleted' }, { where: { id: oldUrlLink.id } })
                                 .then(() => resolve())
                                 .catch((error) => resolve(error))
                         }
                     })
             )
         )
-
         const addNewUrls = await Promise.all(
             newUrls.map(
                 (newUrl, index) =>
                     new Promise((resolve) => {
-                        const match = oldUrls.find((oldUrl) => oldUrl.Url.url === newUrl.url)
+                        const match = oldUrlLinks.find(
+                            (oldUrlLink) => oldUrlLink.url === newUrl.url
+                        )
                         if (match) {
-                            Link.update({ index }, { where: { id: match.Link.id } })
+                            Link.update({ index }, { where: { id: match.id } })
                                 .then(() => resolve())
                                 .catch((error) => resolve(error))
                         } else {
@@ -2280,6 +2374,51 @@ router.post('/update-post', authenticateToken, async (req, res) => {
                     })
             )
         )
+
+        // const oldUrls = await post.getBlocks({
+        //     attributes: ['id'],
+        //     through: { where: { itemBType: 'url', state: 'active' } },
+        //     joinTableAttributes: ['id'],
+        //     include: [
+        //         {
+        //             model: Url,
+        //             attributes: ['id', 'url'],
+        //         },
+        //     ],
+        // })
+
+        // const removeOldUrls = await Promise.all(
+        //     oldUrls.map(
+        //         (oldUrl) =>
+        //             new Promise((resolve) => {
+        //                 const match = newUrls.find((newUrl) => newUrl.url === oldUrl.Url.url)
+        //                 if (match) resolve()
+        //                 else {
+        //                     Link.update({ state: 'deleted' }, { where: { id: oldUrl.Link.id } })
+        //                         .then(() => resolve())
+        //                         .catch((error) => resolve(error))
+        //                 }
+        //             })
+        //     )
+        // )
+
+        // const addNewUrls = await Promise.all(
+        //     newUrls.map(
+        //         (newUrl, index) =>
+        //             new Promise((resolve) => {
+        //                 const match = oldUrls.find((oldUrl) => oldUrl.Url.url === newUrl.url)
+        //                 if (match) {
+        //                     Link.update({ index }, { where: { id: match.Link.id } })
+        //                         .then(() => resolve())
+        //                         .catch((error) => resolve(error))
+        //                 } else {
+        //                     createUrl(accountId, id, post.type, newUrl, index)
+        //                         .then(() => resolve())
+        //                         .catch((error) => resolve(error))
+        //                 }
+        //             })
+        //     )
+        // )
 
         // notify mentions
         const mentionedUsers = await User.findAll({
@@ -2340,11 +2479,6 @@ router.post('/update-post', authenticateToken, async (req, res) => {
             )
         )
 
-        const updatePost = await Post.update(
-            { mediaTypes, title, text, searchableText },
-            { where: { id, creatorId: accountId } }
-        )
-
         Promise.all([updatePost, removeOldUrls, addNewUrls, notifyMentions])
             .then(() => res.status(200).json(updatePost))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
@@ -2367,10 +2501,11 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
             },
         })
 
-        const updateTotalReposts = await Post.update(
-            { totalReposts: post.totalReposts + spaceIds.length },
-            { where: { id: postId }, silent: true }
-        )
+        const incrementTotalReposts = await Post.increment('totalReposts', {
+            by: spaceIds.length,
+            where: { id: postId },
+            silent: true,
+        })
 
         const skipNotification = post.Creator.id === accountId
         const skipEmail =
@@ -2558,7 +2693,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
         })
 
         Promise.all([
-            updateTotalReposts,
+            incrementTotalReposts,
             sendNotification,
             sendEmail,
             createReactions,
@@ -2883,10 +3018,22 @@ router.post('/remove-rating', authenticateToken, async (req, res) => {
     }
 })
 
+// test
 router.post('/add-link', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { sourceType, sourceId, targetType, targetId, description, accountHandle, accountName } =
         req.body
+
+    const postTypes = [
+        'post',
+        'comment',
+        'bead',
+        'poll-answer',
+        'card-face',
+        'url-block',
+        'audio-block',
+        'image-block',
+    ]
 
     async function getItem(type, id) {
         let model
@@ -2902,7 +3049,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             as: 'Moderators',
             attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
         }
-        if (['post', 'comment'].includes(type)) {
+        if (postTypes.includes(type)) {
             model = Post
             attributes = ['id']
             include = creator
@@ -2928,8 +3075,8 @@ router.post('/add-link', authenticateToken, async (req, res) => {
             creatorId: accountId,
             state: 'active',
             relationship: 'link',
-            itemAType: sourceType,
-            itemBType: targetType,
+            itemAType: postTypes.includes(sourceType) ? 'post' : sourceType,
+            itemBType: postTypes.includes(targetType) ? 'post' : targetType,
             description,
             itemAId: sourceId,
             itemBId: targetId,
@@ -2950,13 +3097,13 @@ router.post('/add-link', authenticateToken, async (req, res) => {
         async function notifyOwners(item, type, location) {
             // skip notification if linked item is link creators
             let isOwn = false
-            if (['post', 'comment'].includes(type)) isOwn = item.Creator.id === accountId
+            if (postTypes.includes(type)) isOwn = item.Creator.id === accountId
             if (type === 'user') isOwn = item.id === accountId
             if (type === 'space') isOwn = item.Moderators.find((u) => u.id === accountId)
             if (isOwn) return null
             // send out notifications and emails to recipients
             let recipients = []
-            if (['post', 'comment'].includes(type)) recipients = [item.Creator]
+            if (postTypes.includes(type)) recipients = [item.Creator]
             if (type === 'user') recipients = [item]
             if (type === 'space') recipients = [...item.Moderators]
             return Promise.all(
@@ -2967,16 +3114,19 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                             let postId = null
                             let commentId = null
                             let spaceAId = null
-                            if (type === 'post')
+                            if (postTypes.filter((p) => p !== 'comment').includes(type))
                                 postId = location === 'source' ? sourceId : targetId
                             if (type === 'comment')
                                 commentId = location === 'source' ? sourceId : targetId
                             if (type === 'space')
                                 spaceAId = location === 'source' ? sourceId : targetId
                             // todo: need 3 slots for each model type (until then only include link to source)
+                            let itemType = type
+                            if (postTypes.filter((p) => p !== 'comment').includes(type))
+                                type = 'post'
                             const createNotification = await Notification.create({
                                 ownerId: id,
-                                type: `${type}-link-${location}`,
+                                type: `${itemType}-link-${location}`,
                                 seen: false,
                                 userId: accountId,
                                 spaceAId,
@@ -2985,7 +3135,7 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                             })
                             const skipEmail =
                                 emailsDisabled || (await accountMuted(accountId, recipient))
-                            const url = `${appURL}/linkmap?item=${type}&id=${item.id}`
+                            const url = `${appURL}/linkmap?item=${itemType}&id=${item.id}`
                             const sendEmail = skipEmail
                                 ? null
                                 : await sgMail.send({
@@ -3185,8 +3335,8 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
                               })
                               const answerLink = await Link.findOne({
                                   where: {
-                                      itemAId: post.Poll.id,
-                                      itemAType: 'poll',
+                                      itemAId: postId,
+                                      itemAType: 'post',
                                       itemBId: answer.id,
                                       itemBType: 'poll-answer',
                                   },
@@ -3355,7 +3505,7 @@ router.post('/save-glass-bead-game', async (req, res) => {
 })
 
 router.post('/glass-bead-game-comment', async (req, res) => {
-    const { gameId, userId, text } = req.body
+    const { postId, userId, text } = req.body
 
     const newComment = await Post.create({
         ...defaultPostValues,
@@ -3367,20 +3517,20 @@ router.post('/glass-bead-game-comment', async (req, res) => {
         lastActivity: new Date(),
     })
 
-    const addRootLink = await Link.create({
+    const addParentLink = await Link.create({
         creatorId: userId || null,
-        itemAType: 'glass-bead-game',
-        itemBType: 'comment',
-        itemAId: gameId,
+        itemAId: postId,
+        itemAType: 'post',
         itemBId: newComment.id,
-        relationship: 'root',
+        itemBType: 'gbg-room-comment',
+        relationship: 'parent',
         state: 'active',
         totalLikes: 0,
         totalComments: 0,
         totalRatings: 0,
     })
 
-    Promise.all([addRootLink])
+    Promise.all([addParentLink])
         .then(() => res.status(200).send({ message: 'Success' }))
         .catch((error) => res.status(500).json({ error }))
 })
@@ -3499,7 +3649,7 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: revisit linking system
+// test
 router.post('/delete-comment', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.body
@@ -3510,7 +3660,7 @@ router.post('/delete-comment', authenticateToken, async (req, res) => {
             { state: 'deleted' },
             { where: { id: postId, creatorId: accountId } }
         )
-        // get root and parent links for tally updates
+        // get links & root post for tally updates
         const rootLink = await Link.findOne({
             where: { itemBId: postId, itemBType: 'comment', relationship: 'root' },
             attributes: ['itemAId', 'itemAType'],
@@ -3519,24 +3669,13 @@ router.post('/delete-comment', authenticateToken, async (req, res) => {
             where: { itemBId: postId, itemBType: 'comment', relationship: 'parent' },
             attributes: ['itemAId'],
         })
-        // decrement comment tallies
-        const decrementParentsChildComments = await Post.decrement('totalChildComments', {
-            where: { id: parentLink.itemAId },
-            silent: true,
+        const ancestorLinks = await Link.findAll({
+            where: { itemBId: postId, itemBType: 'comment', relationship: 'ancestor' },
+            attributes: ['itemAId'],
         })
-        const ancestors = await PostAncestor.findAll({
-            where: { descendentId: parentLink.itemAId },
-            attributes: ['ancestorId'],
-        })
-        const ancestorIds = [parentLink.itemAId, ...ancestors.map((a) => a.ancestorId)]
-        const decrementAncestorsTotalComments = await Post.decrement('totalComments', {
-            where: { id: ancestorIds },
-            silent: true,
-        })
-        // decrement space tallies
         const rootPost = await Post.findOne({
             where: { id: rootLink.itemAId },
-            attributes: ['id', 'totalLikes', 'totalComments'],
+            attributes: ['id'],
             include: [
                 {
                     model: Space,
@@ -3548,12 +3687,19 @@ router.post('/delete-comment', authenticateToken, async (req, res) => {
                 },
             ],
         })
-        const decrementSpaceStats = await Promise.all(
-            rootPost.AllPostSpaces.map((space) =>
-                space.decrement('totalComments', { silent: true })
-            )
-        )
-
+        // decrement tallies
+        const decrementParentsChildComments = await Post.decrement('totalChildComments', {
+            where: { id: parentLink.itemAId },
+            silent: true,
+        })
+        const decrementAncestorsTotalComments = await Post.decrement('totalComments', {
+            where: { id: ancestorLinks.map((a) => a.itemAId) },
+            silent: true,
+        })
+        const decrementSpaceStats = await Space.decrement('totalComments', {
+            where: { id: rootPost.AllPostSpaces.map((s) => s.id) },
+            silent: true,
+        })
         Promise.all([
             removeComment,
             decrementParentsChildComments,
@@ -3565,7 +3711,7 @@ router.post('/delete-comment', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: revisit linking system
+// test
 router.post('/delete-bead', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.body
@@ -3576,22 +3722,22 @@ router.post('/delete-bead', authenticateToken, async (req, res) => {
             { state: 'deleted' },
             { where: { id: postId, creatorId: accountId } }
         )
-        // find link to root post
+        // find link to game post
         const parentLink = await Link.findOne({
             where: { itemBId: postId, itemBType: 'bead', relationship: 'parent' },
             attributes: ['id', 'itemAId', 'index'],
         })
-        const rootPostId = parentLink.itemAId
+        const gamePostId = parentLink.itemAId
         // decrement the games total bead tally
         const decrementTotalBeads = await GlassBeadGame.decrement('totalBeads', {
-            where: { postId: rootPostId },
+            where: { postId: gamePostId },
             silent: true,
         })
         // decrement the index of later beads
         const decrementOtherBeadIndexes = await Link.decrement('index', {
             where: {
                 itemAType: 'post',
-                itemAId: rootPostId,
+                itemAId: gamePostId,
                 itemBType: 'bead',
                 relationship: 'parent',
                 index: { [Op.gte]: parentLink.index },
@@ -3606,7 +3752,6 @@ router.post('/delete-bead', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: needs thinking through (remove links too?)
 router.post('/delete-block', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId } = req.body

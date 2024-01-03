@@ -118,10 +118,10 @@ io.on('connection', (socket) => {
     })
 
     socket.on('outgoing-start-game', (data) => {
-        const { userSignaling, roomId, gameData } = data
+        const { userSignaling, roomId, postId } = data
         io.in(roomId).emit('incoming-start-game', data)
         const comment = {
-            gameId: gameData.id,
+            postId,
             text: `${userSignaling.name} started the game`,
         }
         axios
@@ -130,9 +130,9 @@ io.on('connection', (socket) => {
     })
 
     socket.on('outgoing-stop-game', (data) => {
-        const { userSignaling, roomId, gameId } = data
+        const { userSignaling, roomId, postId } = data
         io.in(roomId).emit('incoming-stop-game', data)
-        const comment = { gameId, text: `${userSignaling.name} stopped the game` }
+        const comment = { postId, text: `${userSignaling.name} stopped the game` }
         axios
             .post(`${config.apiUrl}/glass-bead-game-comment`, comment)
             .catch((error) => console.log('error: ', error))

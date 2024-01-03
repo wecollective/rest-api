@@ -589,6 +589,7 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
     res.status(200).json(postsWithData)
 })
 
+// todo: potentially load images after posts retrieved to speed up initial load time
 router.post('/post-map-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const {
@@ -655,26 +656,40 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
             (post) =>
                 new Promise(async (resolve) => {
                     if (post.mediaTypes.includes('image')) {
-                        const [imageBlock] = await post.getBlocks({
-                            attributes: [],
-                            through: { where: { itemBType: 'image', state: 'active' } },
-                            joinTableAttributes: ['index'],
-                            include: [{ model: Image, attributes: ['url'] }],
-                            order: [[sequelize.col('Link.index'), 'ASC']],
+                        const [linkToImageBlock] = await Link.findAll({
+                            where: { itemAId: post.id, itemBType: 'image-block', state: 'active' },
+                            attributes: ['itemBId'],
+                            order: [['index', 'ASC']],
                             limit: 1,
                         })
-                        if (imageBlock) post.setDataValue('imageUrl', imageBlock.Image.url)
+                        const linkToImage = await Link.findOne({
+                            where: {
+                                itemAId: linkToImageBlock.itemBId,
+                                itemBType: 'image',
+                                state: 'active',
+                            },
+                            attributes: [],
+                            include: { model: Image, attributes: ['url'] },
+                        })
+                        post.setDataValue('imageUrl', linkToImage.Image.url)
                         resolve()
                     } else if (post.mediaTypes.includes('url')) {
-                        const [urlBlock] = await post.getBlocks({
-                            attributes: [],
-                            through: { where: { itemBType: 'url', state: 'active' } },
-                            joinTableAttributes: ['index'],
-                            include: [{ model: Url, attributes: ['image'] }],
-                            order: [[sequelize.col('Link.index'), 'ASC']],
+                        const [linkToUrlBlock] = await Link.findAll({
+                            where: { itemAId: post.id, itemBType: 'url-block', state: 'active' },
+                            attributes: ['itemBId'],
+                            order: [['index', 'ASC']],
                             limit: 1,
                         })
-                        if (urlBlock) post.setDataValue('imageUrl', urlBlock.Url.image)
+                        const linkToUrl = await Link.findOne({
+                            where: {
+                                itemAId: linkToUrlBlock.itemBId,
+                                itemBType: 'url',
+                                state: 'active',
+                            },
+                            attributes: [],
+                            include: { model: Url, attributes: ['image'] },
+                        })
+                        post.setDataValue('imageUrl', linkToUrl.Url.image)
                         resolve()
                     } else resolve()
                 })

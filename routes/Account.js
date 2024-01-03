@@ -252,36 +252,9 @@ router.post('/account-notifications', authenticateToken, async (req, res) => {
                             },
                         },
                         {
-                            model: Url,
-                            attributes: ['url', 'image', 'title', 'description'],
-                        },
-                        {
-                            model: Image,
-                            attributes: ['url'],
-                        },
-                        {
-                            model: Audio,
-                            attributes: ['url'],
-                        },
-                        {
                             model: GlassBeadGame,
                             attributes: ['topicImage', 'state'],
                         },
-                        // {
-                        //     model: Post,
-                        //     as: 'CardSides',
-                        //     attributes: ['id'],
-                        //     through: {
-                        //         where: { type: 'card-post', state: ['visible', 'account-deleted'] },
-                        //         attributes: [],
-                        //     },
-                        //     include: {
-                        //         model: Image,
-                        //         attributes: ['id', 'url'],
-                        //         required: false,
-                        //     },
-                        //     required: false,
-                        // },
                     ],
                 },
                 {
@@ -328,10 +301,10 @@ router.post('/followed-spaces', authenticateToken, async (req, res) => {
                 'flagImagePath',
                 'coverImagePath',
                 'privacy',
-                totalSpaceFollowers,
-                totalSpaceComments,
-                totalSpaceLikes,
-                totalSpacePosts,
+                'totalFollowers',
+                'totalComments',
+                'totalPostLikes',
+                'totalPosts',
             ],
             limit: 10,
             offset,

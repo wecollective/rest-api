@@ -211,30 +211,44 @@ function uploadBeadFile(file, accountId) {
     })
 }
 
-// todo: add state to media?
-function createImage(accountId, postId, postType, image, index, files) {
+function createUrl(accountId, postId, postType, urlData, index) {
     return new Promise(async (resolve) => {
-        const newPost = await Post.create({
+        const { url, title, description, domain, image, searchableText } = urlData
+        const newUrlBlock = await Post.create({
             ...defaultPostValues,
             creatorId: accountId,
-            type: 'image',
-            mediaTypes: 'image',
-            text: image.text || null,
-            searchableText: image.text || null,
+            type: 'url-block',
+            mediaTypes: 'url',
+            searchableText,
             lastActivity: new Date(),
         })
-        const file = files.find((file) => file.originalname === image.id)
-        const addImage = await Image.create({
+        const newUrl = await Url.create({
             creatorId: accountId,
-            postId: newPost.id,
-            url: file ? file.url : image.Image.url,
+            url,
+            title,
+            description,
+            domain,
+            image,
+            state: 'active',
         })
-        const addLink = await Link.create({
+        const linkBlockToUrl = await Link.create({
             creatorId: accountId,
-            itemAType: postType,
-            itemBType: 'image',
+            itemAId: newUrlBlock.id,
+            itemAType: 'url-block',
+            itemBId: newUrl.id,
+            itemBType: 'url',
+            relationship: 'parent',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        const linkPostToBlock = await Link.create({
+            creatorId: accountId,
             itemAId: postId,
-            itemBId: newPost.id,
+            itemAType: postType,
+            itemBId: newUrlBlock.id,
+            itemBType: 'url-block',
             index,
             relationship: 'parent',
             state: 'active',
@@ -242,7 +256,55 @@ function createImage(accountId, postId, postType, image, index, files) {
             totalComments: 0,
             totalRatings: 0,
         })
-        Promise.all([addImage, addLink])
+        Promise.all([linkBlockToUrl, linkPostToBlock])
+            .then(() => resolve())
+            .catch((error) => resolve(error))
+    })
+}
+
+function createImage(accountId, postId, postType, image, index, files) {
+    return new Promise(async (resolve) => {
+        const newImageBlock = await Post.create({
+            ...defaultPostValues,
+            creatorId: accountId,
+            type: 'image-block',
+            mediaTypes: 'image',
+            text: image.text || null,
+            searchableText: image.text || null,
+            lastActivity: new Date(),
+        })
+        const file = files.find((file) => file.originalname === image.id)
+        const newImage = await Image.create({
+            creatorId: accountId,
+            url: file ? file.url : image.Image.url,
+            state: 'active',
+        })
+        const linkBlockToImage = await Link.create({
+            creatorId: accountId,
+            itemAId: newImageBlock.id,
+            itemAType: 'image-block',
+            itemBId: newImage.id,
+            itemBType: 'image',
+            relationship: 'parent',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        const linkPostToBlock = await Link.create({
+            creatorId: accountId,
+            itemAId: postId,
+            itemAType: postType,
+            itemBId: newImageBlock.id,
+            itemBType: 'image-block',
+            index,
+            relationship: 'parent',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        Promise.all([linkBlockToImage, linkPostToBlock])
             .then(() => resolve())
             .catch((error) => resolve(error))
     })
@@ -250,65 +312,38 @@ function createImage(accountId, postId, postType, image, index, files) {
 
 function createAudio(accountId, postId, postType, audio, index, files) {
     return new Promise(async (resolve) => {
-        const newPost = await Post.create({
+        const newAudioBlock = await Post.create({
             ...defaultPostValues,
             creatorId: accountId,
-            type: 'audio',
+            type: 'audio-block',
             mediaTypes: 'audio',
             text: audio.text || null,
             searchableText: audio.text || null,
             lastActivity: new Date(),
         })
-        const addAudio = await Audio.create({
+        const newAudio = await Audio.create({
             creatorId: accountId,
-            postId: newPost.id,
             url: files.find((file) => file.originalname === audio.id).url,
+            state: 'active',
         })
-        const addLink = await Link.create({
+        const linkBlockToAudio = await Link.create({
             creatorId: accountId,
-            itemAType: postType,
+            itemAId: newAudioBlock.id,
+            itemAType: 'audio-block',
+            itemBId: newAudio.id,
             itemBType: 'audio',
-            itemAId: postId,
-            itemBId: newPost.id,
-            index,
             relationship: 'parent',
             state: 'active',
             totalLikes: 0,
             totalComments: 0,
             totalRatings: 0,
         })
-        Promise.all([addAudio, addLink])
-            .then(() => resolve())
-            .catch((error) => resolve(error))
-    })
-}
-
-function createUrl(accountId, postId, postType, urlData, index) {
-    return new Promise(async (resolve) => {
-        const { url, title, description, domain, image, searchableText } = urlData
-        const newPost = await Post.create({
-            ...defaultPostValues,
+        const linkPostToBlock = await Link.create({
             creatorId: accountId,
-            type: 'url',
-            mediaTypes: 'url',
-            searchableText,
-            lastActivity: new Date(),
-        })
-        const addUrl = await Url.create({
-            creatorId: accountId,
-            postId: newPost.id,
-            url,
-            title,
-            description,
-            domain,
-            image,
-        })
-        const addLink = await Link.create({
-            creatorId: accountId,
+            itemAId: postId,
             itemAType: postType,
-            itemBType: 'url',
-            itemAId: postId,
-            itemBId: newPost.id,
+            itemBId: newAudioBlock.id,
+            itemBType: 'audio-block',
             index,
             relationship: 'parent',
             state: 'active',
@@ -316,7 +351,7 @@ function createUrl(accountId, postId, postType, urlData, index) {
             totalComments: 0,
             totalRatings: 0,
         })
-        Promise.all([addUrl, addLink])
+        Promise.all([linkBlockToAudio, linkPostToBlock])
             .then(() => resolve())
             .catch((error) => resolve(error))
     })
@@ -658,6 +693,7 @@ const totalSpaceFollowers = [
     'totalFollowers',
 ]
 
+// todo: update or remove
 const totalSpaceComments = [
     literal(`(
         SELECT COUNT(*)
@@ -1112,18 +1148,18 @@ function findPostInclude(accountId) {
         },
         // { model: GlassBeadGame },
         // for block posts
-        {
-            model: Image,
-            attributes: ['id', 'url'],
-        },
-        {
-            model: Audio,
-            attributes: ['id', 'url'],
-        },
-        {
-            model: Url,
-            attributes: ['id', 'url', 'title', 'description', 'domain', 'image'],
-        },
+        // {
+        //     model: Image,
+        //     attributes: ['id', 'url'],
+        // },
+        // {
+        //     model: Audio,
+        //     attributes: ['id', 'url'],
+        // },
+        // {
+        //     model: Url,
+        //     attributes: ['id', 'url', 'title', 'description', 'domain', 'image'],
+        // },
     ]
 }
 
@@ -1264,34 +1300,36 @@ async function getToyboxItem(type, id) {
             const mediaTypes = item.mediaTypes.split(',')
             const mediaType = mediaTypes[mediaTypes.length - 1]
             if (mediaType === 'url') {
-                const urlBlocks = await item.getBlocks({
-                    attributes: ['id'],
-                    through: { where: { itemBType: 'url', state: 'active' } },
-                    joinTableAttributes: [],
-                    include: [
-                        {
-                            model: Url,
-                            attributes: ['image'],
-                        },
-                    ],
+                const [linkToUrlBlock] = await Link.findAll({
+                    where: { itemAId: item.id, itemBType: 'url-block', state: 'active' },
+                    attributes: ['itemBId'],
+                    order: [['index', 'ASC']],
                     limit: 1,
                 })
-                item.setDataValue('image', urlBlocks[0].Url.image)
+                const linkToUrl = await Link.findOne({
+                    where: { itemAId: linkToUrlBlock.itemBId, itemBType: 'url', state: 'active' },
+                    attributes: [],
+                    include: { model: Url, attributes: ['image'] },
+                })
+                item.setDataValue('image', linkToUrl.Url.image)
                 resolve({ type, data: item })
             } else if (mediaType === 'image') {
-                const imageBlocks = await item.getBlocks({
-                    attributes: ['id'],
-                    through: { where: { itemBType: 'image', state: 'active' } },
-                    joinTableAttributes: [],
-                    include: [
-                        {
-                            model: Image,
-                            attributes: ['url'],
-                        },
-                    ],
+                const [linkToImageBlock] = await Link.findAll({
+                    where: { itemAId: item.id, itemBType: 'image-block', state: 'active' },
+                    attributes: ['itemBId'],
+                    order: [['index', 'ASC']],
                     limit: 1,
                 })
-                item.setDataValue('image', imageBlocks[0].Image.url)
+                const linkToImage = await Link.findOne({
+                    where: {
+                        itemAId: linkToImageBlock.itemBId,
+                        itemBType: 'image',
+                        state: 'active',
+                    },
+                    attributes: [],
+                    include: { model: Image, attributes: ['url'] },
+                })
+                item.setDataValue('image', linkToImage.Image.url)
                 resolve({ type, data: item })
             } else resolve({ type, data: item })
         }
@@ -1299,32 +1337,48 @@ async function getToyboxItem(type, id) {
 }
 
 async function getFullLinkedItem(type, id, accountId) {
-    let model
-    let attributes = []
-    let include = null
-    if (['post', 'comment'].includes(type)) {
-        model = Post
-        attributes = [sourcePostId(), ...findFullPostAttributes('Post', accountId)]
-        include = findPostInclude(accountId)
-    }
-    if (type === 'user') {
-        model = User
-        attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
-    }
-    if (type === 'space') {
-        model = Space
-        attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
-    }
-    const item = await model.findOne({
-        where: { id, state: { [Op.or]: ['visible', 'active'] } },
-        attributes,
-        include,
-    })
-    if (item) {
+    return new Promise(async (resolve) => {
+        let model
+        let attributes = []
+        let include = null
+        if (['post', 'comment'].includes(type)) {
+            model = Post
+            attributes = [sourcePostId(), ...findFullPostAttributes('Post', accountId)]
+            include = findPostInclude(accountId)
+        }
+        if (type === 'user') {
+            model = User
+            attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
+        }
+        if (type === 'space') {
+            model = Space
+            attributes = ['id', 'handle', 'name', 'flagImagePath', 'createdAt']
+        }
+        const item = await model.findOne({
+            where: { id, state: { [Op.or]: ['visible', 'active'] } },
+            attributes,
+            include,
+        })
         item.setDataValue('modelType', type)
-        return item
-    }
-    return null
+        if (type === 'post' && item.type.includes('block')) {
+            // fetch block media
+            const mediaType = item.type.split('-')[0]
+            let model = Url
+            let attributes = ['url', 'image', 'title', 'description', 'domain']
+            if (['image', 'audio'].includes(mediaType)) attributes = ['url']
+            if (mediaType === 'image') model = Image
+            if (mediaType === 'audio') model = Audio
+            const linkToMedia = await Link.findOne({
+                where: { itemAId: id, itemBType: mediaType, state: 'active' },
+                attributes: [],
+                include: { model, attributes },
+            })
+            if (mediaType === 'url') item.setDataValue('Url', linkToMedia.Url)
+            if (mediaType === 'image') item.setDataValue('Image', linkToMedia.Image)
+            if (mediaType === 'audio') item.setDataValue('Audio', linkToMedia.Audio)
+            resolve(item)
+        } else resolve(item)
+    })
 }
 
 // todo: turn into recursive function to handle privacy... (i.e private space within public child being attached to public parent)
