@@ -1016,7 +1016,33 @@ router.get('/post-data', authenticateToken, async (req, res) => {
     if (!post) res.status(404).json({ message: 'Post not found' })
     else if (!post.dataValues.access) res.status(401).json({ message: 'Access denied' })
     else if (post.state === 'deleted') res.status(401).json({ message: 'Post deleted' })
-    else res.status(200).json(post)
+    else if (post.type.includes('block')) {
+        // fetch block media
+        const mediaType = post.type.split('-')[0]
+        let model = Url
+        let attributes = ['url', 'image', 'title', 'description', 'domain']
+        if (mediaType === 'image') {
+            model = Image
+            attributes = ['url']
+        }
+        if (mediaType === 'audio') {
+            model = Audio
+            attributes = ['url']
+        }
+        const linkToMedia = await Link.findOne({
+            where: {
+                itemAId: postId,
+                itemBType: mediaType,
+                state: 'active',
+            },
+            attributes: [],
+            include: { model, attributes },
+        })
+        if (mediaType === 'url') post.setDataValue('Url', linkToMedia.Url)
+        if (mediaType === 'image') post.setDataValue('Image', linkToMedia.Image)
+        if (mediaType === 'audio') post.setDataValue('Audio', linkToMedia.Audio)
+        res.status(200).json(post)
+    } else res.status(200).json(post)
 })
 
 router.get('/account-reactions', authenticateToken, async (req, res) => {
@@ -1553,11 +1579,11 @@ router.get('/glass-bead-game-comments', async (req, res) => {
     res.status(200).json(comments)
 })
 
-// todo: set up pagination
+// todo: set up pagination? (or restirct to ~5?)
 router.get('/post-urls', async (req, res) => {
     const { postId, offset } = req.query
     const blocks = []
-    const linksToBlocks = await Link.findAndCountAll({
+    const linksToBlocks = await Link.findAll({
         where: {
             itemAId: postId,
             itemBType: 'url-block',
@@ -1570,7 +1596,7 @@ router.get('/post-urls', async (req, res) => {
         include: { model: Post, attributes: ['id'] },
     })
     Promise.all(
-        linksToBlocks.rows.map(
+        linksToBlocks.map(
             (link) =>
                 new Promise(async (resolve) => {
                     const linkToUrl = await Link.findOne({
@@ -1591,7 +1617,7 @@ router.get('/post-urls', async (req, res) => {
                 })
         )
     )
-        .then(() => res.status(200).json({ blocks, total: linksToBlocks.count }))
+        .then(() => res.status(200).json({ blocks })) // total: linksToBlocks.count
         .catch((error) => res.status(500).json({ error }))
 })
 
@@ -1633,11 +1659,11 @@ router.get('/post-images', async (req, res) => {
         .catch((error) => res.status(500).json({ error }))
 })
 
-// todo: update pagination
+// todo: set up pagination? (or restirct to ~5?)
 router.get('/post-audio', async (req, res) => {
     const { postId, offset } = req.query
     const blocks = []
-    const linksToBlocks = await Link.findAndCountAll({
+    const linksToBlocks = await Link.findAll({
         where: {
             itemAId: postId,
             itemBType: 'audio-block',
@@ -1645,12 +1671,12 @@ router.get('/post-audio', async (req, res) => {
         },
         attributes: ['itemBId'],
         order: [['index', 'ASC']],
-        offset: +offset,
-        limit: +offset ? 10 : 4,
+        // offset: +offset,
+        // limit: +offset ? 10 : 4,
         include: { model: Post, attributes: ['id', 'text'] },
     })
     Promise.all(
-        linksToBlocks.rows.map(
+        linksToBlocks.map(
             (link) =>
                 new Promise(async (resolve) => {
                     const linkToAudio = await Link.findOne({
@@ -1668,7 +1694,7 @@ router.get('/post-audio', async (req, res) => {
                 })
         )
     )
-        .then(() => res.status(200).json({ blocks, total: linksToBlocks.count }))
+        .then(() => res.status(200).json({ blocks })) // total: linksToBlocks.count
         .catch((error) => res.status(500).json({ error }))
 })
 
