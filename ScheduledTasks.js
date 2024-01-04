@@ -68,7 +68,7 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
     if (reminderTime > new Date()) {
         schedule.scheduleJob(reminderTime, async () => {
             const post = await Post.findOne({
-                where: { id: postId, state: 'visible' },
+                where: { id: postId, state: 'active' },
                 include: [
                     {
                         model: GlassBeadGame,
@@ -79,7 +79,7 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
                         as: 'Beads',
                         required: false,
                         through: {
-                            where: { state: 'visible' },
+                            where: { state: 'active' },
                             attributes: ['index'],
                         },
                         include: {
@@ -132,7 +132,7 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
     if (deadline > new Date()) {
         schedule.scheduleJob(deadline, async () => {
             const post = await Post.findOne({
-                where: { id: postId, state: 'visible' },
+                where: { id: postId, state: 'active' },
                 include: [
                     {
                         model: GlassBeadGame,
@@ -152,7 +152,7 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
                         as: 'Beads',
                         required: false,
                         through: {
-                            where: { state: 'visible' },
+                            where: { state: 'active' },
                             attributes: ['index'],
                         },
                         include: {
@@ -288,7 +288,7 @@ async function initializeScheduledTasks() {
     // todo: only grab games with nextMoveDeadline
     const gbgPosts = await Post.findAll({
         where: {
-            state: 'visible',
+            state: 'active',
             type: 'glass-bead-game',
             '$GlassBeadGame.nextMoveDeadline$': { [Op.not]: null },
         },
@@ -319,7 +319,7 @@ async function initializeScheduledTasks() {
                 as: 'Beads',
                 required: false,
                 through: {
-                    where: { state: 'visible' },
+                    where: { state: 'active' },
                     attributes: [],
                 },
             },

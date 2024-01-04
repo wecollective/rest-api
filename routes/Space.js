@@ -806,7 +806,7 @@ router.get('/space-events', authenticateToken, (req, res) => {
         where: {
             '$DirectSpaces.handle$': spaceHandle,
             '$Event.startTime$': { [Op.between]: [startTime, endTime] },
-            state: 'visible',
+            state: 'active',
             type: ['event', 'glass-bead-game'],
         },
         attributes: ['id', 'type', 'title', postAccess(accountId)],
@@ -836,7 +836,7 @@ router.get('/space-governance-polls', authenticateToken, async (req, res) => {
     const { spaceId } = req.query
     const polls = await Poll.findAll({ where: { spaceId }, attributes: ['postId'] })
     const posts = await Post.findAll({
-        where: { id: polls.map((poll) => poll.postId), state: 'visible' },
+        where: { id: polls.map((poll) => poll.postId), state: 'active' },
         attributes: findFullPostAttributes('Post', accountId),
         include: findPostInclude(accountId),
     })

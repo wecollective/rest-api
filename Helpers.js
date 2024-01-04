@@ -1026,6 +1026,7 @@ const fullPostAttributes = [
     'state',
     'title',
     'text',
+    // 'color',
     'createdAt',
     'updatedAt',
     'lastActivity',
@@ -1078,7 +1079,6 @@ function findPostWhere(
 ) {
     const query = searchQuery || ''
     const where = {
-        // state: 'visible',
         state: 'active',
         createdAt: { [Op.between]: [startDate, Date.now()] },
         // mediaTypes: { [Op.like]: `%${type}%` },
@@ -1799,8 +1799,8 @@ async function createPost(data, files, accountId) {
 
                   //   const linkSourceBead = sourcePostId
                   //       ? await Link.create({
-                  //             state: 'visible',
-                  //             type: 'gbg-post',
+                  //             state: 'active',
+                  //             // type: 'gbg-post',
                   //             index: 0,
                   //             relationship: 'source',
                   //             creatorId: accountId,
@@ -1933,7 +1933,7 @@ function scheduleNextBeadDeadline(postId, settings, players) {
                       subject: 'New notification',
                       text: `
                             Hi ${nextPlayer.name}, it's your move!
-                            Add a new bead to the glass bead game: https://${config.appURL}/p/${postId}
+                            Add a new bead to the glass bead game: https://${appURL}/p/${postId}
                         `,
                       html: `
                             <p>
@@ -1941,14 +1941,14 @@ function scheduleNextBeadDeadline(postId, settings, players) {
                                 <br/>
                                 It's your move!
                                 <br/>
-                                Add a new bead to the <a href='${config.appURL}/p/${postId}'>glass bead game</a>.
+                                Add a new bead to the <a href='${appURL}/p/${postId}'>glass bead game</a>.
                             </p>
                         `,
                   })
             const scheduleReminders = await scheduleGBGMoveJobs(
                 postId,
                 nextPlayer,
-                totalBeads + 2,
+                totalBeads + 2, // +2 as move number starts at 1 and function run before last increment
                 newDeadline
             )
             Promise.all([updateDeadline, createMoveNotification, sendMoveEmail, scheduleReminders])

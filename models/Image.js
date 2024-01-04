@@ -10,15 +10,13 @@ module.exports = (sequelize, DataTypes) => {
             index: DataTypes.INTEGER,
             url: DataTypes.TEXT,
             caption: DataTypes.TEXT,
+            state: DataTypes.STRING,
         },
         {}
     )
     Image.associate = function (models) {
-        Image.belongsTo(models.Post)
-        // Image.belongsTo(models.User, {
-        //     foreignKey: 'creatorId',
-        //     as: 'Creator',
-        // })
+        // Image.belongsTo(models.Post)
+        // Image.hasMany(models.Link)
     }
     return Image
 }

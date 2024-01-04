@@ -130,19 +130,20 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'itemId',
         })
 
+        // todo: remove and get via link table
         // updated from itemId to postId (20-11-2023)
         // updated from hasMany to hasOne (23-11-2023)
-        Post.hasOne(models.Url, {
-            foreignKey: 'postId',
-        })
+        // Post.hasMany(models.Url, {
+        //     foreignKey: 'itemId',
+        // })
 
-        Post.hasOne(models.Image, {
-            foreignKey: 'postId',
-        })
+        // Post.hasMany(models.Image, {
+        //     foreignKey: 'itemId',
+        // })
 
-        Post.hasOne(models.Audio, {
-            foreignKey: 'postId',
-        })
+        // Post.hasMany(models.Audio, {
+        //     foreignKey: 'itemId',
+        // })
         //
 
         Post.hasOne(models.Event, {

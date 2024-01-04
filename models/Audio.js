@@ -8,6 +8,7 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.INTEGER,
                 autoIncrement: true,
             },
+            creatorId: DataTypes.INTEGER,
             // type: DataTypes.STRING,
             // itemId: DataTypes.INTEGER,
             postId: DataTypes.INTEGER,
@@ -17,8 +18,8 @@ module.exports = (sequelize, DataTypes) => {
         {}
     )
     Audio.associate = function (models) {
-        // associations can be defined here
-        Audio.belongsTo(models.Post)
+        // Audio.belongsTo(models.Post)
+        // Audio.hasMany(models.Link)
     }
     return Audio
 }

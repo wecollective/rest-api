@@ -75,13 +75,7 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
-        // new updates:
-        // gbg-updates migration
-        // skip: media-table-updates
-
-        // todo: connect gbg comments to post? yes...
-        // todo: add root links to parent comments
-        // todo: always add relationship: 'parent' on links between beads, poll answers, card-faces
+        // todo: skip deleted comments when tallying post & comment totalComments
 
         // before updates:
         // + log out & remove getHomepageHighlights
@@ -90,8 +84,13 @@ router.get('/test', async (req, res) => {
         // + add back in post assosiastions on Url, Audio, Image models
         // + ensure defaultPostValues is present in Helpers import list
 
-        // run link-table-additions, gbg-updates, & post-table-updates migrations
+        // run link-table-additions, gbg-updates, new-media-table-additions & post-table-updates migrations
         // add new values to models
+
+        // // add state to all images
+        // Image.update({ state: 'active' }, { where: { state: null }, silent: true })
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
 
         // // link table updates
         // const links = await Link.findAll({ attributes: ['id', 'type', 'relationship', 'state'] })
@@ -375,6 +374,8 @@ router.get('/test', async (req, res) => {
         //                     post.Urls.map(
         //                         (url, index) =>
         //                             new Promise(async (resolve2) => {
+        //                                  // add creatorId to Url
+        //                                  Url.update({ creatorId: post.creatorId }, { where: { id: url.id }, silent: true  })
         //                                 // create new url block
         //                                 const newUrlBlock = await Post.create(
         //                                     {
@@ -497,6 +498,8 @@ router.get('/test', async (req, res) => {
         //                         (audio) =>
         //                             new Promise(async (resolve2) => {
         //                                 // create new audio block
+        //                                  // add creatorId to Audio
+        //                                  Audio.update({ creatorId: post.creatorId }, { where: { id: audio.id }, silent: true  })
         //                                 const newAudioBlock = await Post.create(
         //                                     {
         //                                         ...defaultPostValues,
@@ -1000,6 +1003,11 @@ router.get('/test', async (req, res) => {
         //     .catch((error) => res.status(500).json(error))
 
         // update Post model hasMany --> hasOne ? (or just remove and get via links)
+
+        //convert all  comment reactions to post reaction
+        Reaction.update({ itemType: 'post' }, { where: { itemType: 'comment' }, silent: true })
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json(error))
     }
 })
 
@@ -1012,7 +1020,7 @@ router.get('/post-data', authenticateToken, async (req, res) => {
     const post = await Post.findOne({
         where: { id: postId, state: 'active' },
         include: findPostInclude(accountId),
-        attributes: [postAccess(accountId), ...findFullPostAttributes('Post', accountId)],
+        attributes: [postAccess(accountId), ...fullPostAttributes],
     })
     if (!post) res.status(404).json({ message: 'Post not found' })
     else if (!post.dataValues.access) res.status(401).json({ message: 'Access denied' })
@@ -1059,15 +1067,13 @@ router.get('/parent-links', async (req, res) => {
     const [{ parentId }] = await db.sequelize.query(
         `SELECT itemAId AS parentId FROM Links
         WHERE itemBId = :postId
-        AND relationship = 'parent'
-        AND state = 'active'`,
+        AND relationship = 'parent'`, // AND state = 'active'
         { replacements: { postId }, type: QueryTypes.SELECT }
     )
     const root = await db.sequelize.query(
         `SELECT itemAId AS rootId FROM Links
         WHERE itemBId = :postId
-        AND relationship = 'root'
-        AND state = 'active'`,
+        AND relationship = 'root'`, // AND state = 'active'
         { replacements: { postId }, type: QueryTypes.SELECT }
     )
     // only pass back rootId if present and different from parentId
@@ -1267,7 +1273,7 @@ router.get('/link-data', authenticateToken, async (req, res) => {
         },
     })
     const liked = await accountReaction('like', 'link', linkId, accountId)
-    if (liked) link.setDataValue('accountLike', liked)
+    if (liked) link.setDataValue('liked', liked)
     const source = await getFullLinkedItem(link.itemAType, link.itemAId, accountId)
     const target = await getFullLinkedItem(link.itemBType, link.itemBId, accountId)
     res.status(200).json({ source, link, target })
@@ -1316,9 +1322,9 @@ router.get('/post-comments', async (req, res) => {
             ['id', 'ASC'],
         ]
 
-    async function getChildComments(root, depth) {
+    async function getChildComments(parent, depth) {
         return new Promise(async (resolve) => {
-            const comments = await root.getBlocks({
+            const comments = await parent.getBlocks({
                 attributes: [...fullPostAttributes, 'totalChildComments'],
                 through: {
                     where: {
@@ -1339,12 +1345,16 @@ router.get('/post-comments', async (req, res) => {
                 offset: depth ? 0 : +offset,
                 order,
             })
-            comments.forEach((c) => c.setDataValue('Comments', []))
-            root.setDataValue('Comments', comments)
+            // remove deleted comments with no replies
+            const filteredComments = comments.filter((c) => c.state === 'active' || c.totalComments)
+            filteredComments.forEach((c) => c.setDataValue('Comments', []))
+            parent.setDataValue('Comments', filteredComments)
             if (!limits[depth + 1]) resolve()
             else {
                 Promise.all(
-                    root.dataValues.Comments.map((comment) => getChildComments(comment, depth + 1))
+                    parent.dataValues.Comments.map((comment) =>
+                        getChildComments(comment, depth + 1)
+                    )
                 )
                     .then(() => resolve())
                     .catch((error) => resolve(error))
@@ -1550,7 +1560,6 @@ router.get('/scrape-url', authenticateToken, async (req, res) => {
     }
 })
 
-// test
 router.get('/glass-bead-game-comments', async (req, res) => {
     const { postId } = req.query
     const commentLinks = await Link.findAll({
@@ -1568,7 +1577,6 @@ router.get('/glass-bead-game-comments', async (req, res) => {
                 model: User,
                 as: 'Creator',
                 attributes: ['id', 'handle', 'name', 'flagImagePath'],
-                // required: false,
             },
         },
     })
@@ -2012,7 +2020,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
         ]
         // create new ancestor links
         const createAncestorLinks = await Promise.all(
-            ancestorIds.map((a) =>
+            ancestors.map((a) =>
                 Link.create({
                     creatorId: accountId,
                     itemAId: a.id,
@@ -2988,7 +2996,6 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
     }
 })
 
-// todo: set up option on front end to remove ratings
 router.post('/remove-rating', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { itemType, itemId } = req.body

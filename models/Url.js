@@ -8,6 +8,7 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.INTEGER,
                 autoIncrement: true,
             },
+            creatorId: DataTypes.INTEGER,
             // type: DataTypes.STRING,
             // itemId: DataTypes.INTEGER,
             postId: DataTypes.INTEGER,
@@ -21,7 +22,8 @@ module.exports = (sequelize, DataTypes) => {
         {}
     )
     Url.associate = function (models) {
-        Url.belongsTo(models.Post)
+        // Url.belongsTo(models.Post)
+        // Url.hasMany(models.Link)
     }
     return Url
 }

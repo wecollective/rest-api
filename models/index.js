@@ -12,8 +12,8 @@ const sequelize = new Sequelize(config.database, config.username, config.passwor
     dialect: config.dialect,
     // pool setting may need increasing for long database operations
     pool: {
-        acquire: 720000, // (12 mins) default: 60000 (1 min)
-        idle: 720000, // (12 mins) default: 10000 (10 secs)
+        acquire: 1440000, // (24 mins) default: 60000 (1 min)
+        idle: 1440000, // (24 mins) default: 10000 (10 secs)
     },
 })
 

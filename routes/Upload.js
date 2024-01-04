@@ -147,7 +147,7 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
     }
 })
 
-// todo: use new createPost function
+// todo: use create-bead route in Post routes
 router.post('/gbg-audio-upload', authenticateToken, (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { postId, moveNumber } = req.query
@@ -197,70 +197,71 @@ router.post('/gbg-audio-upload', authenticateToken, (req, res) => {
                                                 if (err) console.log(err)
                                             }
                                         )
-                                        // // send back the mp3's url
-                                        // res.send(
-                                        //     `https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`
-                                        // )
                                         const url = `https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`
-                                        const bead = await Post.create({
+                                        const newBead = await Post.create({
                                             ...defaultPostValues,
+                                            creatorId: accountId,
                                             type: 'bead',
                                             mediaTypes: 'audio',
-                                            state: 'active',
-                                            creatorId: accountId,
                                             lastActivity: new Date(),
                                         })
-
-                                        const linkBeadToGame = await Link.create({
-                                            state: 'draft',
-                                            itemAId: postId,
-                                            itemBId: bead.id,
-                                            itemAType: 'post',
-                                            itemBType: 'bead',
-                                            index: moveNumber,
-                                            relationship: 'parent',
-                                            creatorId: accountId,
-                                            totalLikes: 0,
-                                            totalComments: 0,
-                                            totalRatings: 0,
-                                        })
-
-                                        const audioBlock = await Post.create({
+                                        const newAudioBlock = await Post.create({
                                             ...defaultPostValues,
-                                            type: 'audio',
-                                            mediaTypes: 'audio',
-                                            state: 'active',
                                             creatorId: accountId,
+                                            type: 'audio-block',
+                                            mediaTypes: 'audio',
                                             lastActivity: new Date(),
                                         })
-
-                                        const createAudio = await Audio.create({
-                                            postId: audioBlock.id,
+                                        const newAudio = await Audio.create({
                                             creatorId: accountId,
                                             url,
                                             state: 'active',
                                         })
-
-                                        const linkAudioBlockToBead = await Link.create({
-                                            state: 'active',
-                                            itemAId: bead.id,
-                                            itemBId: audioBlock.id,
-                                            itemAType: 'bead',
+                                        const linkAudioToBlock = await Link.create({
+                                            creatorId: accountId,
+                                            itemAId: newAudioBlock.id,
+                                            itemAType: 'audio-block',
+                                            itemBId: newAudio.id,
                                             itemBType: 'audio',
+                                            relationship: 'parent',
+                                            state: 'active',
+                                            totalLikes: 0,
+                                            totalComments: 0,
+                                            totalRatings: 0,
+                                        })
+                                        const linkBlockToBead = await Link.create({
+                                            creatorId: accountId,
+                                            itemAId: newBead.id,
+                                            itemAType: 'bead',
+                                            itemBId: newAudioBlock.id,
+                                            itemBType: 'audio-block',
                                             index: 0,
                                             relationship: 'parent',
+                                            state: 'active',
+                                            totalLikes: 0,
+                                            totalComments: 0,
+                                            totalRatings: 0,
+                                        })
+                                        const linkBeadToGame = await Link.create({
                                             creatorId: accountId,
+                                            itemAId: postId,
+                                            itemAType: 'post',
+                                            itemBId: newBead.id,
+                                            itemBType: 'bead',
+                                            index: moveNumber - 1,
+                                            relationship: 'parent',
+                                            state: 'draft',
                                             totalLikes: 0,
                                             totalComments: 0,
                                             totalRatings: 0,
                                         })
 
                                         Promise.all([
+                                            linkAudioToBlock,
+                                            linkBlockToBead,
                                             linkBeadToGame,
-                                            createAudio,
-                                            linkAudioBlockToBead,
                                         ])
-                                            .then(() => res.status(200).json({ id: bead.id, url }))
+                                            .then(() => res.status(200).json({ id: newBead.id }))
                                             .catch((error) => res.status(500).json({ error }))
                                     }
                                 }

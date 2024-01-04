@@ -853,7 +853,7 @@ router.post('/respond-to-gbg-invite', authenticateToken, async (req, res) => {
 
         Promise.all([updateUserPostState, updateNotification]).then(async () => {
             const post = await Post.findOne({
-                where: { id: postId, state: 'visible' },
+                where: { id: postId, state: 'active' },
                 include: [
                     {
                         model: User,

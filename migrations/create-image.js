@@ -29,6 +29,9 @@ module.exports = {
             caption: {
                 type: Sequelize.TEXT,
             },
+            state: {
+                type: Sequelize.STRING,
+            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE,
