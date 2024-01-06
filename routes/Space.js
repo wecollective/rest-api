@@ -213,9 +213,7 @@ async function isAuthorizedModerator(accountId, spaceId) {
 }
 
 // GET
-router.get('/homepage-highlights', authenticateToken, async (req, res) => {
-    const accountId = req.user ? req.user.id : null
-
+router.get('/homepage-highlights', async (req, res) => {
     const totals = await Space.findOne({
         where: { id: 1 },
         attributes: [
@@ -236,22 +234,72 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
     const posts = await Post.findAll({
         where: {
             state: 'active',
-            type: ['image', 'url'],
+            type: 'post',
+            [Op.or]: [
+                { mediaTypes: { [Op.like]: '%image%' } },
+                { mediaTypes: { [Op.like]: '%url%' } },
+            ],
         },
         order: [['createdAt', 'DESC']],
         limit: 3,
-        attributes: ['type'],
+        attributes: ['mediaTypes'],
         include: [
             {
-                model: Url,
-                attributes: ['image'],
+                model: Link,
+                as: 'ImageBlockLinks',
+                separate: true,
+                where: { itemBType: 'image-block', index: 0 },
+                attributes: ['id'],
+                include: {
+                    model: Post,
+                    attributes: ['id'],
+                    include: {
+                        model: Link,
+                        as: 'MediaLink',
+                        attributes: ['id'],
+                        include: {
+                            model: Image,
+                            attributes: ['url'],
+                        },
+                    },
+                },
             },
             {
-                model: Image,
-                attributes: ['url'],
+                model: Link,
+                as: 'UrlBlockLinks',
+                separate: true,
+                where: {
+                    '$Post.mediaTypes$': 'url',
+                    itemBType: 'url-block',
+                    index: 0,
+                },
+                attributes: ['id'],
+                include: {
+                    model: Post,
+                    attributes: ['id'],
+                    include: {
+                        model: Link,
+                        as: 'MediaLink',
+                        attributes: ['id'],
+                        include: {
+                            model: Url,
+                            attributes: ['image'],
+                        },
+                    },
+                },
             },
         ],
     })
+
+    // just getting blocks takes more than twice as long and prevent top level ordering
+    // include: [
+    //     {
+    //         model: Post,
+    //         as: 'Blocks',
+    //         attributes: ['id'],
+    //         through: { where: { itemBType: 'image-block' } },
+    //     },
+    // ],
 
     const spaces = await Space.findAll({
         where: {
@@ -279,8 +327,8 @@ router.get('/homepage-highlights', authenticateToken, async (req, res) => {
     res.status(200).json({
         totals,
         posts: posts.map((p) => {
-            if (p.type === 'image') return p.Image.url
-            return p.Url.image
+            if (p.mediaTypes.includes('image')) return p.ImageBlockLinks[0].Post.MediaLink.Image.url
+            return p.UrlBlockLinks[0].Post.MediaLink.Url.image
         }),
         spaces: spaces.map((s) => s.flagImagePath),
         users: users.map((u) => u.flagImagePath),
