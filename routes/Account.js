@@ -44,9 +44,9 @@ const {
     findFullPostAttributes,
     findPostThrough,
     findPostInclude,
-    multerParams,
     noMulterErrors,
     getToyboxItem,
+    uploadFiles,
 } = require('../Helpers')
 
 // GET
@@ -445,42 +445,38 @@ router.post('/create-stream', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        multer(multerParams('stream-image', accountId)).single('file')(req, res, async (error) => {
-            const { file, body } = req
-            if (noMulterErrors(error, res)) {
-                const { name, spaceIds, userIds } = JSON.parse(body.data)
-                // todo: if not already following, follow users and spaces
-                const newStream = await Stream.create({
-                    ownerId: accountId,
-                    name,
-                    image: file ? file.location : null,
+        const { postData, files } = await uploadFiles(req, res, accountId)
+        const { name, spaceIds, userIds } = postData
+        // todo: if not already following, follow users and spaces
+        const newStream = await Stream.create({
+            ownerId: accountId,
+            name,
+            image: files[0] ? files[0].url : null,
+            state: 'active',
+        })
+        const createSpaceSources = await Promise.all(
+            spaceIds.map((id) =>
+                StreamSource.create({
+                    streamId: newStream.id,
+                    sourceType: 'space',
+                    sourceId: id,
                     state: 'active',
                 })
-                const createSpaceSources = await Promise.all(
-                    spaceIds.map((id) =>
-                        StreamSource.create({
-                            streamId: newStream.id,
-                            sourceType: 'space',
-                            sourceId: id,
-                            state: 'active',
-                        })
-                    )
-                )
-                const createUserSources = await Promise.all(
-                    userIds.map((id) =>
-                        StreamSource.create({
-                            streamId: newStream.id,
-                            sourceType: 'user',
-                            sourceId: id,
-                            state: 'active',
-                        })
-                    )
-                )
-                Promise.all([createSpaceSources, createUserSources])
-                    .then(() => res.status(200).json(newStream))
-                    .catch((error) => res.status(500).json({ message: 'Error', error }))
-            }
-        })
+            )
+        )
+        const createUserSources = await Promise.all(
+            userIds.map((id) =>
+                StreamSource.create({
+                    streamId: newStream.id,
+                    sourceType: 'user',
+                    sourceId: id,
+                    state: 'active',
+                })
+            )
+        )
+        Promise.all([createSpaceSources, createUserSources])
+            .then(() => res.status(200).json(newStream))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
@@ -488,48 +484,44 @@ router.post('/edit-stream', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        multer(multerParams('stream-image', accountId)).single('file')(req, res, async (error) => {
-            const { file, body } = req
-            if (noMulterErrors(error, res)) {
-                const { streamId, name, spaceIds, userIds } = JSON.parse(body.data)
-                const update = { name }
-                if (file) update.image = file.location
-                const updatedStream = await Stream.update(update, {
-                    where: { id: streamId, ownerId: accountId },
-                })
-                if (!updatedStream) res.status(401).json({ message: 'Unauthorized' })
-                else {
-                    const removeOldSources = await StreamSource.update(
-                        { state: 'deleted' },
-                        { where: { streamId } }
-                    )
-                    // todo: if not already following, follow users and spaces
-                    const createSpaceSources = await Promise.all(
-                        spaceIds.map((id) =>
-                            StreamSource.create({
-                                streamId: streamId,
-                                sourceType: 'space',
-                                sourceId: id,
-                                state: 'active',
-                            })
-                        )
-                    )
-                    const createUserSources = await Promise.all(
-                        userIds.map((id) =>
-                            StreamSource.create({
-                                streamId: streamId,
-                                sourceType: 'user',
-                                sourceId: id,
-                                state: 'active',
-                            })
-                        )
-                    )
-                    Promise.all([removeOldSources, createSpaceSources, createUserSources])
-                        .then(() => res.status(200).json({ message: 'Success' }))
-                        .catch((error) => res.status(500).json({ message: 'Error', error }))
-                }
-            }
+        const { postData, files } = await uploadFiles(req, res, accountId)
+        const { streamId, name, spaceIds, userIds } = postData
+        const update = { name }
+        if (files[0]) update.image = files[0].url
+        const updatedStream = await Stream.update(update, {
+            where: { id: streamId, ownerId: accountId },
         })
+        if (!updatedStream) res.status(401).json({ message: 'Unauthorized' })
+        else {
+            const removeOldSources = await StreamSource.update(
+                { state: 'deleted' },
+                { where: { streamId } }
+            )
+            // todo: if not already following, follow users and spaces
+            const createSpaceSources = await Promise.all(
+                spaceIds.map((id) =>
+                    StreamSource.create({
+                        streamId: streamId,
+                        sourceType: 'space',
+                        sourceId: id,
+                        state: 'active',
+                    })
+                )
+            )
+            const createUserSources = await Promise.all(
+                userIds.map((id) =>
+                    StreamSource.create({
+                        streamId: streamId,
+                        sourceType: 'user',
+                        sourceId: id,
+                        state: 'active',
+                    })
+                )
+            )
+            Promise.all([removeOldSources, createSpaceSources, createUserSources])
+                .then(() => res.status(200).json({ message: 'Success' }))
+                .catch((error) => res.status(500).json({ message: 'Error', error }))
+        }
     }
 })
 
@@ -1162,34 +1154,26 @@ router.post('/edit-toybox-row', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        multer(multerParams('toybox-row-image', accountId)).single('file')(
-            req,
-            res,
-            async (error) => {
-                const { file, body } = req
-                if (noMulterErrors(error, res)) {
-                    const { rowId, rowIndex, name } = JSON.parse(body.data)
-                    const data = { name }
-                    if (file) data.image = file.location
-                    if (rowId) {
-                        // update row
-                        ToyBoxRow.update(data, { where: { id: rowId } })
-                            .then(() => res.status(200).json({ message: 'Success' }))
-                            .catch((error) => res.status(500).json({ message: 'Error', error }))
-                    } else {
-                        // create new row
-                        ToyBoxRow.create({
-                            ...data,
-                            userId: accountId,
-                            index: rowIndex,
-                            state: 'active',
-                        })
-                            .then((newRow) => res.status(200).json({ newRow }))
-                            .catch((error) => res.status(500).json({ message: 'Error', error }))
-                    }
-                }
-            }
-        )
+        const { postData, files } = await uploadFiles(req, res, accountId)
+        const { rowId, rowIndex, name } = postData
+        const data = { name }
+        if (files[0]) data.image = files[0].url
+        if (rowId) {
+            // update row
+            ToyBoxRow.update(data, { where: { id: rowId } })
+                .then(() => res.status(200).json({ message: 'Success' }))
+                .catch((error) => res.status(500).json({ message: 'Error', error }))
+        } else {
+            // create new row
+            ToyBoxRow.create({
+                ...data,
+                userId: accountId,
+                index: rowIndex,
+                state: 'active',
+            })
+                .then((newRow) => res.status(200).json({ newRow }))
+                .catch((error) => res.status(500).json({ message: 'Error', error }))
+        }
     }
 })
 

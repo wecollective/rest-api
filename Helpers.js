@@ -70,68 +70,10 @@ function noMulterErrors(error, res) {
     return true
 }
 
-// no longer used in create-post route
-function multerParams(type, accountId) {
-    // types: 'image-file', 'audio-file', 'audio-blob', 'glass-bead-game' (also: 'stream-image', 'toybox-row-image')
-    // todo: set up new account bucket for stream and toybox images
-    const isAudio = type.includes('audio')
-    const limit = isAudio ? audioMBLimit : imageMBLimit
-    const params = { limits: { fileSize: limit * 1024 * 1024 } }
-    if (type === 'audio-blob') params.dest = './temp/audio/raw'
-    else if (type === 'glass-bead-game') params.dest = './temp/beads'
-    else {
-        const bucketType = isAudio ? 'post-audio' : 'post-images'
-        params.storage = multerS3({
-            s3: s3,
-            bucket: `weco-${process.env.NODE_ENV}-${bucketType}`,
-            acl: 'public-read',
-            metadata: (req, file, cb) => cb(null, { mimetype: file.mimetype }),
-            key: (req, file, cb) => cb(null, findFileName(file, accountId)),
-        })
-    }
-    return params
-}
-
-// function convertAndUploadAudio(file, accountId, type) {
-//     return new Promise((resolve) => {
-//         // convert raw audio to mp3
-//         const outputPath = `temp/audio/mp3/${file.filename}.mp3`
-//         ffmpeg(file.path)
-//             .output(outputPath)
-//             .on('end', () => {
-//                 // upload new mp3 file to s3 bucket
-//                 fs.readFile(outputPath, (error, data) => {
-//                     if (!error) {
-//                         const fileName = findFileName(file, accountId, true)
-//                         const bucket = `weco-${process.env.NODE_ENV}-post-audio`
-//                         const s3Object = {
-//                             Bucket: bucket,
-//                             ACL: 'public-read',
-//                             Key: fileName,
-//                             Body: data,
-//                             Metadata: { mimetype: 'audio/mp3' },
-//                             ContentType: 'audio/mpeg',
-//                         }
-//                         s3.putObject(s3Object, (err) => {
-//                             // delete old files
-//                             if (type === 'post')
-//                                 fs.unlink(`temp/audio/raw/${file.filename}`, (e) => console.log(e))
-//                             else fs.unlink(`temp/beads/${file.filename}`, (e) => console.log(e))
-//                             fs.unlink(`temp/audio/mp3/${file.filename}.mp3`, (e) => console.log(e))
-//                             // return audio url
-//                             resolve(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
-//                         })
-//                     }
-//                 })
-//             })
-//             .run()
-//     })
-// }
-
+// todo: configure ffmpeg options
 function convertAndUploadAudio(file, accountId) {
     return new Promise((resolve) => {
         // convert raw audio to mp3
-        // todo: configure ffmpeg options
         const outputPath = `temp/mp3s/${file.filename}.mp3`
         ffmpeg(file.path)
             .output(outputPath)
@@ -179,31 +121,6 @@ function uploadPostFile(file, accountId) {
             s3.putObject(s3Object, (err) => {
                 // delete old file
                 fs.unlink(`temp/post-files/${file.filename}`, (e) => console.log(e))
-                // return upload url
-                resolve(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
-            })
-        })
-    })
-}
-
-function uploadBeadFile(file, accountId) {
-    return new Promise((resolve) => {
-        // fieldnames include: 'topicImage', 'imageFile', 'audioFile',
-        const isAudio = file.fieldname.includes('audio')
-        const bucketType = isAudio ? 'post-audio' : 'post-images'
-        const fileName = findFileName(file, accountId)
-        const bucket = `weco-${process.env.NODE_ENV}-${bucketType}`
-        fs.readFile(`temp/beads/${file.filename}`, (err, data) => {
-            const s3Object = {
-                Bucket: bucket,
-                ACL: 'public-read',
-                Key: fileName,
-                Body: data,
-                Metadata: { mimetype: file.mimetype },
-            }
-            s3.putObject(s3Object, (err) => {
-                // delete old file
-                fs.unlink(`temp/beads/${file.filename}`, (e) => console.log(e))
                 // return upload url
                 resolve(`https://${bucket}.s3.eu-west-1.amazonaws.com/${fileName}`)
             })
@@ -1106,6 +1023,7 @@ function findPostWhere(
     return where
 }
 
+// todo: try including blocks
 function findPostInclude(accountId) {
     return [
         {
@@ -1146,6 +1064,73 @@ function findPostInclude(accountId) {
                 },
             ],
         },
+        // todo: add sorting of blocks at top level so not needed on front end
+        {
+            model: Link,
+            as: 'UrlBlockLinks',
+            separate: true,
+            where: { itemBType: 'url-block' },
+            attributes: ['id'],
+            include: {
+                model: Post,
+                attributes: ['id'],
+                include: {
+                    model: Link,
+                    as: 'MediaLink',
+                    attributes: ['id'],
+                    include: {
+                        model: Url,
+                        attributes: ['url', 'image', 'title', 'description', 'domain'],
+                    },
+                },
+            },
+        },
+        {
+            model: Link,
+            as: 'ImageBlockLinks',
+            separate: true,
+            where: { itemBType: 'image-block', index: [0, 1, 2, 3] },
+            attributes: ['index'],
+            include: {
+                model: Post,
+                attributes: ['id', 'text'],
+                include: {
+                    model: Link,
+                    as: 'MediaLink',
+                    attributes: ['id'],
+                    include: {
+                        model: Image,
+                        attributes: ['url'],
+                    },
+                },
+            },
+        },
+        {
+            model: Link,
+            as: 'AudioBlockLinks',
+            separate: true,
+            where: { itemBType: 'audio-block' },
+            attributes: ['id'],
+            include: {
+                model: Post,
+                attributes: ['id', 'text'],
+                include: {
+                    model: Link,
+                    as: 'MediaLink',
+                    attributes: ['id'],
+                    include: {
+                        model: Audio,
+                        attributes: ['url'],
+                    },
+                },
+            },
+        },
+        // // todo: try including blocks
+        // {
+        //     model: Post,
+        //     as: 'ImageBlocks',
+        //     through: { where: { relationship: 'parent', itemBType: 'image-block' }, attributes: [] },
+        // }
         // { model: GlassBeadGame },
         // for block posts
         // {
@@ -2036,6 +2021,7 @@ module.exports = {
     totalSpaceChildren,
     totalUserPosts,
     totalUserComments,
+    restrictedAncestors,
     findStartDate,
     findPostOrder,
     findSpaceOrder,
@@ -2057,12 +2043,9 @@ module.exports = {
     isFollowingUser,
     totalLikesReceivedInSpace,
     noMulterErrors,
-    multerParams,
     convertAndUploadAudio,
     uploadPostFile,
-    uploadBeadFile,
     sourcePostId,
-    restrictedAncestors,
     getLinkedItem,
     getFullLinkedItem,
     getToyboxItem,
