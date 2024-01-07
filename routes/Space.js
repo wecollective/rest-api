@@ -413,7 +413,7 @@ router.get('/space-data', authenticateToken, async (req, res) => {
 router.get('/space-access', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { spaceId } = req.query
-    const [{ state }] = await db.sequelize.query(
+    const access = await db.sequelize.query(
         `
             SELECT state FROM SpaceUsers
             WHERE userId = :accountId
@@ -423,7 +423,8 @@ router.get('/space-access', authenticateToken, async (req, res) => {
         `,
         { replacements: { spaceId, accountId }, type: QueryTypes.SELECT }
     )
-    res.status(200).json(state)
+    // return access boolean
+    res.status(200).json(!!access[0])
 })
 
 router.get('/space-modal-data', async (req, res) => {
