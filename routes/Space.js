@@ -627,8 +627,6 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
     res.status(200).json(postsWithData)
 })
 
-// todo: potentially load images after posts retrieved to speed up initial load time
-// instead include posts via new link approach
 router.post('/post-map-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const {
@@ -645,7 +643,6 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
     } = req.body
 
     const startDate = findStartDate(timeRange)
-    // const postType = findPostType(type)
     const order = findPostOrder(filter, sortBy)
     const through = findPostThrough(depth)
     const where = findPostWhere('space', spaceId, startDate, type, 'post', searchQuery, mutedUsers)
@@ -708,7 +705,7 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
                         attributes: ['id'],
                         include: {
                             model: Url,
-                            attributes: ['url', 'image', 'title', 'description', 'domain'],
+                            attributes: ['image'],
                         },
                     },
                 },
@@ -737,54 +734,18 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
         ],
         required: false,
     })
+    // add images to posts
+    postsWithData.forEach((post) => {
+        if (post.mediaTypes.includes('image')) {
+            post.setDataValue('image', post.ImageBlocks[0].Post.MediaLink.Image.url)
+        } else if (post.mediaTypes.includes('url')) {
+            post.setDataValue('image', post.UrlBlocks[0].Post.MediaLink.Url.image)
+        }
+        delete post.dataValues.UrlBlocks
+        delete post.dataValues.ImageBlocks
+    })
 
-    // add images
-    Promise.all(
-        postsWithData.map(
-            (post) =>
-                new Promise(async (resolve) => {
-                    if (post.mediaTypes.includes('image')) {
-                        const [linkToImageBlock] = await Link.findAll({
-                            where: { itemAId: post.id, itemBType: 'image-block', state: 'active' },
-                            attributes: ['itemBId'],
-                            order: [['index', 'ASC']],
-                            limit: 1,
-                        })
-                        const linkToImage = await Link.findOne({
-                            where: {
-                                itemAId: linkToImageBlock.itemBId,
-                                itemBType: 'image',
-                                state: 'active',
-                            },
-                            attributes: [],
-                            include: { model: Image, attributes: ['url'] },
-                        })
-                        post.setDataValue('imageUrl', linkToImage.Image.url)
-                        resolve()
-                    } else if (post.mediaTypes.includes('url')) {
-                        const [linkToUrlBlock] = await Link.findAll({
-                            where: { itemAId: post.id, itemBType: 'url-block', state: 'active' },
-                            attributes: ['itemBId'],
-                            order: [['index', 'ASC']],
-                            limit: 1,
-                        })
-                        const linkToUrl = await Link.findOne({
-                            where: {
-                                itemAId: linkToUrlBlock.itemBId,
-                                itemBType: 'url',
-                                state: 'active',
-                            },
-                            attributes: [],
-                            include: { model: Url, attributes: ['image'] },
-                        })
-                        post.setDataValue('imageUrl', linkToUrl.Url.image)
-                        resolve()
-                    } else resolve()
-                })
-        )
-    )
-        .then(() => res.status(200).json({ totalPosts: emptyPosts.count, posts: postsWithData }))
-        .catch((error) => res.status(500).json({ message: 'Error', error }))
+    res.status(200).json({ totalPosts: emptyPosts.count, posts: postsWithData })
 })
 
 router.post('/space-spaces', authenticateToken, (req, res) => {
