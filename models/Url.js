@@ -9,9 +9,8 @@ module.exports = (sequelize, DataTypes) => {
                 autoIncrement: true,
             },
             creatorId: DataTypes.INTEGER,
-            // type: DataTypes.STRING,
-            // itemId: DataTypes.INTEGER,
-            postId: DataTypes.INTEGER,
+            type: DataTypes.STRING,
+            itemId: DataTypes.INTEGER,
             state: DataTypes.STRING,
             url: DataTypes.TEXT,
             image: DataTypes.TEXT,
@@ -21,9 +20,6 @@ module.exports = (sequelize, DataTypes) => {
         },
         {}
     )
-    Url.associate = function (models) {
-        // Url.belongsTo(models.Post)
-        // Url.hasMany(models.Link)
-    }
+    Url.associate = function (models) {}
     return Url
 }

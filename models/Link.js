@@ -27,10 +27,12 @@ module.exports = (sequelize, DataTypes) => {
         {}
     )
     Link.associate = function (models) {
-        Link.belongsTo(models.User, {
-            foreignKey: 'creatorId',
-            as: 'Creator',
-        })
+        Link.belongsTo(models.User, { foreignKey: 'creatorId', as: 'Creator' })
+        Link.belongsTo(models.Post, { foreignKey: 'itemBId' })
+        Link.belongsTo(models.Url, { foreignKey: 'itemBId' })
+        Link.belongsTo(models.Image, { foreignKey: 'itemBId' })
+        Link.belongsTo(models.Audio, { foreignKey: 'itemBId' })
+        // used for post map (todo: rethink...)
         Link.belongsTo(models.Post, {
             foreignKey: 'itemAId',
             as: 'IncomingPost',
@@ -47,11 +49,6 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'itemBId',
             as: 'OutgoingComment',
         })
-        //
-        Link.belongsTo(models.Post, { foreignKey: 'itemBId' })
-        Link.belongsTo(models.Url, { foreignKey: 'itemBId' })
-        Link.belongsTo(models.Image, { foreignKey: 'itemBId' })
-        Link.belongsTo(models.Audio, { foreignKey: 'itemBId' })
     }
     return Link
 }

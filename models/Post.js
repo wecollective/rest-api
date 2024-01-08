@@ -31,131 +31,78 @@ module.exports = (sequelize, DataTypes) => {
     )
 
     Post.associate = function (models) {
-        Post.belongsTo(models.User, {
-            foreignKey: 'creatorId',
-            as: 'Creator',
-        })
-
+        // direct links
+        Post.belongsTo(models.User, { foreignKey: 'creatorId', as: 'Creator' })
+        Post.hasOne(models.Event, { foreignKey: 'postId' })
+        Post.hasOne(models.Poll, { foreignKey: 'postId' })
+        Post.hasOne(models.GlassBeadGame, { foreignKey: 'postId' })
+        Post.hasMany(models.Reaction, { foreignKey: 'itemId' })
+        Post.hasMany(models.Comment, { foreignKey: 'itemId' })
+        // blocks
+        Post.hasMany(models.Link, { as: 'UrlBlocks', foreignKey: 'itemAId' })
+        Post.hasMany(models.Link, { as: 'ImageBlocks', foreignKey: 'itemAId' })
+        Post.hasMany(models.Link, { as: 'AudioBlocks', foreignKey: 'itemAId' })
+        Post.hasOne(models.Link, { as: 'MediaLink', foreignKey: 'itemAId' })
+        // used for post map (todo: rethink...)
+        Post.hasMany(models.Link, { as: 'OutgoingPostLinks', foreignKey: 'itemAId' })
+        Post.hasMany(models.Link, { as: 'OutgoingCommentLinks', foreignKey: 'itemAId' })
+        Post.hasMany(models.Link, { as: 'IncomingPostLinks', foreignKey: 'itemBId' })
+        Post.hasMany(models.Link, { as: 'IncomingCommentLinks', foreignKey: 'itemBId' })
+        // spaces
         Post.belongsToMany(models.Space, {
             through: models.SpacePost,
             as: 'AllPostSpaces',
             foreignKey: 'postId',
         })
-
         Post.belongsToMany(models.Space, {
             through: models.SpacePost,
             as: 'DirectSpaces',
             foreignKey: 'postId',
         })
-
         Post.belongsToMany(models.Space, {
             through: models.SpacePost,
             as: 'IndirectSpaces',
             foreignKey: 'postId',
         })
-
         Post.belongsToMany(models.Space, {
             through: models.SpacePost,
             as: 'PrivateSpaces',
             foreignKey: 'postId',
         })
-
         Post.belongsToMany(models.Space, {
             through: models.SpacePost,
             as: 'Reposts',
             foreignKey: 'postId',
         })
-
         Post.belongsToMany(models.User, {
             through: models.UserPost,
             as: 'Players',
             foreignKey: 'postId',
         })
-
-        // blocks (use for all post children: media, comments, beads etc?)
+        // todo: remove (slower than nested link approach)
         Post.belongsToMany(models.Post, {
             through: models.Link,
             as: 'Blocks',
             foreignKey: 'itemAId',
             otherKey: 'itemBId',
         })
-        //
-
         Post.belongsToMany(models.Post, {
             through: models.Link,
             as: 'Beads',
             foreignKey: 'itemAId',
             otherKey: 'itemBId',
         })
-
         Post.belongsToMany(models.Post, {
             through: models.Link,
             as: 'Answers',
             foreignKey: 'itemAId',
             otherKey: 'itemBId',
         })
-
         Post.belongsToMany(models.Post, {
             through: models.Link,
             as: 'CardSides',
             foreignKey: 'itemAId',
             otherKey: 'itemBId',
-        })
-
-        Post.hasMany(models.Link, {
-            as: 'OutgoingPostLinks',
-            foreignKey: 'itemAId',
-        })
-
-        Post.hasMany(models.Link, {
-            as: 'OutgoingCommentLinks',
-            foreignKey: 'itemAId',
-        })
-
-        Post.hasMany(models.Link, {
-            as: 'IncomingPostLinks',
-            foreignKey: 'itemBId',
-        })
-
-        Post.hasMany(models.Link, {
-            as: 'IncomingCommentLinks',
-            foreignKey: 'itemBId',
-        })
-
-        Post.hasMany(models.Reaction, {
-            foreignKey: 'itemId',
-        })
-
-        Post.hasMany(models.Comment, {
-            foreignKey: 'itemId',
-        })
-
-        // todo: remove and get via link table
-        // updated from itemId to postId (20-11-2023)
-        // updated from hasMany to hasOne (23-11-2023)
-        // Post.hasMany(models.Url, {
-        //     foreignKey: 'itemId',
-        // })
-
-        // Post.hasMany(models.Image, {
-        //     foreignKey: 'itemId',
-        // })
-
-        // Post.hasMany(models.Audio, {
-        //     foreignKey: 'itemId',
-        // })
-        //
-
-        Post.hasOne(models.Event, {
-            foreignKey: 'postId',
-        })
-
-        Post.hasOne(models.Poll, {
-            foreignKey: 'postId',
-        })
-
-        Post.hasOne(models.GlassBeadGame, {
-            foreignKey: 'postId',
         })
     }
     return Post

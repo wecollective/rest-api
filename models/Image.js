@@ -4,9 +4,8 @@ module.exports = (sequelize, DataTypes) => {
         'Image',
         {
             creatorId: DataTypes.INTEGER,
-            // type: DataTypes.STRING,
-            // itemId: DataTypes.INTEGER,
-            postId: DataTypes.INTEGER,
+            type: DataTypes.STRING,
+            itemId: DataTypes.INTEGER,
             index: DataTypes.INTEGER,
             url: DataTypes.TEXT,
             caption: DataTypes.TEXT,
@@ -14,9 +13,6 @@ module.exports = (sequelize, DataTypes) => {
         },
         {}
     )
-    Image.associate = function (models) {
-        // Image.belongsTo(models.Post)
-        // Image.hasMany(models.Link)
-    }
+    Image.associate = function (models) {}
     return Image
 }

@@ -1064,13 +1064,13 @@ function findPostInclude(accountId) {
                 },
             ],
         },
-        // todo: add sorting of blocks at top level so not needed on front end
         {
             model: Link,
-            as: 'UrlBlockLinks',
+            as: 'UrlBlocks',
             separate: true,
             where: { itemBType: 'url-block' },
-            attributes: ['id'],
+            attributes: ['index'],
+            order: [['index', 'ASC']],
             include: {
                 model: Post,
                 attributes: ['id'],
@@ -1087,10 +1087,11 @@ function findPostInclude(accountId) {
         },
         {
             model: Link,
-            as: 'ImageBlockLinks',
+            as: 'ImageBlocks',
             separate: true,
             where: { itemBType: 'image-block', index: [0, 1, 2, 3] },
             attributes: ['index'],
+            order: [['index', 'ASC']],
             include: {
                 model: Post,
                 attributes: ['id', 'text'],
@@ -1107,10 +1108,11 @@ function findPostInclude(accountId) {
         },
         {
             model: Link,
-            as: 'AudioBlockLinks',
+            as: 'AudioBlocks',
             separate: true,
             where: { itemBType: 'audio-block' },
-            attributes: ['id'],
+            attributes: ['index'],
+            order: [['index', 'ASC']],
             include: {
                 model: Post,
                 attributes: ['id', 'text'],

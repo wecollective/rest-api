@@ -9,17 +9,13 @@ module.exports = (sequelize, DataTypes) => {
                 autoIncrement: true,
             },
             creatorId: DataTypes.INTEGER,
-            // type: DataTypes.STRING,
-            // itemId: DataTypes.INTEGER,
-            postId: DataTypes.INTEGER,
+            type: DataTypes.STRING,
+            itemId: DataTypes.INTEGER,
             state: DataTypes.STRING,
             url: DataTypes.TEXT,
         },
         {}
     )
-    Audio.associate = function (models) {
-        // Audio.belongsTo(models.Post)
-        // Audio.hasMany(models.Link)
-    }
+    Audio.associate = function (models) {}
     return Audio
 }
