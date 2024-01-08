@@ -75,8 +75,6 @@ router.get('/test', async (req, res) => {
         console.log('first attempt')
         testIndex += 1
 
-        // todo: skip deleted comments when tallying post & comment totalComments
-
         // before updates:
         // + log out & remove getHomepageHighlights
         // + remove mediaTypes, originSpaceId, & totalChildComments from Post model
@@ -86,11 +84,6 @@ router.get('/test', async (req, res) => {
 
         // run link-table-additions, gbg-updates, new-media-table-additions & post-table-updates migrations
         // add new values to models
-
-        // // add state to all images
-        // Image.update({ state: 'active' }, { where: { state: null }, silent: true })
-        //     .then(() => res.status(200).json({ message: 'Success' }))
-        //     .catch((error) => res.status(500).json(error))
 
         // // link table updates
         // const links = await Link.findAll({ attributes: ['id', 'type', 'relationship', 'state'] })
@@ -178,7 +171,12 @@ router.get('/test', async (req, res) => {
         //             new Promise(async (resolve) => {
         //                 if (post.totalComments) {
         //                     const totalChildComments = await Comment.count({
-        //                         where: { itemType: 'post', itemId: post.id, parentCommentId: null },
+        //                         where: {
+        //                             itemType: 'post',
+        //                             itemId: post.id,
+        //                             parentCommentId: null,
+        //                             state: 'visible',
+        //                         },
         //                     })
         //                     post.update({ totalChildComments }, { silent: true })
         //                         .then(() => resolve())
@@ -374,8 +372,6 @@ router.get('/test', async (req, res) => {
         //                     post.Urls.map(
         //                         (url, index) =>
         //                             new Promise(async (resolve2) => {
-        //                                  // add creatorId to Url
-        //                                  Url.update({ creatorId: post.creatorId }, { where: { id: url.id }, silent: true  })
         //                                 // create new url block
         //                                 const newUrlBlock = await Post.create(
         //                                     {
@@ -498,8 +494,6 @@ router.get('/test', async (req, res) => {
         //                         (audio) =>
         //                             new Promise(async (resolve2) => {
         //                                 // create new audio block
-        //                                  // add creatorId to Audio
-        //                                  Audio.update({ creatorId: post.creatorId }, { where: { id: audio.id }, silent: true  })
         //                                 const newAudioBlock = await Post.create(
         //                                     {
         //                                         ...defaultPostValues,
@@ -588,10 +582,10 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
 
-        // // switch db instance to t3 to enable unlimited burst (long operation: ~26+mins on t3.small) (should be less with target links removed)
-        // // migrate root comments to post table
-        // before running, update comments where itemId = null to itemId = 0
-        // SELECT * FROM `weco-prod-db`.Comments where itemType = 'glass-bead-game' and itemId is null
+        // // // switch db instance to t3 to enable unlimited burst (long operation: ~29mins on t3.small) (should be less with target links removed)
+        // // // migrate root comments to post table
+        // // before running, update comments where itemId = null to itemId = 0
+        // // SELECT * FROM `weco-prod-db`.Comments where itemType = 'glass-bead-game' and itemId is null
         // const comments = await Comment.findAll()
         // const rootCommentMappings = []
         // const migrateRootComments = await Promise.all(
@@ -637,8 +631,6 @@ router.get('/test', async (req, res) => {
         //                         newCommentId: newComment.id, // postId
         //                     })
         //                     // find post id for gbg comments and create root link
-        //                     // before running, update comments where itemId = null to itemId = 0
-        //                     // SELECT * FROM `weco-prod-db`.Comments where itemType = 'glass-bead-game' and itemId is null
         //                     const game =
         //                         comment.itemType === 'post'
         //                             ? null
@@ -891,7 +883,6 @@ router.get('/test', async (req, res) => {
 
         // // todo: add searchable text to comments using front end after migration
 
-        // todo: get polls post id and link answers to post instead of poll (should be ready below)
         // // migrate poll answers
         // const pollAnswers = await PollAnswer.findAll()
         // Promise.all(
@@ -1002,12 +993,22 @@ router.get('/test', async (req, res) => {
         //     .then(() => res.status(200).json({ message: 'Success' }))
         //     .catch((error) => res.status(500).json(error))
 
-        // update Post model hasMany --> hasOne ? (or just remove and get via links)
+        // // convert all  comment reactions to post reaction
+        // Reaction.update({ itemType: 'post' }, { where: { itemType: 'comment' }, silent: true })
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
 
-        //convert all  comment reactions to post reaction
-        Reaction.update({ itemType: 'post' }, { where: { itemType: 'comment' }, silent: true })
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json(error))
+        // // add state to all images
+        // Image.update({ state: 'active' }, { where: { state: null }, silent: true })
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json(error))
+
+        // todo after migration:
+        //                                  // add creatorIds to Urls
+        //                                  // Url.update({ creatorId: post.creatorId }, { where: { id: url.id }, silent: true  })
+
+        //                                  // add creatorIds to Audios
+        //                                  Audio.update({ creatorId: post.creatorId }, { where: { id: audio.id }, silent: true  })
     }
 })
 
@@ -1297,6 +1298,7 @@ router.get('/target-from-text', authenticateToken, async (req, res) => {
     res.status(200).json(matchingPosts)
 })
 
+// todo: fix bug causing deleted top level comments to break pagination
 // todo: try using link approach instead of 'getBlocks' to speed up results...
 router.get('/post-comments', async (req, res) => {
     const { postId, offset, filter } = req.query
@@ -1583,6 +1585,7 @@ router.get('/glass-bead-game-comments', async (req, res) => {
     res.status(200).json(commentLinks.map((link) => link.Post))
 })
 
+// todo: update post media routes to new linking approach? (test speed differences)
 // todo: set up pagination? (or restirct to ~5?)
 router.get('/post-urls', async (req, res) => {
     const { postId, offset } = req.query
@@ -1670,6 +1673,28 @@ router.get('/post-images', async (req, res) => {
             })
         )
         .catch((error) => res.status(500).json({ error }))
+
+    // no faster...
+    // const linksToImages = await Link.findAll({
+    //     where: {
+    //         itemAType: 'image-block',
+    //         itemAId: linksToBlocks.rows.map((link) => link.itemBId),
+    //         itemBType: 'image',
+    //         state: 'active',
+    //     },
+    //     attributes: [],
+    //     include: { model: Image, attributes: ['url'] },
+    // })
+    // res.status(200).json({
+    //     blocks: linksToBlocks.rows.map((link, index) => {
+    //         return {
+    //             ...link.Post.dataValues,
+    //             index: link.index,
+    //             Image: linksToImages[index].Image,
+    //         }
+    //     }),
+    //     total: linksToBlocks.count,
+    // })
 })
 
 // todo: set up pagination? (or restirct to ~5?)
@@ -1814,6 +1839,7 @@ router.get('/post-preview-data', async (req, res) => {
         .catch((error) => res.status(500).json({ error }))
 })
 
+// todo: potentially update to match new block include approach
 router.get('/card-faces', async (req, res) => {
     const { postId } = req.query
     const blocks = []

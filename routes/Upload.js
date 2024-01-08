@@ -25,6 +25,8 @@ aws.config.update({
 
 const s3 = new aws.S3({})
 
+// todo: revisit upload process
+
 router.post('/image-upload', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { type, id } = req.query

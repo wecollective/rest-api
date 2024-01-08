@@ -696,13 +696,13 @@ function spaceAccess(accountId) {
     // used in findSpaceMapAttributes, space-data, find-spaces, and nav-list-child-spaces
     return [
         literal(`(
-        SELECT SpaceUsers.state
-        FROM SpaceUsers
-        WHERE SpaceUsers.userId = ${accountId}
-        AND SpaceUsers.spaceId = Space.id
-        AND SpaceUsers.relationship = 'access'
-        AND (SpaceUsers.state = 'active' OR SpaceUsers.state = 'pending')
-    )`),
+            SELECT SpaceUsers.state
+            FROM SpaceUsers
+            WHERE SpaceUsers.userId = ${accountId}
+            AND SpaceUsers.spaceId = Space.id
+            AND SpaceUsers.relationship = 'access'
+            AND (SpaceUsers.state = 'active' OR SpaceUsers.state = 'pending')
+        )`),
         'spaceAccess',
     ]
 }

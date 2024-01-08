@@ -246,7 +246,7 @@ router.get('/homepage-highlights', async (req, res) => {
         include: [
             {
                 model: Link,
-                as: 'ImageBlockLinks',
+                as: 'ImageBlocks',
                 separate: true,
                 where: { itemBType: 'image-block', index: 0 },
                 attributes: ['id'],
@@ -266,7 +266,7 @@ router.get('/homepage-highlights', async (req, res) => {
             },
             {
                 model: Link,
-                as: 'UrlBlockLinks',
+                as: 'UrlBlocks',
                 separate: true,
                 where: {
                     '$Post.mediaTypes$': 'url',
@@ -317,8 +317,8 @@ router.get('/homepage-highlights', async (req, res) => {
     res.status(200).json({
         totals,
         posts: posts.map((p) => {
-            if (p.mediaTypes.includes('image')) return p.ImageBlockLinks[0].Post.MediaLink.Image.url
-            return p.UrlBlockLinks[0].Post.MediaLink.Url.image
+            if (p.mediaTypes.includes('image')) return p.ImageBlocks[0].Post.MediaLink.Image.url
+            return p.UrlBlocks[0].Post.MediaLink.Url.image
         }),
         spaces: spaces.map((s) => s.flagImagePath),
         users: users.map((u) => u.flagImagePath),
