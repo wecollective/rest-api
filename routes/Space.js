@@ -291,16 +291,6 @@ router.get('/homepage-highlights', async (req, res) => {
         ],
     })
 
-    // just getting blocks takes more than twice as long and prevent top level ordering
-    // include: [
-    //     {
-    //         model: Post,
-    //         as: 'Blocks',
-    //         attributes: ['id'],
-    //         through: { where: { itemBType: 'image-block' } },
-    //     },
-    // ],
-
     const spaces = await Space.findAll({
         where: {
             state: 'active',
@@ -586,7 +576,7 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 
-    // todo: try getting space first then .getSpacePosts function to replace double query
+    // tried getting space first then .getSpacePosts function to replace double query
     // warning: causes extreme cpu utilisation on db for some reason
     // const space = await Space.findOne({ where: { id: spaceId }, attributes: ['id'] })
     // const posts = await space.getSpacePosts({
@@ -606,7 +596,6 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
     //     ],
     //     subQuery: false,
     // })
-
     // res.status(200).json(posts)
 
     // Double query used to prevent results being effected by top level where clause and reduce data load on joins.
@@ -639,6 +628,7 @@ router.post('/space-posts', authenticateToken, async (req, res) => {
 })
 
 // todo: potentially load images after posts retrieved to speed up initial load time
+// instead include posts via new link approach
 router.post('/post-map-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const {
@@ -684,18 +674,67 @@ router.post('/post-map-data', authenticateToken, async (req, res) => {
         where: { id: emptyPosts.rows.map((post) => post.id) },
         attributes: fullAttributes,
         order,
-        include: {
-            model: Link,
-            as: 'OutgoingPostLinks',
-            attributes: ['id', 'description'],
-            where: { state: 'active', itemAType: 'post', itemBType: 'post' },
-            required: false,
-            include: {
-                model: Post,
-                as: 'OutgoingPost',
-                attributes: ['id'],
+        include: [
+            {
+                model: Link,
+                as: 'OutgoingPostLinks',
+                attributes: ['id', 'description'],
+                where: {
+                    state: 'active',
+                    relationship: 'link',
+                    itemAType: 'post',
+                    itemBType: 'post',
+                },
+                required: false,
+                include: {
+                    model: Post,
+                    as: 'OutgoingPost',
+                    attributes: ['id'],
+                },
             },
-        },
+            {
+                model: Link,
+                as: 'UrlBlocks',
+                separate: true,
+                where: { itemBType: 'url-block', index: 0 },
+                attributes: ['index'],
+                order: [['index', 'ASC']],
+                include: {
+                    model: Post,
+                    attributes: ['id'],
+                    include: {
+                        model: Link,
+                        as: 'MediaLink',
+                        attributes: ['id'],
+                        include: {
+                            model: Url,
+                            attributes: ['url', 'image', 'title', 'description', 'domain'],
+                        },
+                    },
+                },
+            },
+            {
+                model: Link,
+                as: 'ImageBlocks',
+                separate: true,
+                where: { itemBType: 'image-block', index: 0 },
+                attributes: ['index'],
+                order: [['index', 'ASC']],
+                include: {
+                    model: Post,
+                    attributes: ['id', 'text'],
+                    include: {
+                        model: Link,
+                        as: 'MediaLink',
+                        attributes: ['id'],
+                        include: {
+                            model: Image,
+                            attributes: ['url'],
+                        },
+                    },
+                },
+            },
+        ],
         required: false,
     })
 
@@ -1700,85 +1739,88 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const grantAccess =
-            response === 'accepted'
-                ? await SpaceUser.create({
-                      relationship: 'access',
-                      state: 'active',
-                      spaceId,
-                      userId: accountId,
-                  })
-                : null
-
-        const followSpace =
-            response === 'accepted'
-                ? await new Promise(async (resolve) => {
-                      const createSpaceUser = await SpaceUser.create({
-                          relationship: 'follower',
+        const existingAccess = await SpaceUser.findOne({
+            where: { relationship: 'access', state: 'active', spaceId, userId: accountId },
+        })
+        if (existingAccess) res.status(200).json({ message: 'Success' })
+        else {
+            const grantAccess =
+                response === 'accepted'
+                    ? await SpaceUser.create({
+                          relationship: 'access',
                           state: 'active',
                           spaceId,
                           userId: accountId,
                       })
-                      const updateSpaceStats = await Space.increment('totalFollowers', {
-                          where: { id: spaceId },
-                          silent: true,
+                    : null
+
+            const followSpace =
+                response === 'accepted'
+                    ? await new Promise(async (resolve) => {
+                          const createSpaceUser = await SpaceUser.create({
+                              relationship: 'follower',
+                              state: 'active',
+                              spaceId,
+                              userId: accountId,
+                          })
+                          const updateSpaceStats = await Space.increment('totalFollowers', {
+                              where: { id: spaceId },
+                              silent: true,
+                          })
+                          Promise.all([createSpaceUser, updateSpaceStats])
+                              .then(() => resolve())
+                              .catch((error) => resolve(error))
                       })
-                      Promise.all([createSpaceUser, updateSpaceStats])
-                          .then(() => resolve())
-                          .catch((error) => resolve(error))
-                  })
-                : null
+                    : null
 
-        const updateNotification = await Notification.update(
-            { state: response, seen: true },
-            { where: { id: notificationId } }
-        )
+            const updateNotification = await Notification.update(
+                { state: response, seen: true },
+                { where: { id: notificationId } }
+            )
 
-        const notifyInviteCreator = await new Promise(async (resolve) => {
-            const inviteCreator = await User.findOne({
-                where: { id: userId },
-                attributes: ['id', 'name', 'email', 'emailsDisabled'],
+            const notifyInviteCreator = await new Promise(async (resolve) => {
+                const inviteCreator = await User.findOne({
+                    where: { id: userId },
+                    attributes: ['id', 'name', 'email', 'emailsDisabled'],
+                })
+                const createNotification = await Notification.create({
+                    ownerId: inviteCreator.id,
+                    type: 'space-invite-response',
+                    state: response,
+                    seen: false,
+                    spaceAId: spaceId,
+                    userId: accountId,
+                })
+                const sendEmail = inviteCreator.emailsDisabled
+                    ? null
+                    : await sgMail.send({
+                          to: inviteCreator.email,
+                          from: { email: 'admin@weco.io', name: 'we { collective }' },
+                          subject: 'New notification',
+                          text: `
+                            Hi ${inviteCreator.name}, ${accountName} just ${response} your invite to join ${spaceName}: ${appURL}/s/${spaceHandle} on weco.
+                        `,
+                          html: `
+                            <p>
+                                Hi ${inviteCreator.name},
+                                <br/>
+                                <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
+                                just ${response} your invite to join
+                                <a href='${appURL}/s/${spaceHandle}'>${spaceName}</a>
+                                on weco.
+                                <br/>
+                            </p>
+                        `,
+                      })
+                Promise.all([createNotification, sendEmail])
+                    .then(() => resolve())
+                    .catch((error) => resolve(error))
             })
-            const createNotification = await Notification.create({
-                ownerId: inviteCreator.id,
-                type: 'space-invite-response',
-                state: response,
-                seen: false,
-                spaceAId: spaceId,
-                userId: accountId,
-            })
-            const sendEmail = inviteCreator.emailsDisabled
-                ? null
-                : await sgMail.send({
-                      to: inviteCreator.email,
-                      from: {
-                          email: 'admin@weco.io',
-                          name: 'we { collective }',
-                      },
-                      subject: 'New notification',
-                      text: `
-                    Hi ${inviteCreator.name}, ${accountName} just ${response} your invite to join ${spaceName}: ${appURL}/s/${spaceHandle} on weco.
-                `,
-                      html: `
-                    <p>
-                        Hi ${inviteCreator.name},
-                        <br/>
-                        <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
-                        just ${response} your invite to join
-                        <a href='${appURL}/s/${spaceHandle}'>${spaceName}</a>
-                        on weco.
-                        <br/>
-                    </p>
-                `,
-                  })
-            Promise.all([createNotification, sendEmail])
-                .then(() => resolve())
-                .catch((error) => resolve(error))
-        })
 
-        Promise.all([grantAccess, followSpace, updateNotification, notifyInviteCreator])
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
+            Promise.all([grantAccess, followSpace, updateNotification, notifyInviteCreator])
+                .then(() => res.status(200).json({ message: 'Success' }))
+                .catch((error) => res.status(500).json({ message: 'Error', error }))
+        }
     }
 })
 
@@ -1788,72 +1830,81 @@ router.post('/request-space-access', authenticateToken, async (req, res) => {
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const space = await Space.findOne({
-            where: { id: spaceId },
-            attributes: ['handle', 'name'],
-            include: {
-                model: User,
-                as: 'Moderators',
-                attributes: ['id', 'name', 'email', 'emailsDisabled'],
-                through: { where: { relationship: 'moderator', state: 'active' }, attributes: [] },
-            },
+        const existingRequest = await SpaceUser.findOne({
+            where: { relationship: 'access', state: 'pending', spaceId, userId: accountId },
         })
+        if (existingRequest) res.status(200).json({ message: 'Success' })
+        else {
+            const space = await Space.findOne({
+                where: { id: spaceId },
+                attributes: ['handle', 'name'],
+                include: {
+                    model: User,
+                    as: 'Moderators',
+                    attributes: ['id', 'name', 'email', 'emailsDisabled'],
+                    through: {
+                        where: { relationship: 'moderator', state: 'active' },
+                        attributes: [],
+                    },
+                },
+            })
 
-        const createAccessRealtionship = await SpaceUser.create({
-            relationship: 'access',
-            state: 'pending',
-            spaceId,
-            userId: accountId,
-        })
+            const createAccessRealtionship = await SpaceUser.create({
+                relationship: 'access',
+                state: 'pending',
+                spaceId,
+                userId: accountId,
+            })
 
-        const notifyMods = await Promise.all(
-            space.Moderators.map(
-                (mod) =>
-                    new Promise(async (resolve) => {
-                        const createNotification = await Notification.create({
-                            ownerId: mod.id,
-                            type: 'space-access-request',
-                            state: 'pending',
-                            seen: false,
-                            spaceAId: spaceId,
-                            userId: accountId,
-                        })
-                        const sendEmail = mod.emailsDisabled
-                            ? null
-                            : await sgMail.send({
-                                  to: mod.email,
-                                  from: {
-                                      email: 'admin@weco.io',
-                                      name: 'we { collective }',
-                                  },
-                                  subject: 'New notification',
-                                  text: `
-                                Hi ${mod.name}, ${accountName} just requested access to ${space.name}: ${appURL}/s/${space.handle} on weco.
-                                Log in and go to your notifications to respond to the request.
-                            `,
-                                  html: `
-                                <p>
-                                    Hi ${mod.name},
-                                    <br/>
-                                    <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
-                                    just requested access to
-                                    <a href='${appURL}/s/${space.handle}'>${space.name}</a>
-                                    on weco.
-                                    <br/>
+            const notifyMods = await Promise.all(
+                space.Moderators.map(
+                    (mod) =>
+                        new Promise(async (resolve) => {
+                            const createNotification = await Notification.create({
+                                ownerId: mod.id,
+                                type: 'space-access-request',
+                                state: 'pending',
+                                seen: false,
+                                spaceAId: spaceId,
+                                userId: accountId,
+                            })
+                            const sendEmail = mod.emailsDisabled
+                                ? null
+                                : await sgMail.send({
+                                      to: mod.email,
+                                      from: {
+                                          email: 'admin@weco.io',
+                                          name: 'we { collective }',
+                                      },
+                                      subject: 'New notification',
+                                      text: `
+                                    Hi ${mod.name}, ${accountName} just requested access to ${space.name}: ${appURL}/s/${space.handle} on weco.
                                     Log in and go to your notifications to respond to the request.
-                                </p>
-                            `,
-                              })
-                        Promise.all([createNotification, sendEmail])
-                            .then(() => resolve())
-                            .catch((error) => resolve(error))
-                    })
+                                `,
+                                      html: `
+                                    <p>
+                                        Hi ${mod.name},
+                                        <br/>
+                                        <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
+                                        just requested access to
+                                        <a href='${appURL}/s/${space.handle}'>${space.name}</a>
+                                        on weco.
+                                        <br/>
+                                        Log in and go to your notifications to respond to the request.
+                                    </p>
+                                `,
+                                  })
+                            Promise.all([createNotification, sendEmail])
+                                .then(() => resolve())
+                                .catch((error) => resolve(error))
+                        })
+                )
             )
-        )
 
-        Promise.all([createAccessRealtionship, notifyMods])
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
+            Promise.all([createAccessRealtionship, notifyMods])
+                .then(() => res.status(200).json({ message: 'Success' }))
+                .catch((error) => res.status(500).json({ message: 'Error', error }))
+        }
     }
 })
 
@@ -1872,68 +1923,73 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const updateAccess = await SpaceUser.update(
-            { state: response === 'accepted' ? 'active' : 'removed' },
-            { where: { relationship: 'access', state: 'pending', spaceId, userId } }
-        )
+        const existingAccess = await SpaceUser.findOne({
+            where: { relationship: 'access', state: 'active', spaceId, userId: accountId },
+        })
+        if (existingAccess) res.status(200).json({ message: 'Success' })
+        else {
+            const updateAccess = await SpaceUser.update(
+                { state: response === 'accepted' ? 'active' : 'removed' },
+                { where: { relationship: 'access', state: 'pending', spaceId, userId } }
+            )
 
-        const followSpace =
-            response === 'accepted'
-                ? await new Promise(async (resolve) => {
-                      const createSpaceUser = await SpaceUser.create({
-                          relationship: 'follower',
-                          state: 'active',
-                          spaceId,
-                          userId,
+            const followSpace =
+                response === 'accepted'
+                    ? await new Promise(async (resolve) => {
+                          const createSpaceUser = await SpaceUser.create({
+                              relationship: 'follower',
+                              state: 'active',
+                              spaceId,
+                              userId,
+                          })
+                          const updateSpaceStats = await Space.increment('totalFollowers', {
+                              where: { id: spaceId },
+                              silent: true,
+                          })
+                          Promise.all([createSpaceUser, updateSpaceStats])
+                              .then(() => resolve())
+                              .catch((error) => resolve(error))
                       })
-                      const updateSpaceStats = await Space.increment('totalFollowers', {
-                          where: { id: spaceId },
-                          silent: true,
-                      })
-                      Promise.all([createSpaceUser, updateSpaceStats])
-                          .then(() => resolve())
-                          .catch((error) => resolve(error))
-                  })
-                : null
+                    : null
 
-        const updateModNotifications = await Notification.update(
-            { state: response, seen: true },
-            {
-                where: {
-                    type: 'space-access-request',
+            const updateModNotifications = await Notification.update(
+                { state: response, seen: true },
+                {
+                    where: {
+                        type: 'space-access-request',
+                        spaceAId: spaceId,
+                        userId: userId,
+                        state: 'pending',
+                    },
+                }
+            )
+
+            const notifyRequestCreator = await new Promise(async (resolve) => {
+                const requestCreator = await User.findOne({
+                    where: { id: userId },
+                    attributes: ['id', 'name', 'email', 'emailsDisabled'],
+                })
+                const createNotification = await Notification.create({
+                    ownerId: requestCreator.id,
+                    type: 'space-access-response',
+                    state: response,
+                    seen: false,
                     spaceAId: spaceId,
-                    userId: userId,
-                    state: 'pending',
-                },
-            }
-        )
-
-        const notifyRequestCreator = await new Promise(async (resolve) => {
-            const requestCreator = await User.findOne({
-                where: { id: userId },
-                attributes: ['id', 'name', 'email', 'emailsDisabled'],
-            })
-            const createNotification = await Notification.create({
-                ownerId: requestCreator.id,
-                type: 'space-access-response',
-                state: response,
-                seen: false,
-                spaceAId: spaceId,
-                userId: accountId,
-            })
-            const sendEmail = requestCreator.emailsDisabled
-                ? null
-                : await sgMail.send({
-                      to: requestCreator.email,
-                      from: {
-                          email: 'admin@weco.io',
-                          name: 'we { collective }',
-                      },
-                      subject: 'New notification',
-                      text: `
+                    userId: accountId,
+                })
+                const sendEmail = requestCreator.emailsDisabled
+                    ? null
+                    : await sgMail.send({
+                          to: requestCreator.email,
+                          from: {
+                              email: 'admin@weco.io',
+                              name: 'we { collective }',
+                          },
+                          subject: 'New notification',
+                          text: `
                     Hi ${requestCreator.name}, ${accountName} just ${response} your request to access ${spaceName}: ${appURL}/s/${spaceHandle} on weco.
                 `,
-                      html: `
+                          html: `
                     <p>
                         Hi ${requestCreator.name},
                         <br/>
@@ -1944,15 +2000,16 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
                         <br/>
                     </p>
                 `,
-                  })
-            Promise.all([createNotification, sendEmail])
-                .then(() => resolve())
-                .catch((error) => resolve(error))
-        })
+                      })
+                Promise.all([createNotification, sendEmail])
+                    .then(() => resolve())
+                    .catch((error) => resolve(error))
+            })
 
-        Promise.all([updateAccess, followSpace, updateModNotifications, notifyRequestCreator])
-            .then(() => res.status(200).json({ message: 'Success' }))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
+            Promise.all([updateAccess, followSpace, updateModNotifications, notifyRequestCreator])
+                .then(() => res.status(200).json({ message: 'Success' }))
+                .catch((error) => res.status(500).json({ message: 'Error', error }))
+        }
     }
 })
 
@@ -1965,18 +2022,15 @@ router.post('/accept-space-invite-link', authenticateToken, async (req, res) => 
             where: { id: spaceId, inviteToken },
             attributes: ['id'],
         })
+        const existingAccess = await SpaceUser.findOne({
+            where: { relationship: 'access', state: 'active', spaceId, userId: accountId },
+        })
         if (!validToken) res.status(401).json({ message: 'Invalid token' })
+        else if (existingAccess) res.status(200).json({ message: 'Success' })
         else {
             const removePending = await SpaceUser.update(
                 { state: 'removed' },
-                {
-                    where: {
-                        spaceId,
-                        userId: accountId,
-                        relationship: 'access',
-                        state: 'pending',
-                    },
-                }
+                { where: { spaceId, userId: accountId, relationship: 'access', state: 'pending' } }
             )
             const createAccess = await SpaceUser.create({
                 spaceId,
@@ -1984,22 +2038,17 @@ router.post('/accept-space-invite-link', authenticateToken, async (req, res) => 
                 relationship: 'access',
                 state: 'active',
             })
-            const followSpace = await new Promise(async (resolve) => {
-                const createSpaceUser = await SpaceUser.create({
-                    spaceId,
-                    userId: accountId,
-                    relationship: 'follower',
-                    state: 'active',
-                })
-                const updateSpaceStats = await Space.increment('totalFollowers', {
-                    where: { id: spaceId },
-                    silent: true,
-                })
-                Promise.all([createSpaceUser, updateSpaceStats])
-                    .then(() => resolve())
-                    .catch((error) => resolve(error))
+            const createSpaceUser = await SpaceUser.create({
+                spaceId,
+                userId: accountId,
+                relationship: 'follower',
+                state: 'active',
             })
-            Promise.all([removePending, createAccess, followSpace])
+            const updateSpaceStats = await Space.increment('totalFollowers', {
+                where: { id: spaceId },
+                silent: true,
+            })
+            Promise.all([removePending, createAccess, createSpaceUser, updateSpaceStats])
                 .then(() => res.status(200).json({ message: 'Success' }))
                 .catch((error) => res.status(500).json({ message: 'Error', error }))
         }
