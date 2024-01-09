@@ -1068,7 +1068,7 @@ function findPostInclude(accountId) {
             model: Link,
             as: 'UrlBlocks',
             separate: true,
-            where: { itemBType: 'url-block' },
+            where: { itemBType: 'url-block', state: 'active' },
             attributes: ['index'],
             order: [['index', 'ASC']],
             include: {
