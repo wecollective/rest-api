@@ -1298,9 +1298,310 @@ router.get('/target-from-text', authenticateToken, async (req, res) => {
     res.status(200).json(matchingPosts)
 })
 
-// todo: fix bug causing deleted top level comments to break pagination
-// todo: try using link approach instead of 'getBlocks' to speed up results...
+// attempt to nest full depth with includes (breaks on second post include with limit applied)
+// router.get('/post-comments', async (req, res) => {
+//     const { postId, offset, filter } = req.query
+//     const limits = [5, 4, 3, 2, 1] // number of comments to inlcude per generation (length of array determines max depth)
+//     let order = [
+//         // default 'top'
+//         ['totalLikes', 'DESC'],
+//         ['createdAt', 'ASC'],
+//         ['id', 'ASC'],
+//     ]
+//     if (filter === 'new')
+//         order = [
+//             ['createdAt', 'DESC'],
+//             ['id', 'ASC'],
+//         ]
+//     if (filter === 'old')
+//         order = [
+//             ['createdAt', 'ASC'],
+//             ['id', 'ASC'],
+//         ]
+//     const root = await Post.findOne({
+//         where: { id: postId },
+//         attributes: ['id', 'type', 'totalChildComments'],
+//         include: {
+//             model: Link,
+//             as: 'OutgoingCommentLinks',
+//             separate: true,
+//             // subQuery: false,
+//             where: { relationship: 'parent', itemBType: 'comment' },
+//             attributes: ['id'],
+//             order,
+//             limit: 3,
+//             offset: +offset,
+//             include: {
+//                 model: Post,
+//                 required: true,
+//                 // subQuery: false,
+//                 attributes: [...fullPostAttributes, 'totalChildComments'],
+//                 include: {
+//                     model: Link,
+//                     as: 'OutgoingCommentLinks',
+//                     separate: true,
+//                     // subQuery: false,
+//                     // required: false,
+//                     where: { relationship: 'parent', itemBType: 'comment' },
+//                     attributes: ['id'],
+//                     order,
+//                     limit: 3,
+//                     // offset: +offset,
+//                     include: {
+//                         model: Post,
+//                         // subQuery: false,
+//                         required: true,
+//                         // as: 'A',
+//                         attributes: [...fullPostAttributes, 'totalChildComments'],
+//                     },
+//                 },
+//             },
+//         },
+//     })
+
+//     res.status(200).json({
+//         totalChildren: root.totalChildComments,
+//         root,
+//         // comments: root.,
+//     })
+// })
+
+// // attempt to use links as root instead of get blocks (1.25s without media blocks)
+// router.get('/post-comments', async (req, res) => {
+//     const { postId, offset, filter } = req.query
+//     const limits = [5, 4, 3, 2, 1] // number of comments to inlcude per generation (length of array determines max depth)
+//     const post = await Post.findOne({
+//         where: { id: postId },
+//         attributes: ['id', 'type', 'totalChildComments'],
+//     })
+//     let order = [
+//         // default 'top'
+//         ['totalLikes', 'DESC'],
+//         ['createdAt', 'ASC'],
+//         ['id', 'ASC'],
+//     ]
+//     if (filter === 'new')
+//         order = [
+//             ['createdAt', 'DESC'],
+//             ['id', 'ASC'],
+//         ]
+//     if (filter === 'old')
+//         order = [
+//             ['createdAt', 'ASC'],
+//             ['id', 'ASC'],
+//         ]
+
+//     async function getChildComments(parent, depth) {
+//         return new Promise(async (resolve) => {
+//             const comments = await Link.findAll({
+//                 where: {
+//                     itemAId: parent.id,
+//                     // itemAType: parent.type,
+//                     itemBType: 'comment',
+//                     relationship: 'parent',
+//                 },
+//                 limit: limits[depth],
+//                 offset: depth ? 0 : +offset,
+//                 order,
+//                 include: {
+//                     model: Post,
+//                     attributes: [...fullPostAttributes, 'totalChildComments'],
+//                     include: [
+//                         {
+//                             model: User,
+//                             as: 'Creator',
+//                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
+//                         },
+//                         // {
+//                         //     model: Link,
+//                         //     as: 'UrlBlocks',
+//                         //     separate: true,
+//                         //     where: { itemBType: 'url-block' },
+//                         //     attributes: ['index'],
+//                         //     order: [['index', 'ASC']],
+//                         //     include: {
+//                         //         model: Post,
+//                         //         attributes: ['id'],
+//                         //         include: {
+//                         //             model: Link,
+//                         //             as: 'MediaLink',
+//                         //             attributes: ['id'],
+//                         //             include: {
+//                         //                 model: Url,
+//                         //                 attributes: [
+//                         //                     'url',
+//                         //                     'image',
+//                         //                     'title',
+//                         //                     'description',
+//                         //                     'domain',
+//                         //                 ],
+//                         //             },
+//                         //         },
+//                         //     },
+//                         // },
+//                         // {
+//                         //     model: Link,
+//                         //     as: 'ImageBlocks',
+//                         //     separate: true,
+//                         //     where: { itemBType: 'image-block', index: [0, 1, 2, 3] },
+//                         //     attributes: ['index'],
+//                         //     order: [['index', 'ASC']],
+//                         //     include: {
+//                         //         model: Post,
+//                         //         attributes: ['id', 'text'],
+//                         //         include: {
+//                         //             model: Link,
+//                         //             as: 'MediaLink',
+//                         //             attributes: ['id'],
+//                         //             include: {
+//                         //                 model: Image,
+//                         //                 attributes: ['url'],
+//                         //             },
+//                         //         },
+//                         //     },
+//                         // },
+//                         // {
+//                         //     model: Link,
+//                         //     as: 'AudioBlocks',
+//                         //     separate: true,
+//                         //     where: { itemBType: 'audio-block' },
+//                         //     attributes: ['index'],
+//                         //     order: [['index', 'ASC']],
+//                         //     include: {
+//                         //         model: Post,
+//                         //         attributes: ['id', 'text'],
+//                         //         include: {
+//                         //             model: Link,
+//                         //             as: 'MediaLink',
+//                         //             attributes: ['id'],
+//                         //             include: {
+//                         //                 model: Audio,
+//                         //                 attributes: ['url'],
+//                         //             },
+//                         //         },
+//                         //     },
+//                         // },
+//                     ],
+//                 },
+//             })
+
+//             // remove deleted comments with no replies
+//             const filteredComments = comments
+//                 .map((c) => c.Post)
+//                 .filter((c) => c.state === 'active' || c.totalComments)
+//             filteredComments.forEach((c) => c.setDataValue('Comments', []))
+//             parent.setDataValue('Comments', filteredComments)
+//             if (!limits[depth + 1]) resolve()
+//             else {
+//                 Promise.all(
+//                     parent.dataValues.Comments.map((comment) =>
+//                         getChildComments(comment, depth + 1)
+//                     )
+//                 )
+//                     .then(() => resolve())
+//                     .catch((error) => resolve(error))
+//             }
+//         })
+//     }
+
+//     getChildComments(post, 0)
+//         .then(() =>
+//             res.status(200).json({
+//                 totalChildren: post.totalChildComments,
+//                 comments: post.dataValues.Comments,
+//             })
+//         )
+//         .catch((error) => res.status(500).json({ message: 'Error', error }))
+// })
+
+// attempt to get post data seperately (2.6s)
+// router.get('/post-comments', async (req, res) => {
+//     const { postId, offset, filter } = req.query
+//     const limits = [5, 4, 3, 2, 1] // number of comments to inlcude per generation (length of array determines max depth)
+//     const post = await Post.findOne({
+//         where: { id: postId },
+//         attributes: ['id', 'type', 'totalChildComments'],
+//     })
+//     let order = [
+//         // default 'top'
+//         ['totalLikes', 'DESC'],
+//         ['createdAt', 'ASC'],
+//         ['id', 'ASC'],
+//     ]
+//     if (filter === 'new')
+//         order = [
+//             ['createdAt', 'DESC'],
+//             ['id', 'ASC'],
+//         ]
+//     if (filter === 'old')
+//         order = [
+//             ['createdAt', 'ASC'],
+//             ['id', 'ASC'],
+//         ]
+
+//     async function getChildComments(parent, depth) {
+//         return new Promise(async (resolve) => {
+
+//             const comments = await Link.findAll({
+//                 where: {
+//                     itemAId: parent.id,
+//                     // itemAType: parent.type,
+//                     itemBType: 'comment',
+//                     relationship: 'parent',
+//                 },
+//                 limit: limits[depth],
+//                 offset: depth ? 0 : +offset,
+//                 order,
+//                 include: {
+//                     model: Post,
+//                     attributes: [...fullPostAttributes, 'totalChildComments'],
+//                     include: [
+//                         {
+//                             model: User,
+//                             as: 'Creator',
+//                             attributes: ['id', 'handle', 'name', 'flagImagePath'],
+//                         },
+//                     ],
+//                 },
+//             })
+
+//             Promise.all(comments.map((commentLink) => new Promise((resolve2) => {
+
+//             })))
+
+//             // remove deleted comments with no replies
+//             const filteredComments = comments
+//                 .map((c) => c.Post)
+//                 .filter((c) => c.state === 'active' || c.totalComments)
+//             filteredComments.forEach((c) => c.setDataValue('Comments', []))
+//             parent.setDataValue('Comments', filteredComments)
+//             if (!limits[depth + 1]) resolve()
+//             else {
+//                 Promise.all(
+//                     parent.dataValues.Comments.map((comment) =>
+//                         getChildComments(comment, depth + 1)
+//                     )
+//                 )
+//                     .then(() => resolve())
+//                     .catch((error) => resolve(error))
+//             }
+//         })
+//     }
+
+//     getChildComments(post, 0)
+//         .then(() =>
+//             res.status(200).json({
+//                 totalChildren: post.totalChildComments,
+//                 comments: post.dataValues.Comments,
+//             })
+//         )
+//         .catch((error) => res.status(500).json({ message: 'Error', error }))
+// })
+
 router.get('/post-comments', async (req, res) => {
+    // failed approaches:
+    // + full nested include with no recursive promises (doesn't allow limit beyond first generation)
+    // + get links first instead of using getBlocks function ~1.5s
     const { postId, offset, filter } = req.query
     const limits = [5, 4, 3, 2, 1] // number of comments to inlcude per generation (length of array determines max depth)
     const post = await Post.findOne({
@@ -1329,11 +1630,7 @@ router.get('/post-comments', async (req, res) => {
             const comments = await parent.getBlocks({
                 attributes: [...fullPostAttributes, 'totalChildComments'],
                 through: {
-                    where: {
-                        itemBType: 'comment',
-                        relationship: 'parent',
-                        state: 'active',
-                    },
+                    where: { itemBType: 'comment', relationship: 'parent', state: 'active' },
                 },
                 joinTableAttributes: [],
                 include: [
