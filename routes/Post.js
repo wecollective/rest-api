@@ -1084,9 +1084,9 @@ router.get('/parent-links', async (req, res) => {
 })
 
 router.get('/likes', async (req, res) => {
-    const { itemType, itemId } = req.query
+    const { type, id } = req.query
     Reaction.findAll({
-        where: { itemType, itemId, type: 'like', state: 'active' },
+        where: { itemType: type, itemId: id, type: 'like', state: 'active' },
         attributes: ['id'],
         include: {
             model: User,
@@ -1121,9 +1121,9 @@ router.get('/post-reposts', async (req, res) => {
 })
 
 router.get('/ratings', async (req, res) => {
-    const { itemType, itemId } = req.query
+    const { type, id } = req.query
     Reaction.findAll({
-        where: { itemType, itemId, type: 'rating', state: 'active' },
+        where: { itemType: type, itemId: id, type: 'rating', state: 'active' },
         attributes: ['id', 'value'],
         include: {
             model: User,
@@ -3038,6 +3038,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
 router.post('/add-like', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { type, id, sourceType, sourceId, spaceId } = req.body
+    // type includes all post types plus 'link'
     // sourceType and sourceId used to generate link map url
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -3050,8 +3051,8 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                 attributes: ['id', 'handle', 'name', 'email', 'emailsDisabled'],
             },
         ]
-        if (['post', 'comment'].includes(type)) model = Post
         if (type === 'link') model = Link
+        else model = Post
         if (type === 'post') {
             // include post spaces for stat updates
             include.push({
@@ -3064,9 +3065,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
             })
         }
         const item = await model.findOne({ where: { id }, attributes: ['id'], include })
-
         const updateTotalLikes = item.increment('totalLikes', { silent: true })
-
         const updateSpaceStats =
             type === 'post'
                 ? Promise.all(
@@ -3097,7 +3096,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
 
         const createReaction = await Reaction.create({
             type: 'like',
-            itemType: type,
+            itemType: type === 'link' ? 'link' : 'post',
             itemId: id,
             state: 'active',
             spaceId,
@@ -3108,16 +3107,12 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         let postId = null
         let commentId = null
         let spaceAId = spaceId
-        if (type === 'post') postId = id
-        if (type === 'comment') {
-            // postId = rootId
-            commentId = id
-        }
         if (type === 'link') {
             if (sourceType === 'post') postId = sourceId
             if (sourceType === 'comment') commentId = sourceId
             if (sourceType === 'space') spaceAId = sourceId
-        }
+        } else if (type === 'comment') commentId = id
+        else postId = id
 
         const skipNotification = item.Creator.id === accountId
         const skipEmail =
@@ -3138,9 +3133,8 @@ router.post('/add-like', authenticateToken, async (req, res) => {
               })
 
         let itemUrl
-        if (['post', 'comment'].includes(type)) itemUrl = `${appURL}/p/${id}`
-        // if (type === 'comment') itemUrl = `${appURL}/p/${rootId}?commentId=${id}`
         if (type === 'link') itemUrl = `${appURL}/linkmap?item=${sourceType}&id=${sourceId}`
+        else itemUrl = `${appURL}/p/${id}`
 
         const { handle, name } = await User.findOne({
             where: { id: accountId },
@@ -3182,13 +3176,13 @@ router.post('/add-like', authenticateToken, async (req, res) => {
 
 router.post('/remove-like', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { type, id } = req.body
+    const { type, id } = req.body // type includes all post types plus 'link'
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         let model
         let include = [{ model: User, as: 'Creator', attributes: ['id'] }]
-        if (['post', 'comment'].includes(type)) model = Post
         if (type === 'link') model = Link
+        else model = Post
         if (type === 'post') {
             include.push({
                 model: Space,
@@ -3201,9 +3195,7 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
         }
 
         const item = await model.findOne({ where: { id }, attributes: ['id'], include })
-
         const updateTotalLikes = await item.decrement('totalLikes', { silent: true })
-
         const updateSpaceStats =
             type === 'post'
                 ? Promise.all(
@@ -3230,7 +3222,7 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
             {
                 where: {
                     type: 'like',
-                    itemType: type,
+                    itemType: type === 'link' ? 'link' : 'post',
                     itemId: id,
                     state: 'active',
                     creatorId: accountId,
@@ -3246,12 +3238,12 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
 
 router.post('/add-rating', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { itemType, itemId, newRating, accountHandle, accountName, spaceId } = req.body
+    const { type, id, newRating, accountHandle, accountName, spaceId } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const item = await Post.findOne({
-            where: { id: itemId },
+            where: { id },
             attributes: ['id'],
             include: {
                 model: User,
@@ -3264,8 +3256,8 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
 
         const createReaction = await Reaction.create({
             type: 'rating',
-            itemType,
-            itemId,
+            itemType: type === 'link' ? 'link' : 'post',
+            itemId: id,
             value: newRating,
             state: 'active',
             spaceId,
@@ -3282,14 +3274,14 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
             ? null
             : await Notification.create({
                   ownerId: item.Creator.id,
-                  type: `${itemType}-rating`,
+                  type: `${type}-rating`,
                   seen: false,
                   spaceAId: spaceId,
                   userId: accountId,
-                  postId: itemId,
+                  postId: id,
               })
 
-        const itemUrl = `${appURL}/p/${itemId}`
+        const itemUrl = `${appURL}/p/${id}`
         const sendEmail = skipEmail
             ? null
             : await sgMail.send({
@@ -3297,7 +3289,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
                   from: { email: 'admin@weco.io', name: 'we { collective }' },
                   subject: 'New notification',
                   text: `
-                        Hi ${item.Creator.name}, ${accountName} just rated your ${itemType} on weco:
+                        Hi ${item.Creator.name}, ${accountName} just rated your ${type} on weco:
                         http://${itemUrl}
                     `,
                   html: `
@@ -3306,7 +3298,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
                             <br/>
                             <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
                             just rated your
-                            <a href='${itemUrl}'>${itemType}</a>
+                            <a href='${itemUrl}'>${type}</a>
                             on weco
                         </p>
                     `,
@@ -3320,7 +3312,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
 
 router.post('/remove-rating', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { itemType, itemId } = req.body
+    const { type, id } = req.body
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const removeReaction = await Reaction.update(
@@ -3328,8 +3320,8 @@ router.post('/remove-rating', authenticateToken, async (req, res) => {
             {
                 where: {
                     type: 'rating',
-                    itemType,
-                    itemId,
+                    itemType: type === 'link' ? 'link' : 'post',
+                    itemId: id,
                     state: 'active',
                     creatorId: accountId,
                 },
@@ -3337,7 +3329,7 @@ router.post('/remove-rating', authenticateToken, async (req, res) => {
         )
 
         const updateTotalRatings = await Post.decrement('totalRatings', {
-            where: { id: itemId },
+            where: { id },
             silent: true,
         })
 
