@@ -2392,9 +2392,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                 },
             })
             const isOwnPost = parentPost.Creator.id === accountId
-            const muted = await accountMuted(accountId, parentPost.Creator)
-            const skipNotification = isOwnPost || muted
-            const createNotification = skipNotification
+            const createNotification = isOwnPost
                 ? null
                 : await Notification.create({
                       ownerId: parentPost.Creator.id,
@@ -2405,7 +2403,8 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                       postId: parent.id,
                       commentId: post.id,
                   })
-            const skipEmail = skipNotification || parentPost.Creator.emailsDisabled
+            const muted = await accountMuted(accountId, parentPost.Creator)
+            const skipEmail = isOwnPost || muted || parentPost.Creator.emailsDisabled
             const messageText =
                 parentPost.type === 'comment' ? 'replied to your' : 'commented on your'
             const sendEmail = skipEmail
