@@ -855,8 +855,8 @@ router.get('/space-events', authenticateToken, (req, res) => {
         where: {
             '$DirectSpaces.handle$': spaceHandle,
             '$Event.startTime$': { [Op.between]: [startTime, endTime] },
+            mediaTypes: { [Op.like]: `%event%` },
             state: 'active',
-            type: ['event', 'glass-bead-game'],
         },
         attributes: ['id', 'type', 'title', postAccess(accountId)],
         having: { ['access']: 1 },
