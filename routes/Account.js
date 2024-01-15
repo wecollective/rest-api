@@ -200,6 +200,33 @@ router.get('/muted-users', authenticateToken, async (req, res) => {
     }
 })
 
+router.get('/chats', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const user = await User.findOne({ where: { id: accountId } })
+        const chats = await user.getUserSpaces({
+            where: { state: 'active', type: 'chat' },
+            through: { where: { relationship: 'access', state: 'active' } },
+            attributes: [
+                'id',
+                'handle',
+                'name',
+                'description',
+                'flagImagePath',
+                'coverImagePath',
+                'totalFollowers',
+                'totalComments',
+                'totalPostLikes',
+                'totalPosts',
+            ],
+            limit: 10,
+            // offset,
+        })
+        res.status(200).json(chats)
+    }
+})
+
 // POST
 router.post('/account-notifications', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
@@ -625,7 +652,8 @@ router.post('/create-chat', authenticateToken, async (req, res) => {
                                   type: 'chat-invite',
                                   seen: false,
                                   userId: accountId,
-                                  spaceId: newChat.id,
+                                  spaceAId: newChat.id,
+                                  state: 'pending',
                               })
                         const sendEmail = isOwnAccount
                             ? null
@@ -656,7 +684,7 @@ router.post('/create-chat', authenticateToken, async (req, res) => {
         )
 
         Promise.all([createMod, createFollower, addUsers])
-            .then(() => res.status(200).json({ message: 'Success' }))
+            .then(() => res.status(200).json(newChat))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
