@@ -12,6 +12,14 @@
 
 `npx sequelize-cli db:migrate`
 
+### Undo last migration
+
+`npx sequelize-cli db:migrate:undo`
+
+### Undo specific migration
+
+`npx sequelize-cli db:migrate:undo --name file-name.js`
+
 ### Remove all migrated tables from the database
 
 `npx sequelize-cli db:migrate:undo:all`

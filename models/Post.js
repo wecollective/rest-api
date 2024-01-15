@@ -28,6 +28,12 @@ module.exports = (sequelize, DataTypes) => {
             lastActivity: DataTypes.DATE,
         },
         {}
+        // {
+        //     indexes: [
+        //         { unique: false, fields: ['createdAt'] },
+        //         { unique: false, fields: ['totalLikes'] },
+        //     ],
+        // }
     )
 
     Post.associate = function (models) {

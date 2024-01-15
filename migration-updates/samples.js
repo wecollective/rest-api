@@ -46,6 +46,8 @@ module.exports = {
                     },
                     { transaction: t }
                 ),
+                queryInterface.addIndex('Posts', ['createdAt']),
+                queryInterface.removeIndex('Posts', ['createdAt']),
             ])
         })
     },
