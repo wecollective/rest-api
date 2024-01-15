@@ -1436,14 +1436,14 @@ router.post('/create-space', authenticateToken, async (req, res) => {
             totalFollowers: 1,
         })
 
-        const createModRelationship = SpaceUser.create({
+        const createModRelationship = await SpaceUser.create({
             relationship: 'moderator',
             state: 'active',
             spaceId: newSpace.id,
             userId: accountId,
         })
 
-        const createFollowerRelationship = SpaceUser.create({
+        const createFollowerRelationship = await SpaceUser.create({
             relationship: 'follower',
             state: 'active',
             spaceId: newSpace.id,
@@ -1451,7 +1451,7 @@ router.post('/create-space', authenticateToken, async (req, res) => {
         })
 
         const createAccessRelationship = private
-            ? SpaceUser.create({
+            ? await SpaceUser.create({
                   relationship: 'access',
                   state: 'active',
                   spaceId: newSpace.id,

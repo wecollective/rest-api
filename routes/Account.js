@@ -6,7 +6,7 @@ const sequelize = require('sequelize')
 const { Op } = sequelize
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
-const multer = require('multer')
+const crypto = require('crypto')
 const authenticateToken = require('../middleware/authenticateToken')
 const ScheduledTasks = require('../ScheduledTasks')
 const {
@@ -48,6 +48,7 @@ const {
     getToyboxItem,
     uploadFiles,
 } = require('../Helpers')
+const { v4: uuidv4 } = require('uuid')
 
 // GET
 router.get('/account-data', authenticateToken, async (req, res) => {
@@ -561,6 +562,102 @@ router.post('/liked-posts', authenticateToken, async (req, res) => {
             orderedPosts.push(post)
         })
         res.status(200).json(orderedPosts)
+    }
+})
+
+router.post('/create-chat', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        const { postData: chatData, files } = await uploadFiles(req, res, accountId)
+        const { name, userIds } = chatData
+        const newChat = await await Space.create({
+            creatorId: accountId,
+            type: 'chat',
+            handle: uuidv4().substring(0, 15),
+            name: name || null,
+            description: null,
+            flagImagePath: files[0] ? files[0].url : null,
+            state: 'active',
+            privacy: 'private',
+            inviteToken: crypto.randomBytes(64).toString('hex'),
+            totalPostLikes: 0,
+            totalPosts: 0,
+            totalComments: 0,
+            totalFollowers: 1,
+        })
+
+        const createMod = await SpaceUser.create({
+            relationship: 'moderator',
+            state: 'active',
+            spaceId: newChat.id,
+            userId: accountId,
+        })
+
+        const createFollower = await SpaceUser.create({
+            relationship: 'follower',
+            state: 'active',
+            spaceId: newChat.id,
+            userId: accountId,
+        })
+
+        const users = await User.findAll({
+            where: { id: [accountId, ...userIds] },
+            attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
+        })
+        const creator = users.find((u) => u.id === accountId)
+
+        const addUsers = Promise.all(
+            users.map(
+                (user) =>
+                    new Promise(async (resolve) => {
+                        const isOwnAccount = user.id === accountId
+                        const createAccess = await SpaceUser.create({
+                            relationship: 'access',
+                            state: isOwnAccount ? 'active' : 'pending',
+                            spaceId: newChat.id,
+                            userId: user.id,
+                        })
+                        const sendNotification = isOwnAccount
+                            ? null
+                            : await Notification.create({
+                                  ownerId: user.id,
+                                  type: 'chat-invite',
+                                  seen: false,
+                                  userId: accountId,
+                                  spaceId: newChat.id,
+                              })
+                        const sendEmail = isOwnAccount
+                            ? null
+                            : sgMail.send({
+                                  to: user.email,
+                                  from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                  subject: 'New notification',
+                                  text: `
+                                        Hi ${user.name}, ${creator.name} just invited you to a chat on weco:
+                                        http://${appURL}/s/${newChat.handle}
+                                    `,
+                                  html: `
+                                        <p>
+                                            Hi ${user.name},
+                                            <br/>
+                                            <a href='${appURL}/u/${creator.handle}'>${creator.name}</a>
+                                            just invited you to a 
+                                            <a href='${appURL}/s/${newChat.handle}'>chat</a>
+                                            on weco
+                                        </p>
+                                    `,
+                              })
+                        Promise.all([createAccess, sendNotification, sendEmail])
+                            .then(() => resolve())
+                            .catch((error) => resolve(error))
+                    })
+            )
+        )
+
+        Promise.all([createMod, createFollower, addUsers])
+            .then(() => res.status(200).json({ message: 'Success' }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
