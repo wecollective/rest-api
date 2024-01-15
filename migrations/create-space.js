@@ -11,6 +11,9 @@ module.exports = {
             state: {
                 type: Sequelize.STRING,
             },
+            type: {
+                type: Sequelize.STRING,
+            },
             privacy: {
                 type: Sequelize.STRING,
             },
