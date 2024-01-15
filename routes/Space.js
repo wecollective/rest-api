@@ -1687,16 +1687,7 @@ router.post('/invite-space-users', authenticateToken, async (req, res) => {
 
 router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const {
-        accountHandle,
-        accountName,
-        notificationId,
-        spaceId,
-        spaceHandle,
-        spaceName,
-        userId,
-        response,
-    } = req.body
+    const { notificationId, spaceId, userId, type, response } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -1740,34 +1731,45 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
             )
 
             const notifyInviteCreator = await new Promise(async (resolve) => {
-                const inviteCreator = await User.findOne({
-                    where: { id: userId },
-                    attributes: ['id', 'name', 'email', 'emailsDisabled'],
-                })
                 const createNotification = await Notification.create({
-                    ownerId: inviteCreator.id,
-                    type: 'space-invite-response',
+                    ownerId: userId,
+                    type: `${type}-invite-response`,
                     state: response,
                     seen: false,
                     spaceAId: spaceId,
                     userId: accountId,
                 })
-                const sendEmail = inviteCreator.emailsDisabled
+                // get info to create email
+                const invitor = await User.findOne({
+                    where: { id: userId },
+                    attributes: ['name', 'email', 'emailsDisabled'],
+                })
+                const responder = await User.findOne({
+                    where: { id: accountId },
+                    attributes: ['name', 'email'],
+                })
+                const space = await Space.findOne({
+                    where: { id: spaceId },
+                    attributes: ['name', 'handle'],
+                })
+                const sendEmail = invitor.emailsDisabled
                     ? null
                     : await sgMail.send({
-                          to: inviteCreator.email,
+                          to: invitor.email,
                           from: { email: 'admin@weco.io', name: 'we { collective }' },
                           subject: 'New notification',
                           text: `
-                            Hi ${inviteCreator.name}, ${accountName} just ${response} your invite to join ${spaceName}: ${appURL}/s/${spaceHandle} on weco.
+                            Hi ${invitor.name}, ${responder.name} just ${response} your invite to ${
+                              type === 'chat' ? 'chat' : 'join'
+                          } ${space.name}: ${appURL}/s/${space.handle} on weco.
                         `,
                           html: `
                             <p>
-                                Hi ${inviteCreator.name},
+                                Hi ${invitor.name},
                                 <br/>
-                                <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
-                                just ${response} your invite to join
-                                <a href='${appURL}/s/${spaceHandle}'>${spaceName}</a>
+                                <a href='${appURL}/u/${responder.handle}'>${responder.name}</a>
+                                just ${response} your invite to ${type === 'chat' ? 'chat' : 'join'}
+                                <a href='${appURL}/s/${space.handle}'>${space.name}</a>
                                 on weco.
                                 <br/>
                             </p>
