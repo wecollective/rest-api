@@ -28,7 +28,8 @@ router.post('/log-in', async (req, res) => {
     })
     if (!user) res.status(404).json({ message: 'User not found' })
     else if (user.state === 'spam') res.status(403).json({ message: 'Spam account' })
-    else if (!user.emailVerified) res.status(403).json({ message: 'Email not yet verified' })
+    else if (!user.emailVerified)
+        res.status(403).json({ userId: user.id, message: 'Email not yet verified' })
     else {
         // check password is correct
         bcrypt.compare(password, user.password, function (error, success) {
