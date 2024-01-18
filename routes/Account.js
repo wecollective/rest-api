@@ -31,6 +31,7 @@ const {
     Audio,
 } = require('../models')
 const {
+    fullPostAttributes,
     totalSpaceFollowers,
     totalSpaceComments,
     totalSpaceLikes,
@@ -208,23 +209,69 @@ router.get('/chats', authenticateToken, async (req, res) => {
         const chats = await user.getUserSpaces({
             where: { state: 'active', type: 'chat' },
             through: { where: { relationship: 'access', state: 'active' } },
-            attributes: [
-                'id',
-                'handle',
-                'name',
-                'description',
-                'flagImagePath',
-                'coverImagePath',
-                'totalFollowers',
-                'totalComments',
-                'totalPostLikes',
-                'totalPosts',
-            ],
+            attributes: ['id', 'name', 'flagImagePath', 'totalFollowers'],
+            joinTableAttributes: [],
             limit: 10,
             // offset,
         })
-        res.status(200).json(chats)
+        Promise.all(
+            chats.map(
+                (chat) =>
+                    new Promise(async (resolve) => {
+                        // if no chat image or name and only one other user, get their profile pic to display as image
+                        if ((!chat.flagImagePath || !chat.name) && chat.totalFollowers <= 2) {
+                            const otherUser = await SpaceUser.findOne({
+                                where: {
+                                    spaceId: chat.id,
+                                    userId: { [Op.not]: accountId },
+                                    relationship: 'access',
+                                },
+                                attributes: [],
+                                include: {
+                                    model: User,
+                                    attributes: ['id', 'name', 'flagImagePath'],
+                                },
+                            })
+                            chat.setDataValue('otherUser', otherUser.User)
+                            resolve()
+                        } else resolve()
+                    })
+            )
+        )
+            .then(() => res.status(200).json(chats))
+            .catch((error) => res.status(500).json({ error }))
     }
+})
+
+router.post('/messages', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { chatId, offset } = req.body
+
+    //  const chatData = await Space.findOne({ where: { id: chatId }, attributes: [''] })
+
+    const emptyPosts = await Post.findAndCountAll({
+        where: { '$AllPostSpaces.id$': chatId },
+        order: [['createdAt', 'DESC']],
+        limit: 20,
+        offset,
+        subQuery: false,
+        attributes: ['id'],
+        include: {
+            model: Space,
+            as: 'AllPostSpaces',
+            attributes: [],
+            through: { where: { state: 'active', relationship: 'direct' }, attributes: [] },
+        },
+    })
+
+    const postsWithData = await Post.findAll({
+        where: { id: emptyPosts.rows.map((post) => post.id) },
+        attributes: fullPostAttributes,
+        order: [['createdAt', 'DESC']],
+        include: findPostInclude(accountId),
+    })
+
+    res.status(200).json({ total: emptyPosts.count, messages: postsWithData })
 })
 
 // POST

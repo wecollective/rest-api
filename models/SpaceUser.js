@@ -16,7 +16,7 @@ module.exports = (sequelize, DataTypes) => {
         {}
     )
     SpaceUser.associate = function (models) {
-        // associations can be defined here
+        SpaceUser.belongsTo(models.User)
     }
     return SpaceUser
 }

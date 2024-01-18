@@ -2448,6 +2448,67 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
     }
 })
 
+// todo: create seperate function addPostSpaces that can be used here and in create-post route
+// todo: send out signals and notifications...
+router.post('/create-chat-message', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else {
+        // upload files and create post
+        const { postData, files } = await uploadFiles(req, res, accountId)
+        const { post } = await createPost(postData, files, accountId)
+        const spaceIds = [postData.link.parent.id]
+        // store spaceIds and update with ancestors for response
+        const allSpaceIds = [...spaceIds]
+        // add spaces and increment space stats
+        const addSpaces = spaceIds
+            ? await new Promise(async (resolve) => {
+                  const addDirectSpaces = await Promise.all(
+                      spaceIds.map((spaceId) =>
+                          createSpacePost(accountId, spaceId, post.id, 'post', 'direct')
+                      )
+                  )
+                  // gather direct spaces ancestor ids
+                  const spaces = await Space.findAll({
+                      where: { id: spaceIds, state: 'active' },
+                      attributes: ['id'],
+                      include: {
+                          model: Space,
+                          as: 'SpaceAncestors',
+                          attributes: ['id'],
+                          through: { where: { state: 'open' }, attributes: [] },
+                      },
+                  })
+                  let ancestorIds = []
+                  spaces.forEach((space) =>
+                      ancestorIds.push(...space.SpaceAncestors.map((space) => space.id))
+                  )
+                  // remove duplicates and direct spaces
+                  ancestorIds = [...new Set(ancestorIds)].filter((id) => !spaceIds.includes(id))
+                  // store ancestor ids for response
+                  allSpaceIds.push(...ancestorIds)
+                  const addIndirectSpaces = await Promise.all(
+                      ancestorIds.map((spaceId) =>
+                          createSpacePost(accountId, spaceId, post.id, 'post', 'indirect')
+                      )
+                  )
+                  // increment space stats
+                  const incrementSpaceStats = await Space.increment('totalPosts', {
+                      where: { id: allSpaceIds },
+                      silent: true,
+                  })
+                  Promise.all([addDirectSpaces, addIndirectSpaces, incrementSpaceStats])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
+              })
+            : null
+
+        Promise.all([addSpaces])
+            .then(() => res.status(200).json(post))
+            .catch((error) => res.status(500).json(error))
+    }
+})
+
 // todo: notify parent owner
 // todo: update post last activity
 router.post('/create-poll-answer', authenticateToken, async (req, res) => {
