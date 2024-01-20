@@ -1873,21 +1873,13 @@ router.post('/request-space-access', authenticateToken, async (req, res) => {
 
 router.post('/respond-to-space-access-request', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const {
-        accountHandle,
-        accountName,
-        notificationId,
-        spaceId,
-        spaceHandle,
-        spaceName,
-        userId,
-        response,
-    } = req.body
+    const { accountHandle, accountName, spaceId, spaceHandle, spaceName, userId, response } =
+        req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const existingAccess = await SpaceUser.findOne({
-            where: { relationship: 'access', state: 'active', spaceId, userId: accountId },
+            where: { relationship: 'access', state: 'active', spaceId, userId },
         })
         if (existingAccess) res.status(200).json({ message: 'Success' })
         else {
@@ -1921,7 +1913,7 @@ router.post('/respond-to-space-access-request', authenticateToken, async (req, r
                     where: {
                         type: 'space-access-request',
                         spaceAId: spaceId,
-                        userId: userId,
+                        userId,
                         state: 'pending',
                     },
                 }
