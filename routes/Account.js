@@ -635,7 +635,33 @@ router.post('/liked-posts', authenticateToken, async (req, res) => {
             const post = posts.find((p) => p.id === like.itemId)
             orderedPosts.push(post)
         })
-        res.status(200).json(orderedPosts)
+        Promise.all(
+            orderedPosts.map(
+                (post) =>
+                    new Promise(async (resolve) => {
+                        if (post.type.includes('block')) {
+                            // fetch block media
+                            const mediaType = post.type.split('-')[0]
+                            let model = Url
+                            let attributes = ['url', 'image', 'title', 'description', 'domain']
+                            if (['image', 'audio'].includes(mediaType)) attributes = ['url']
+                            if (mediaType === 'image') model = Image
+                            if (mediaType === 'audio') model = Audio
+                            const linkToMedia = await Link.findOne({
+                                where: { itemAId: post.id, itemBType: mediaType, state: 'active' },
+                                attributes: [],
+                                include: { model, attributes },
+                            })
+                            if (mediaType === 'url') post.setDataValue('Url', linkToMedia.Url)
+                            if (mediaType === 'image') post.setDataValue('Image', linkToMedia.Image)
+                            if (mediaType === 'audio') post.setDataValue('Audio', linkToMedia.Audio)
+                            resolve()
+                        } else resolve()
+                    })
+            )
+        )
+            .then(() => res.status(200).json(orderedPosts))
+            .catch((error) => res.status(500).json({ error }))
     }
 })
 
