@@ -1,7 +1,6 @@
 require('dotenv').config()
 console.log(`Node environment: ${process.env.NODE_ENV}`)
 const config = require('./Config')
-// const passport = require('passport')
 const { v4: uuidv4 } = require('uuid')
 const fs = require('fs')
 const path = require('path')
