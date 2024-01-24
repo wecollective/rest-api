@@ -12,6 +12,7 @@ const sequelize = require('sequelize')
 const { Op, QueryTypes } = sequelize
 const db = require('../models/index')
 const {
+    isValidUrl,
     findFullPostAttributes,
     findPostInclude,
     postAccess,
@@ -1030,7 +1031,7 @@ router.get('/post-data', authenticateToken, async (req, res) => {
         // fetch block media
         const mediaType = post.type.split('-')[0]
         let model = Url
-        let attributes = ['url', 'image', 'title', 'description', 'domain']
+        let attributes = ['url', 'image', 'title', 'description', 'domain', 'favicon']
         if (['image', 'audio'].includes(mediaType)) attributes = ['url']
         if (mediaType === 'image') model = Image
         if (mediaType === 'audio') model = Audio
@@ -1800,62 +1801,52 @@ router.get('/plot-graph-data', (req, res) => {
 router.get('/scrape-url', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { url } = req.query
-    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
-    else {
-        const browser = await puppeteer.launch() // { headless: false })
-        try {
-            const page = await browser.newPage()
-            await page.goto(url, { waitUntil: 'networkidle0', timeout: 20000 }) // { timeout: 20000 }, { waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2' }
-            await page.evaluate(async () => {
-                const youtubeCookieConsent = await document.querySelector(
-                    'base[href="https://consent.youtube.com/"]'
-                )
-                if (youtubeCookieConsent) {
-                    const rejectButton = await document.querySelector(
-                        'button[aria-label="Reject all"]'
-                    )
-                    rejectButton.click()
-                    return
-                } else {
-                    return
-                }
-            })
-            await page.waitForSelector('title')
-            const urlData = await page.evaluate(async () => {
-                let data = {
-                    title: document.title || null,
-                    description: null,
-                    domain: null,
-                    image: null,
-                }
-                // description
-                const ogDescription = document.querySelector('meta[property="og:description"]')
-                if (ogDescription) data.description = ogDescription.content
-                else {
-                    const nameDescription = document.querySelector('meta[name="description"]')
-                    if (nameDescription) data.description = nameDescription.content
-                }
-                // domain
-                const ogSiteName = document.querySelector('meta[property="og:site_name"]')
-                if (ogSiteName) data.domain = ogSiteName.content
-                // image
-                const metaImage = document.querySelector('meta[property="og:image"]')
-                if (metaImage) data.image = metaImage.content
-                else {
-                    const firstImage = document.querySelector('body div img')
-                    if (firstImage) data.image = firstImage.src
-                }
-                return data
-            })
-            if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
-            if (urlData.image[0] === '/')
-                urlData.image = `https://${new URL(url).hostname}${urlData.image}`
-            res.status(200).json(urlData)
-        } catch (error) {
-            res.status(200).json({ data: null, error })
-        } finally {
-            await browser.close()
-        }
+    if (!accountId) return res.status(401).json({ message: 'Unauthorized' })
+    if (!isValidUrl(url)) return res.status(400).json({ message: 'Invalid URL' })
+    const browser = await puppeteer.launch({ headless: false })
+    try {
+        const page = await browser.newPage()
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 }) // waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2'
+        const urlData = await page.evaluate(async () => {
+            let data = {
+                title: document.title || null,
+                description: null,
+                domain: null,
+                favicon: null,
+                image: null,
+            }
+            // description
+            const ogDescription = await document.querySelector('meta[property="og:description"]')
+            if (ogDescription) data.description = ogDescription.content
+            else {
+                const nameDescription = await document.querySelector('meta[name="description"]')
+                if (nameDescription) data.description = nameDescription.content
+            }
+            // domain
+            const ogSiteName = await document.querySelector('meta[property="og:site_name"]')
+            if (ogSiteName) data.domain = ogSiteName.content
+            // favicon
+            const favicon = await document.querySelector('link[rel="icon"]')
+            if (favicon) data.favicon = favicon.href
+            // image
+            const metaImage = await document.querySelector('meta[property="og:image"]')
+            if (metaImage) data.image = metaImage.content
+            else {
+                const firstImage = await document.querySelector('body div img')
+                if (firstImage) data.image = firstImage.src
+            }
+            return data
+        })
+        // manually create domain if not present
+        if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
+        // create full url for image if incomplete
+        if (urlData.image && urlData.image[0] === '/')
+            urlData.image = `https://${new URL(url).hostname}${urlData.image}`
+        res.status(200).json(urlData)
+    } catch (error) {
+        res.status(200).json({ data: null, error })
+    } finally {
+        await browser.close()
     }
 })
 
@@ -1913,7 +1904,7 @@ router.get('/post-urls', async (req, res) => {
                         attributes: [],
                         include: {
                             model: Url,
-                            attributes: ['url', 'image', 'title', 'description', 'domain'],
+                            attributes: ['url', 'image', 'title', 'description', 'domain', 'favicon'],
                         },
                     })
                     blocks.push({ ...link.Post.dataValues, index: link.index, Url: linkToUrl.Url })

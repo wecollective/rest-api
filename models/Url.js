@@ -17,6 +17,7 @@ module.exports = (sequelize, DataTypes) => {
             title: DataTypes.TEXT,
             description: DataTypes.TEXT,
             domain: DataTypes.TEXT,
+            favicon: DataTypes.TEXT,
         },
         {}
     )

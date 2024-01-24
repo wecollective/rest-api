@@ -643,7 +643,14 @@ router.post('/liked-posts', authenticateToken, async (req, res) => {
                             // fetch block media
                             const mediaType = post.type.split('-')[0]
                             let model = Url
-                            let attributes = ['url', 'image', 'title', 'description', 'domain']
+                            let attributes = [
+                                'url',
+                                'image',
+                                'title',
+                                'description',
+                                'domain',
+                                'favicon',
+                            ]
                             if (['image', 'audio'].includes(mediaType)) attributes = ['url']
                             if (mediaType === 'image') model = Image
                             if (mediaType === 'audio') model = Audio

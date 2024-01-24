@@ -53,6 +53,15 @@ const defaultPostValues = {
     totalGlassBeadGames: 0,
 }
 
+function isValidUrl(string) {
+    try {
+        new URL(string)
+        return true
+    } catch (error) {
+        return false
+    }
+}
+
 function findFileName(file, accountId) {
     const date = Date.now().toString()
     const extension = file.fieldname.includes('audio') ? 'mp3' : file.mimetype.split('/')[1]
@@ -130,7 +139,7 @@ function uploadPostFile(file, accountId) {
 
 function createUrl(accountId, postId, postType, urlData, index) {
     return new Promise(async (resolve) => {
-        const { url, title, description, domain, image, searchableText } = urlData
+        const { url, title, description, domain, favicon, image, searchableText } = urlData
         const newUrlBlock = await Post.create({
             ...defaultPostValues,
             creatorId: accountId,
@@ -145,6 +154,7 @@ function createUrl(accountId, postId, postType, urlData, index) {
             title,
             description,
             domain,
+            favicon,
             image,
             state: 'active',
         })
@@ -1080,7 +1090,7 @@ function findPostInclude(accountId) {
                     attributes: ['id'],
                     include: {
                         model: Url,
-                        attributes: ['url', 'image', 'title', 'description', 'domain'],
+                        attributes: ['url', 'image', 'title', 'description', 'domain', 'favicon'],
                     },
                 },
             },
@@ -1351,7 +1361,7 @@ async function getFullLinkedItem(type, id, accountId) {
             // fetch block media
             const mediaType = item.type.split('-')[0]
             let model = Url
-            let attributes = ['url', 'image', 'title', 'description', 'domain']
+            let attributes = ['url', 'image', 'title', 'description', 'domain', 'favicon']
             if (['image', 'audio'].includes(mediaType)) attributes = ['url']
             if (mediaType === 'image') model = Image
             if (mediaType === 'audio') model = Audio
@@ -2024,6 +2034,7 @@ module.exports = {
     totalUserPosts,
     totalUserComments,
     restrictedAncestors,
+    isValidUrl,
     findStartDate,
     findPostOrder,
     findSpaceOrder,

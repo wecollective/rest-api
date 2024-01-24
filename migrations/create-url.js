@@ -38,6 +38,9 @@ module.exports = {
             domain: {
                 type: Sequelize.TEXT,
             },
+            favicon: {
+                type: Sequelize.TEXT,
+            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE,

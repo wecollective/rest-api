@@ -7,10 +7,10 @@ module.exports = {
         return queryInterface.sequelize.transaction((t) => {
             return Promise.all([
                 queryInterface.addColumn(
-                    'Spaces',
-                    'type',
+                    'Urls',
+                    'favicon',
                     {
-                        type: Sequelize.DataTypes.STRING,
+                        type: Sequelize.DataTypes.Text,
                     },
                     { transaction: t }
                 ),
@@ -20,7 +20,7 @@ module.exports = {
 
     down: (queryInterface, Sequelize) => {
         return queryInterface.sequelize.transaction((t) => {
-            return Promise.all([queryInterface.removeColumn('Spaces', 'type', { transaction: t })])
+            return Promise.all([queryInterface.removeColumn('Urls', 'favicon', { transaction: t })])
         })
     },
 }
