@@ -1798,55 +1798,71 @@ router.get('/plot-graph-data', (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
+const userAgents = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15',
+]
+
 router.get('/scrape-url', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { url } = req.query
-    if (!accountId) return res.status(401).json({ message: 'Unauthorized' })
-    if (!isValidUrl(url)) return res.status(400).json({ message: 'Invalid URL' })
-    const browser = await puppeteer.launch({ headless: false })
-    try {
-        const page = await browser.newPage()
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 }) // waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2'
-        const urlData = await page.evaluate(async () => {
-            let data = {
-                title: document.title || null,
-                description: null,
-                domain: null,
-                favicon: null,
-                image: null,
-            }
-            // description
-            const ogDescription = await document.querySelector('meta[property="og:description"]')
-            if (ogDescription) data.description = ogDescription.content
-            else {
-                const nameDescription = await document.querySelector('meta[name="description"]')
-                if (nameDescription) data.description = nameDescription.content
-            }
-            // domain
-            const ogSiteName = await document.querySelector('meta[property="og:site_name"]')
-            if (ogSiteName) data.domain = ogSiteName.content
-            // favicon
-            const favicon = await document.querySelector('link[rel="icon"]')
-            if (favicon) data.favicon = favicon.href
-            // image
-            const metaImage = await document.querySelector('meta[property="og:image"]')
-            if (metaImage) data.image = metaImage.content
-            else {
-                const firstImage = await document.querySelector('body div img')
-                if (firstImage) data.image = firstImage.src
-            }
-            return data
-        })
-        // manually create domain if not present
-        if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
-        // create full url for image if incomplete
-        if (urlData.image && urlData.image[0] === '/')
-            urlData.image = `https://${new URL(url).hostname}${urlData.image}`
-        res.status(200).json(urlData)
-    } catch (error) {
-        res.status(200).json({ data: null, error })
-    } finally {
-        await browser.close()
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    // else if (!isValidUrl(url)) return res.status(400).json({ message: 'Invalid URL' })
+    else {
+        const browser = await puppeteer.launch({ headless: 'new' })
+        try {
+            const page = await browser.newPage()
+            await page.setUserAgent(userAgents[Math.floor(Math.random() * userAgents.length)])
+            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 }) // waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2'
+            await page.waitForSelector('title')
+            const urlData = await page.evaluate(async () => {
+                let data = {
+                    title: document.title || null,
+                    description: null,
+                    domain: null,
+                    favicon: null,
+                    image: null,
+                }
+                // description
+                const ogDescription = await document.querySelector(
+                    'meta[property="og:description"]'
+                )
+                if (ogDescription) data.description = ogDescription.content
+                else {
+                    const nameDescription = await document.querySelector('meta[name="description"]')
+                    if (nameDescription) data.description = nameDescription.content
+                }
+                // domain
+                const ogSiteName = await document.querySelector('meta[property="og:site_name"]')
+                if (ogSiteName) data.domain = ogSiteName.content
+                // favicon
+                const favicon = await document.querySelector('link[rel="icon"]')
+                if (favicon) data.favicon = favicon.href
+                // image
+                const metaImage = await document.querySelector('meta[property="og:image"]')
+                if (metaImage) data.image = metaImage.content
+                else {
+                    const firstImage = await document.querySelector('body div img')
+                    if (firstImage) data.image = firstImage.src
+                }
+                return data
+            })
+            // manually create domain if not present
+            if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
+            // create full url for image if incomplete
+            if (urlData.image && urlData.image[0] === '/')
+                urlData.image = `https://${new URL(url).hostname}${urlData.image}`
+            res.status(200).json(urlData)
+        } catch (error) {
+            res.status(200).json({ data: null, error })
+        } finally {
+            await browser.close()
+        }
     }
 })
 
@@ -1904,7 +1920,14 @@ router.get('/post-urls', async (req, res) => {
                         attributes: [],
                         include: {
                             model: Url,
-                            attributes: ['url', 'image', 'title', 'description', 'domain', 'favicon'],
+                            attributes: [
+                                'url',
+                                'image',
+                                'title',
+                                'description',
+                                'domain',
+                                'favicon',
+                            ],
                         },
                     })
                     blocks.push({ ...link.Post.dataValues, index: link.index, Url: linkToUrl.Url })
