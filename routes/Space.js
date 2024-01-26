@@ -330,7 +330,7 @@ router.get('/space-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { handle } = req.query
 
-    const spaceData = await Space.findOne({
+    const space = await Space.findOne({
         where: { handle, state: 'active' },
         attributes: [
             'id',
@@ -342,6 +342,7 @@ router.get('/space-data', authenticateToken, async (req, res) => {
             'privacy',
             'inviteToken',
             'totalPosts',
+            'totalFollowers',
             totalSpaceSpaces,
             // todo: set up tally system and display next to tabs
             // handle === 'all' ? totalUsers : totalSpaceUsers,
@@ -382,21 +383,20 @@ router.get('/space-data', authenticateToken, async (req, res) => {
         ],
     })
 
-    if (!spaceData) res.status(404).send({ message: 'Space not found' })
+    if (!space) res.status(404).send({ message: 'Space not found' })
     else {
         // check user access
-        const { privacy, spaceAccess, ancestorAccess, isModerator, isFollowing } =
-            spaceData.dataValues
+        const { privacy, spaceAccess, ancestorAccess, isModerator, isFollowing } = space.dataValues
         let access = 'blocked'
         if (privacy === 'public') access = ancestorAccess ? 'granted' : 'blocked-by-ancestor'
         else if (spaceAccess) access = spaceAccess === 'active' ? 'granted' : 'pending'
-        spaceData.setDataValue('access', access)
-        delete spaceData.dataValues.spaceAccess
-        delete spaceData.dataValues.ancestorAccess
+        space.setDataValue('access', access)
+        delete space.dataValues.spaceAccess
+        delete space.dataValues.ancestorAccess
         // convert SQL booleans to JS booleans
-        spaceData.setDataValue('isModerator', !!isModerator)
-        spaceData.setDataValue('isFollowing', !!isFollowing)
-        res.status(200).send(spaceData)
+        space.setDataValue('isModerator', !!isModerator)
+        space.setDataValue('isFollowing', !!isFollowing)
+        res.status(200).send(space)
     }
 })
 
@@ -518,6 +518,20 @@ router.get('/find-child-spaces', authenticateToken, async (req, res) => {
     })
     if (spaces) res.status(200).json(spaces)
     else res.status(500).json({ message: 'Error' })
+})
+
+router.get('/followers', async (req, res) => {
+    const { spaceId } = req.query
+    const space = await Space.findOne({ where: { id: spaceId }, attributes: ['id'] })
+    const followers = await space.getFollowers({
+        where: { flagImagePath: { [Op.not]: null } },
+        attributes: ['flagImagePath'],
+        through: { where: { state: 'active', relationship: 'follower' } },
+        joinTableAttributes: ['id', 'createdAt'],
+        limit: 6,
+        order: [[sequelize.col('SpaceUser.createdAt'), 'DESC']],
+    })
+    res.status(200).json(followers.map((user) => user.flagImagePath))
 })
 
 router.get('/top-contributors', async (req, res) => {
