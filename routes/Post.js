@@ -2269,6 +2269,12 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                   commentId,
               })
 
+        const io = req.app.get('socketio')
+        io.emit('notification', {
+            userId: item.Creator.id,
+            notification: { type: 'like', itemType: type, itemId: id, creatorId: accountId },
+        })
+
         let itemUrl
         if (type === 'link') itemUrl = `${appURL}/linkmap?item=${sourceType}&id=${sourceId}`
         else itemUrl = `${appURL}/p/${id}`
