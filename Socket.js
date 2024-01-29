@@ -18,7 +18,7 @@ io.on('connection', (socket) => {
     // account signals
     socket.on('log-in', (userId) => {
         console.log(999, 'connect', userId)
-        users[userId] = socket.id
+        if (userId) users[userId] = socket.id
         sockets[socket.id] = { id: userId, rooms: [] }
     })
 
@@ -53,7 +53,7 @@ io.on('connection', (socket) => {
         // create room if not yet present
         if (!rooms[roomId]) rooms[roomId] = []
         // add room id to socket
-        sockets[socket.id].rooms.push(roomId)
+        if (sockets[socket.id]) sockets[socket.id].rooms.push(roomId)
         // signal to other users in the room
         socket.to(roomId).emit('user-entering', user)
         // join the room
@@ -69,9 +69,23 @@ io.on('connection', (socket) => {
         // exit room
         socket.leave(roomId)
         // remove user from room
-        rooms[roomId] = rooms[roomId].filter((u) => u.id !== userId)
+        if (rooms[roomId]) rooms[roomId] = rooms[roomId].filter((u) => u.id !== userId)
         // remove room from socket rooms
-        sockets[socket.id].rooms = sockets[socket.id].rooms.filter((id) => id !== roomId)
+        if (sockets[socket.id])
+            sockets[socket.id].rooms = sockets[socket.id].rooms.filter((id) => id !== roomId)
+    })
+
+    // chats
+    socket.on('user-started-typing', (data) => {
+        const { roomId, user } = data
+        // notify other users
+        socket.to(roomId).emit('user-started-typing', user)
+    })
+
+    socket.on('user-stopped-typing', (data) => {
+        const { roomId, user } = data
+        // notify other users
+        socket.to(roomId).emit('user-stopped-typing', user)
     })
 
     // game room signals (old)
