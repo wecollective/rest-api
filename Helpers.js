@@ -1129,6 +1129,7 @@ function findPostInclude(accountId) {
                 include: {
                     model: Link,
                     as: 'MediaLink',
+                    where: { state: 'active', relationship: 'parent' },
                     attributes: ['id'],
                     include: {
                         model: Audio,
