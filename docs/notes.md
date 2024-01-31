@@ -19,6 +19,14 @@ require('crypto').randomBytes(64).toString('hex')
 
 https://serverfault.com/questions/330532/xvda1-is-100-full-what-is-it-how-to-fix
 
+# display total used & available disk space
+
+df -h
+
+# list folders and files in order of size
+
 sudo du -x -h / | sort -h | tail -40
+
+# flush pm2 logs
 
 pm2 flush
