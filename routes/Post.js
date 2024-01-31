@@ -1533,7 +1533,8 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
         // upload files and create post
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post } = await createPost(postData, files, accountId)
-        const spaceIds = [postData.link.parent.id]
+        const chatId = postData.link.parent.id
+        const spaceIds = [chatId]
         // store spaceIds and update with ancestors for response
         const allSpaceIds = [...spaceIds]
         // add spaces and increment space stats
@@ -1578,6 +1579,9 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
                       .catch((error) => resolve(error))
               })
             : null
+        // signal post to users in room
+        const io = req.app.get('socketio')
+        io.to(`chat-${chatId}`).emit('new-message', post.id)
 
         Promise.all([addSpaces])
             .then(() => res.status(200).json(post))
@@ -2270,9 +2274,11 @@ router.post('/add-like', authenticateToken, async (req, res) => {
               })
 
         const io = req.app.get('socketio')
-        io.emit('notification', {
-            userId: item.Creator.id,
-            notification: { type: 'like', itemType: type, itemId: id, creatorId: accountId },
+        io.to(`user-${item.Creator.id}`).emit('notification', {
+            type: 'like',
+            itemType: type,
+            itemId: id,
+            creatorId: accountId,
         })
 
         let itemUrl

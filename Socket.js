@@ -3,32 +3,29 @@ const whitelist = [config.appURL]
 if (process.env.APP_ENV === 'prod') whitelist.push(config.appURL2)
 const axios = require('axios')
 const socketServer = require('http').createServer()
-const io = require('socket.io')(socketServer, { cors: { origin: whitelist } })
+const socketIo = require('socket.io')
+const io = socketIo(socketServer, { cors: { origin: whitelist } })
 
-const users = []
 const sockets = []
-const rooms = []
+const rooms = [] // user, space, post, or game + id: `user-58`
 
 // old
 const gameRooms = []
 const socketsToRooms = []
 const maxPlayers = 10
 
+// socket.io cheatsheet: https://socket.io/docs/v3/emit-cheatsheet/
 io.on('connection', (socket) => {
     // account signals
     socket.on('log-in', (userId) => {
         console.log(999, 'connect', userId)
-        if (userId) users[userId] = socket.id
+        socket.join(`user-${userId}`)
         sockets[socket.id] = { id: userId, rooms: [] }
     })
 
     socket.on('log-out', (userId) => {
-        delete users[userId]
-    })
-
-    socket.on('notification', (data) => {
-        const { userId, notification } = data
-        io.to(users[userId]).emit('notification', notification)
+        console.log(888, 'log-out', userId)
+        socket.leave(`user-${userId}`)
     })
 
     socket.on('disconnect', () => {
@@ -40,8 +37,7 @@ io.on('connection', (socket) => {
                 io.in(roomId).emit('user-disconnected', user.id)
                 rooms[roomId] = rooms[roomId].filter((u) => u.id !== user.id)
             })
-            // delete records
-            delete users[user.id]
+            // delete record
             delete sockets[socket.id]
         }
     })
@@ -78,13 +74,11 @@ io.on('connection', (socket) => {
     // chats
     socket.on('user-started-typing', (data) => {
         const { roomId, user } = data
-        // notify other users
         socket.to(roomId).emit('user-started-typing', user)
     })
 
     socket.on('user-stopped-typing', (data) => {
         const { roomId, user } = data
-        // notify other users
         socket.to(roomId).emit('user-stopped-typing', user)
     })
 
