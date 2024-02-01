@@ -21,6 +21,7 @@ const {
     SpacePost,
     GlassBeadGame,
     UserPost,
+    Reaction,
 } = require('./models')
 
 var aws = require('aws-sdk')
@@ -459,6 +460,7 @@ async function accountReaction(type, itemType, itemId, accountId) {
     return reaction
 }
 
+// todo: needs to check comment state as well
 async function accountComment(postId, accountId) {
     const [{ comment }] = await db.sequelize.query(
         `SELECT CASE WHEN EXISTS (
@@ -1139,6 +1141,12 @@ function findPostInclude(accountId) {
                     },
                 },
             },
+        },
+        {
+            model: Reaction,
+            where: { creatorId: accountId, state: 'active' },
+            attributes: ['type'],
+            required: false,
         },
         // // todo: try including blocks
         // {
