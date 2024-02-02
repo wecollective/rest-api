@@ -271,7 +271,26 @@ router.post('/messages', authenticateToken, async (req, res) => {
         include: findPostInclude(accountId),
     })
 
-    res.status(200).json({ total: emptyPosts.count, messages: postsWithData })
+    Promise.all(
+        postsWithData.map(
+            (post) =>
+                new Promise(async (resolve) => {
+                    if (post.type === 'chat-reply') {
+                        const parentLink = await Link.findOne({
+                            where: { itemBId: post.id, relationship: 'parent' },
+                            attributes: [],
+                            include: { model: Post, attributes: fullPostAttributes },
+                        })
+                        post.setDataValue('Parent', parentLink.Post)
+                        resolve()
+                    } else resolve()
+                })
+        )
+    )
+        .then(() => res.status(200).json({ total: emptyPosts.count, messages: postsWithData }))
+        .catch((error) => res.status(500).json({ error }))
+
+    // res.status(200).json({ total: emptyPosts.count, messages: postsWithData })
 })
 
 // POST
