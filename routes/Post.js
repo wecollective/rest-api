@@ -2419,6 +2419,11 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
             item.Creator.emailsDisabled ||
             (await accountMuted(accountId, item.Creator))
 
+        let postId = null
+        let commentId = null
+        if (type === 'comment') commentId = id
+        else postId = id
+
         const sendNotification = skipNotification
             ? null
             : await Notification.create({
@@ -2427,7 +2432,8 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
                   seen: false,
                   spaceAId: spaceId,
                   userId: accountId,
-                  postId: id,
+                  postId,
+                  commentId,
               })
 
         const itemUrl = `${appURL}/p/${id}`
