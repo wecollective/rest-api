@@ -30,6 +30,7 @@ const {
     createPost,
     scheduleNextBeadDeadline,
     createUrl,
+    attachComment,
     fullPostAttributes,
     defaultPostValues,
 } = require('../Helpers')
@@ -694,7 +695,11 @@ router.get('/post-comments', async (req, res) => {
             const comments = await parent.getBlocks({
                 attributes: [...fullPostAttributes, 'totalChildComments'],
                 through: {
-                    where: { itemBType: 'comment', relationship: 'parent', state: 'active' },
+                    where: {
+                        itemBType: ['comment', 'chat-reply'],
+                        relationship: 'parent',
+                        state: 'active',
+                    },
                 },
                 joinTableAttributes: [],
                 include: [
@@ -1360,98 +1365,8 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
     else {
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post } = await createPost(postData, files, accountId)
-        const { parent } = postData.link
-        // scenarios:
-        // + adding comment on post
-        // + adding comment on comment
-        // + adding comment on bead, poll-answer, card-face, block
-        const rootLink = await Link.findOne({
-            where: { itemBId: parent.id, itemBType: parent.type, relationship: 'root' },
-            attributes: ['itemAId', 'itemAType'],
-        })
-        // if parent has no root link, parent = root
-        const rootPost = await Post.findOne({
-            where: { id: rootLink ? rootLink.itemAId : parent.id },
-            attributes: ['id', 'type'],
-            include: {
-                model: Space,
-                as: 'AllPostSpaces',
-                where: { state: 'active' },
-                required: false,
-                attributes: ['id'],
-                through: { where: { state: 'active' }, attributes: [] },
-            },
-        })
-        const addParentLink = await Link.create({
-            creatorId: accountId,
-            itemAId: parent.id,
-            itemAType: parent.type,
-            itemBId: post.id,
-            itemBType: 'comment',
-            relationship: 'parent',
-            state: 'active',
-            totalLikes: 0,
-            totalComments: 0,
-            totalRatings: 0,
-        })
-        const addRootLink = await Link.create({
-            creatorId: accountId,
-            itemAId: rootPost.id,
-            itemAType: rootPost.type,
-            itemBId: post.id,
-            itemBType: 'comment',
-            relationship: 'root',
-            state: 'active',
-            totalLikes: 0,
-            totalComments: 0,
-            totalRatings: 0,
-        })
-        // find ancestors
-        const ancestorLinks = await Link.findAll({
-            where: { itemBId: parent.id, itemBType: parent.type, relationship: 'ancestor' },
-            attributes: ['itemAId', 'itemAType'],
-        })
-        const ancestors = [
-            parent,
-            ...ancestorLinks.map((a) => {
-                return { id: a.itemAId, type: a.itemAType }
-            }),
-        ]
-        // create new ancestor links
-        const createAncestorLinks = await Promise.all(
-            ancestors.map((a) =>
-                Link.create({
-                    creatorId: accountId,
-                    itemAId: a.id,
-                    itemAType: a.type,
-                    itemBId: post.id,
-                    itemBType: 'comment',
-                    relationship: 'ancestor',
-                    state: 'active',
-                    totalLikes: 0,
-                    totalComments: 0,
-                    totalRatings: 0,
-                })
-            )
-        )
-        // increment tallies
-        const incrementAncestorsTotalComments = await Post.increment('totalComments', {
-            where: { id: ancestors.map((a) => a.id) },
-            silent: true,
-        })
-        const incrementParentsChildComments = await Post.increment('totalChildComments', {
-            where: { id: parent.id },
-            silent: true,
-        })
-        const incrementSpaceStats = Space.increment('totalComments', {
-            where: { id: rootPost.AllPostSpaces.map((s) => s.id) },
-            silent: true,
-        })
-        // update ancestors lastActivity
-        const updateLastActivity = await Post.update(
-            { lastActivity: new Date() },
-            { where: { id: ancestors.map((a) => a.id) }, silent: true }
-        )
+        const { parent } = postData.links
+        const linkComment = await attachComment(post, parent, accountId)
         // notify parent owner
         const notifyParentOwner = await new Promise(async (resolve) => {
             const account = await User.findOne({
@@ -1509,16 +1424,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                 .catch((error) => resolve(error))
         })
 
-        Promise.all([
-            addParentLink,
-            addRootLink,
-            createAncestorLinks,
-            incrementAncestorsTotalComments,
-            incrementParentsChildComments,
-            incrementSpaceStats,
-            updateLastActivity,
-            notifyParentOwner,
-        ])
+        Promise.all([linkComment, notifyParentOwner])
             .then(() => res.status(200).json(post))
             .catch((error) => res.status(500).json(error))
     }
@@ -1533,7 +1439,7 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
         // upload files and create post
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post } = await createPost(postData, files, accountId)
-        const chatId = postData.link.parent.id
+        const { chatId, parent } = postData.links
         const spaceIds = [chatId]
         // store spaceIds and update with ancestors for response
         const allSpaceIds = [...spaceIds]
@@ -1579,11 +1485,12 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
                       .catch((error) => resolve(error))
               })
             : null
+        const linkComment = parent ? await attachComment(post, parent, accountId) : null
         // signal post to users in room
         const io = req.app.get('socketio')
         io.to(`chat-${chatId}`).emit('new-message', post.id)
 
-        Promise.all([addSpaces])
+        Promise.all([addSpaces, linkComment])
             .then(() => res.status(200).json(post))
             .catch((error) => res.status(500).json(error))
     }
@@ -1597,7 +1504,7 @@ router.post('/create-poll-answer', authenticateToken, async (req, res) => {
     else {
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post } = await createPost(postData, files, accountId)
-        const { parent } = postData.link
+        const { parent } = postData.links
         const addRootLink = await Link.create({
             creatorId: accountId,
             itemAId: parent.id,
@@ -1624,7 +1531,7 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
     else {
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post: newBead } = await createPost(postData, files, accountId)
-        const { parent } = postData.link
+        const { parent } = postData.links
 
         const creator = await User.findOne({
             where: { id: accountId },

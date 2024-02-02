@@ -1682,7 +1682,7 @@ function addGBGPlayers(postId, creator, settings) {
 
 // todo:
 // + check notifyMentions is adding the correct notification type
-async function createPost(data, files, accountId) {
+function createPost(data, files, accountId) {
     return new Promise(async (resolveA) => {
         const {
             type, // post, comment, poll-answer
@@ -1906,6 +1906,116 @@ async function createPost(data, files, accountId) {
     })
 }
 
+function attachComment(comment, parent, accountId) {
+    // comment and parent = { id: number, type: string }
+    // scenarios:
+    // + adding comment on post
+    // + adding comment on comment
+    // + adding comment on bead, poll-answer, card-face, block
+    return new Promise(async (resolve) => {
+        // link to parent comment
+        const rootLink = await Link.findOne({
+            where: { itemBId: parent.id, itemBType: parent.type, relationship: 'root' },
+            attributes: ['itemAId', 'itemAType'],
+        })
+        // if parent has no root link, parent = root
+        const rootPost = await Post.findOne({
+            where: { id: rootLink ? rootLink.itemAId : parent.id },
+            attributes: ['id', 'type'],
+            include: {
+                model: Space,
+                as: 'AllPostSpaces',
+                where: { state: 'active' },
+                required: false,
+                attributes: ['id'],
+                through: { where: { state: 'active' }, attributes: [] },
+            },
+        })
+        const addParentLink = await Link.create({
+            creatorId: accountId,
+            itemAId: parent.id,
+            itemAType: parent.type,
+            itemBId: comment.id,
+            itemBType: comment.type,
+            relationship: 'parent',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        const addRootLink = await Link.create({
+            creatorId: accountId,
+            itemAId: rootPost.id,
+            itemAType: rootPost.type,
+            itemBId: comment.id,
+            itemBType: comment.type,
+            relationship: 'root',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        // find ancestors
+        const ancestorLinks = await Link.findAll({
+            where: { itemBId: parent.id, itemBType: parent.type, relationship: 'ancestor' },
+            attributes: ['itemAId', 'itemAType'],
+        })
+        const ancestors = [
+            parent,
+            ...ancestorLinks.map((a) => {
+                return { id: a.itemAId, type: a.itemAType }
+            }),
+        ]
+        // create new ancestor links
+        const createAncestorLinks = await Promise.all(
+            ancestors.map((a) =>
+                Link.create({
+                    creatorId: accountId,
+                    itemAId: a.id,
+                    itemAType: a.type,
+                    itemBId: comment.id,
+                    itemBType: comment.type,
+                    relationship: 'ancestor',
+                    state: 'active',
+                    totalLikes: 0,
+                    totalComments: 0,
+                    totalRatings: 0,
+                })
+            )
+        )
+        // increment tallies
+        const incrementAncestorsTotalComments = await Post.increment('totalComments', {
+            where: { id: ancestors.map((a) => a.id) },
+            silent: true,
+        })
+        const incrementParentsChildComments = await Post.increment('totalChildComments', {
+            where: { id: parent.id },
+            silent: true,
+        })
+        const incrementSpaceStats = Space.increment('totalComments', {
+            where: { id: rootPost.AllPostSpaces.map((s) => s.id) },
+            silent: true,
+        })
+        // update ancestors lastActivity
+        const updateLastActivity = await Post.update(
+            { lastActivity: new Date() },
+            { where: { id: ancestors.map((a) => a.id) }, silent: true }
+        )
+
+        Promise.all([
+            addParentLink,
+            addRootLink,
+            createAncestorLinks,
+            incrementAncestorsTotalComments,
+            incrementParentsChildComments,
+            incrementSpaceStats,
+            updateLastActivity,
+        ])
+            .then(() => resolve())
+            .catch((error) => resolve(error))
+    })
+}
+
 function scheduleNextBeadDeadline(postId, settings, players) {
     return new Promise(async (resolve) => {
         const { movesPerPlayer, totalBeads, moveTimeWindow, playerOrder } = settings
@@ -2085,6 +2195,7 @@ module.exports = {
     accountLink,
     uploadFiles,
     createPost,
+    attachComment,
     scheduleNextBeadDeadline,
     // database operations
     updateAllSpaceStats,
