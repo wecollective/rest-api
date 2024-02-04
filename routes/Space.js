@@ -334,6 +334,7 @@ router.get('/space-data', authenticateToken, async (req, res) => {
         where: { handle, state: 'active' },
         attributes: [
             'id',
+            'type',
             'handle',
             'name',
             'description',
@@ -580,13 +581,21 @@ router.get('/space-about', async (req, res) => {
 router.post('/space-posts', authenticateToken, async (req, res) => {
     // todo: potentially merge with user posts: get('/posts')
     const accountId = req.user ? req.user.id : null
-    const { spaceId, limit, offset, params, mutedUsers } = req.body
+    const { spaceId, limit, offset, params, mutedUsers, postTypes } = req.body
     const { filter, type, sortBy, timeRange, depth, searchQuery } = params
     const startDate = findStartDate(timeRange)
     // const postType = findPostType(type)
     const order = findPostOrder(filter, sortBy)
     const through = findPostThrough(depth)
-    const where = findPostWhere('space', spaceId, startDate, type, 'post', searchQuery, mutedUsers)
+    const where = findPostWhere(
+        'space',
+        spaceId,
+        startDate,
+        type,
+        postTypes,
+        searchQuery,
+        mutedUsers
+    )
     const initialAttributes = findInitialPostAttributes(sortBy)
     const fullAttributes = findFullPostAttributes('Post', accountId)
 

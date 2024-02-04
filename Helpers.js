@@ -1001,7 +1001,7 @@ function findPostWhere(
     id,
     startDate,
     mediaTypes,
-    type,
+    postTypes,
     searchQuery,
     mutedUsers,
     spaceAccessList
@@ -1010,8 +1010,7 @@ function findPostWhere(
     const where = {
         state: 'active',
         createdAt: { [Op.between]: [startDate, Date.now()] },
-        // mediaTypes: { [Op.like]: `%${type}%` },
-        type,
+        type: postTypes,
     }
     if (mediaTypes !== 'All Types') {
         const formattedType = mediaTypes.replace(/\s+/g, '-').toLowerCase()

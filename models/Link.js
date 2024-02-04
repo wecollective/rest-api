@@ -29,6 +29,7 @@ module.exports = (sequelize, DataTypes) => {
     Link.associate = function (models) {
         Link.belongsTo(models.User, { foreignKey: 'creatorId', as: 'Creator' })
         Link.belongsTo(models.Post, { foreignKey: 'itemBId' })
+        Link.belongsTo(models.Post, { as: 'Parent', foreignKey: 'itemAId' })
         Link.belongsTo(models.Url, { foreignKey: 'itemBId' })
         Link.belongsTo(models.Image, { foreignKey: 'itemBId' })
         Link.belongsTo(models.Audio, { foreignKey: 'itemBId' })

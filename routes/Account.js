@@ -279,9 +279,18 @@ router.post('/messages', authenticateToken, async (req, res) => {
                         const parentLink = await Link.findOne({
                             where: { itemBId: post.id, relationship: 'parent' },
                             attributes: [],
-                            include: { model: Post, attributes: fullPostAttributes },
+                            include: {
+                                model: Post,
+                                as: 'Parent',
+                                attributes: fullPostAttributes,
+                                include: {
+                                    model: User,
+                                    as: 'Creator',
+                                    attributes: ['id', 'name'],
+                                },
+                            },
                         })
-                        post.setDataValue('Parent', parentLink.Post)
+                        post.setDataValue('Parent', parentLink.Parent)
                         resolve()
                     } else resolve()
                 })

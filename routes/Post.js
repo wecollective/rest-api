@@ -108,6 +108,23 @@ router.get('/post-data', authenticateToken, async (req, res) => {
         if (mediaType === 'image') post.setDataValue('Image', linkToMedia.Image)
         if (mediaType === 'audio') post.setDataValue('Audio', linkToMedia.Audio)
         res.status(200).json(post)
+    } else if (post.type === 'chat-reply') {
+        const parentLink = await Link.findOne({
+            where: { itemBId: post.id, relationship: 'parent' },
+            attributes: [],
+            include: {
+                model: Post,
+                as: 'Parent',
+                attributes: fullPostAttributes,
+                include: {
+                    model: User,
+                    as: 'Creator',
+                    attributes: ['id', 'name'],
+                },
+            },
+        })
+        post.setDataValue('Parent', parentLink.Parent)
+        res.status(200).json(post)
     } else res.status(200).json(post)
 })
 
@@ -885,7 +902,7 @@ router.get('/scrape-url', authenticateToken, async (req, res) => {
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15',
             ]
             await page.setUserAgent(userAgents[Math.floor(Math.random() * userAgents.length)])
-            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 }) // waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2'
+            await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 }) // waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2'
             await page.waitForSelector('title')
             const urlData = await page.evaluate(async () => {
                 let data = {
