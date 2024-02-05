@@ -208,25 +208,25 @@ router.get('/chats', authenticateToken, async (req, res) => {
         const user = await User.findOne({ where: { id: accountId } })
         const chats = await user.getUserSpaces({
             where: { state: 'active', type: 'chat' },
-            through: { where: { relationship: 'access', state: 'active' } },
-            attributes: ['id', 'name', 'flagImagePath', 'totalFollowers'],
-            joinTableAttributes: [],
+            through: { where: { relationship: 'access', state: ['active', 'pending'] } },
+            attributes: ['id', 'name', 'flagImagePath'],
+            joinTableAttributes: ['state'],
             limit: 10,
-            // offset,
         })
+
         Promise.all(
             chats.map(
                 (chat) =>
                     new Promise(async (resolve) => {
-                        // if no chat image or name and only one other user, get their profile pic to display as image
-                        if ((!chat.flagImagePath || !chat.name) && chat.totalFollowers <= 2) {
+                        // if no chat name, get the other users data to display
+                        if (!chat.name) {
                             const otherUser = await SpaceUser.findOne({
                                 where: {
                                     spaceId: chat.id,
                                     userId: { [Op.not]: accountId },
                                     relationship: 'access',
                                 },
-                                attributes: [],
+                                attributes: ['state'],
                                 include: {
                                     model: User,
                                     attributes: ['id', 'name', 'flagImagePath'],
@@ -247,59 +247,79 @@ router.post('/messages', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { chatId, offset } = req.body
 
-    //  const chatData = await Space.findOne({ where: { id: chatId }, attributes: [''] })
+    const chat = +offset
+        ? null
+        : await Space.findOne({
+              where: { id: chatId, type: 'chat' },
+              attributes: ['id', 'flagImagePath', 'name'],
+              include: {
+                  model: User,
+                  as: 'Members',
+                  attributes: ['id', 'name', 'flagImagePath'],
+                  through: { attributes: ['state'], where: { relationship: 'access' } },
+              },
+          })
+    if (!+offset && !chat) res.status(404).json({ message: 'Chat not found' })
+    else {
+        // if not a group chat
+        if (chat && !chat.name) {
+            chat.setDataValue(
+                'otherUser',
+                chat.Members.find((c) => c.id !== accountId)
+            )
+        }
+        const emptyMessages = await Post.findAndCountAll({
+            where: { '$AllPostSpaces.id$': chatId },
+            order: [['createdAt', 'DESC']],
+            limit: 20,
+            offset,
+            subQuery: false,
+            attributes: ['id'],
+            include: {
+                model: Space,
+                as: 'AllPostSpaces',
+                attributes: [],
+                through: { where: { state: 'active', relationship: 'direct' }, attributes: [] },
+            },
+        })
 
-    const emptyPosts = await Post.findAndCountAll({
-        where: { '$AllPostSpaces.id$': chatId },
-        order: [['createdAt', 'DESC']],
-        limit: 20,
-        offset,
-        subQuery: false,
-        attributes: ['id'],
-        include: {
-            model: Space,
-            as: 'AllPostSpaces',
-            attributes: [],
-            through: { where: { state: 'active', relationship: 'direct' }, attributes: [] },
-        },
-    })
+        const messages = await Post.findAll({
+            where: { id: emptyMessages.rows.map((post) => post.id) },
+            attributes: fullPostAttributes,
+            order: [['createdAt', 'DESC']],
+            include: findPostInclude(accountId),
+        })
 
-    const postsWithData = await Post.findAll({
-        where: { id: emptyPosts.rows.map((post) => post.id) },
-        attributes: fullPostAttributes,
-        order: [['createdAt', 'DESC']],
-        include: findPostInclude(accountId),
-    })
-
-    Promise.all(
-        postsWithData.map(
-            (post) =>
-                new Promise(async (resolve) => {
-                    if (post.type === 'chat-reply') {
-                        const parentLink = await Link.findOne({
-                            where: { itemBId: post.id, relationship: 'parent' },
-                            attributes: [],
-                            include: {
-                                model: Post,
-                                as: 'Parent',
-                                attributes: fullPostAttributes,
+        Promise.all(
+            messages.map(
+                (post) =>
+                    new Promise(async (resolve) => {
+                        if (post.type === 'chat-reply') {
+                            const parentLink = await Link.findOne({
+                                where: { itemBId: post.id, relationship: 'parent' },
+                                attributes: [],
                                 include: {
-                                    model: User,
-                                    as: 'Creator',
-                                    attributes: ['id', 'name'],
+                                    model: Post,
+                                    as: 'Parent',
+                                    attributes: fullPostAttributes,
+                                    include: {
+                                        model: User,
+                                        as: 'Creator',
+                                        attributes: ['id', 'name'],
+                                    },
                                 },
-                            },
-                        })
-                        post.setDataValue('Parent', parentLink.Parent)
-                        resolve()
-                    } else resolve()
-                })
+                            })
+                            post.setDataValue('Parent', parentLink.Parent)
+                            resolve()
+                        } else resolve()
+                    })
+            )
         )
-    )
-        .then(() => res.status(200).json({ total: emptyPosts.count, messages: postsWithData }))
-        .catch((error) => res.status(500).json({ error }))
-
-    // res.status(200).json({ total: emptyPosts.count, messages: postsWithData })
+            .then(() =>
+                res.status(200).json({ chat, messages, totalMessages: emptyMessages.count })
+            )
+            .catch((error) => res.status(500).json({ error }))
+    }
 })
 
 // POST
@@ -702,11 +722,91 @@ router.post('/liked-posts', authenticateToken, async (req, res) => {
 
 router.post('/create-chat', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
+    const { userId } = req.body
+    const user = await User.findOne({ where: { id: accountId }, attributes: ['id'] })
+    const chats = await user.getUserSpaces({
+        where: { state: 'active', type: 'chat', name: null, '$Members.id$': userId },
+        through: { where: { relationship: 'access', state: 'active' } },
+        attributes: ['id'],
+        include: [
+            {
+                model: User,
+                as: 'Members',
+                attributes: ['id'],
+                through: { attributes: [], where: { state: 'active', relationship: 'access' } },
+            },
+        ],
+    })
+    if (chats[0]) res.status(200).json({ existingChatId: chats[0].id })
+    else {
+        const newChat = await Space.create({
+            creatorId: accountId,
+            type: 'chat',
+            handle: uuidv4().substring(0, 15),
+            state: 'active',
+            privacy: 'private',
+            totalPostLikes: 0,
+            totalPosts: 0,
+            totalComments: 0,
+            totalFollowers: 1,
+        })
+
+        const connectUsers = await Promise.all(
+            [accountId, userId].map(
+                (id) =>
+                    new Promise(async (resolve) => {
+                        const createFollower = await SpaceUser.create({
+                            relationship: 'follower',
+                            state: 'active',
+                            spaceId: newChat.id,
+                            userId: id,
+                        })
+                        const createAccess = await SpaceUser.create({
+                            relationship: 'access',
+                            state: 'active',
+                            spaceId: newChat.id,
+                            userId: id,
+                        })
+                        Promise.all([createFollower, createAccess])
+                            .then(() => resolve())
+                            .catch((error) => resolve(error))
+                    })
+            )
+        )
+
+        //sgMail.send({
+        //     to: user.email,
+        //     from: { email: 'admin@weco.io', name: 'we { collective }' },
+        //     subject: 'New notification',
+        //     text: `
+        //         Hi ${user.name}, ${creator.name} just invited you to a chat on weco:
+        //         http://${appURL}/s/${newChat.handle}
+        //     `,
+        //     html: `
+        //         <p>
+        //             Hi ${user.name},
+        //             <br/>
+        //             <a href='${appURL}/u/${creator.handle}'>${creator.name}</a>
+        //             just invited you to a
+        //             <a href='${appURL}/s/${newChat.handle}'>chat</a>
+        //             on weco
+        //         </p>
+        //     `,
+        // })
+
+        Promise.all([connectUsers])
+            .then(() => res.status(200).json(newChat))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    }
+})
+
+router.post('/create-chat-group', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const { postData: chatData, files } = await uploadFiles(req, res, accountId)
         const { name, userIds } = chatData
-        const newChat = await await Space.create({
+        const newChat = await Space.create({
             creatorId: accountId,
             type: 'chat',
             handle: uuidv4().substring(0, 15),
@@ -729,69 +829,75 @@ router.post('/create-chat', authenticateToken, async (req, res) => {
             userId: accountId,
         })
 
-        const createFollower = await SpaceUser.create({
-            relationship: 'follower',
-            state: 'active',
-            spaceId: newChat.id,
-            userId: accountId,
-        })
+        // const createFollower = await SpaceUser.create({
+        //     relationship: 'follower',
+        //     state: 'active',
+        //     spaceId: newChat.id,
+        //     userId: accountId,
+        // })
 
-        const users = await User.findAll({
-            where: { id: [accountId, ...userIds] },
-            attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
-        })
-        const creator = users.find((u) => u.id === accountId)
+        // const users = await User.findAll({
+        //     where: { id: [accountId, ...userIds] },
+        //     attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
+        // })
+        // const creator = users.find((u) => u.id === accountId)
 
         const addUsers = Promise.all(
-            users.map(
-                (user) =>
+            [accountId, ...userIds].map(
+                (userId) =>
                     new Promise(async (resolve) => {
-                        const isOwnAccount = user.id === accountId
+                        // const isOwnAccount = user.id === accountId
                         const createAccess = await SpaceUser.create({
                             relationship: 'access',
-                            state: isOwnAccount ? 'active' : 'pending',
+                            state: 'active',
                             spaceId: newChat.id,
-                            userId: user.id,
+                            userId,
                         })
-                        const sendNotification = isOwnAccount
-                            ? null
-                            : await Notification.create({
-                                  ownerId: user.id,
-                                  type: 'chat-invite',
-                                  seen: false,
-                                  userId: accountId,
-                                  spaceAId: newChat.id,
-                                  state: 'pending',
-                              })
-                        const sendEmail = isOwnAccount
-                            ? null
-                            : sgMail.send({
-                                  to: user.email,
-                                  from: { email: 'admin@weco.io', name: 'we { collective }' },
-                                  subject: 'New notification',
-                                  text: `
-                                        Hi ${user.name}, ${creator.name} just invited you to a chat on weco:
-                                        http://${appURL}/s/${newChat.handle}
-                                    `,
-                                  html: `
-                                        <p>
-                                            Hi ${user.name},
-                                            <br/>
-                                            <a href='${appURL}/u/${creator.handle}'>${creator.name}</a>
-                                            just invited you to a 
-                                            <a href='${appURL}/s/${newChat.handle}'>chat</a>
-                                            on weco
-                                        </p>
-                                    `,
-                              })
-                        Promise.all([createAccess, sendNotification, sendEmail])
+                        const createFollower = await SpaceUser.create({
+                            relationship: 'follower',
+                            state: 'active',
+                            spaceId: newChat.id,
+                            userId,
+                        })
+                        // const sendNotification = isOwnAccount
+                        //     ? null
+                        //     : await Notification.create({
+                        //           ownerId: user.id,
+                        //           type: 'chat-invite',
+                        //           seen: false,
+                        //           userId: accountId,
+                        //           spaceAId: newChat.id,
+                        //           state: 'pending',
+                        //       })
+                        // const sendEmail = isOwnAccount
+                        //     ? null
+                        //     : sgMail.send({
+                        //           to: user.email,
+                        //           from: { email: 'admin@weco.io', name: 'we { collective }' },
+                        //           subject: 'New notification',
+                        //           text: `
+                        //                 Hi ${user.name}, ${creator.name} just invited you to a chat on weco:
+                        //                 http://${appURL}/s/${newChat.handle}
+                        //             `,
+                        //           html: `
+                        //                 <p>
+                        //                     Hi ${user.name},
+                        //                     <br/>
+                        //                     <a href='${appURL}/u/${creator.handle}'>${creator.name}</a>
+                        //                     just invited you to a
+                        //                     <a href='${appURL}/s/${newChat.handle}'>chat</a>
+                        //                     on weco
+                        //                 </p>
+                        //             `,
+                        //       })
+                        Promise.all([createAccess, createFollower])
                             .then(() => resolve())
                             .catch((error) => resolve(error))
                     })
             )
         )
 
-        Promise.all([createMod, createFollower, addUsers])
+        Promise.all([createMod, addUsers])
             .then(() => res.status(200).json(newChat))
             .catch((error) => res.status(500).json({ message: 'Error', error }))
     }

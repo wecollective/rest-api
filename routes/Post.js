@@ -2118,7 +2118,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         ]
         if (type === 'link') model = Link
         else model = Post
-        if (type === 'post') {
+        if (type !== 'link') {
             // include post spaces for stat updates
             include.push({
                 model: Space,
@@ -2132,7 +2132,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         const item = await model.findOne({ where: { id }, attributes: ['id'], include })
         const updateTotalLikes = item.increment('totalLikes', { silent: true })
         const updateSpaceStats =
-            type === 'post'
+            type !== 'link'
                 ? Promise.all(
                       item.AllPostSpaces.map(
                           (space) =>
@@ -2197,13 +2197,15 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                   commentId,
               })
 
-        const io = req.app.get('socketio')
-        io.to(`user-${item.Creator.id}`).emit('notification', {
-            type: 'like',
-            itemType: type,
-            itemId: id,
-            creatorId: accountId,
-        })
+        if (!skipNotification) {
+            const io = req.app.get('socketio')
+            io.to(`user-${item.Creator.id}`).emit('notification', {
+                type: 'like',
+                itemType: type,
+                itemId: id,
+                creatorId: accountId,
+            })
+        }
 
         let itemUrl
         if (type === 'link') itemUrl = `${appURL}/linkmap?item=${sourceType}&id=${sourceId}`

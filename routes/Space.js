@@ -1322,13 +1322,13 @@ router.get('/users-with-access', async (req, res) => {
         include: [
             {
                 model: User,
-                as: 'UsersWithAccess',
+                as: 'Members',
                 attributes: ['id'],
                 through: { where: { relationship: 'access', state: 'active' }, attributes: [] },
             },
         ],
     })
-        .then((space) => res.status(200).send(space.UsersWithAccess.map((u) => u.id)))
+        .then((space) => res.status(200).send(space.Members.map((u) => u.id)))
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
@@ -1721,12 +1721,17 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
         else {
             const grantAccess =
                 response === 'accepted'
-                    ? await SpaceUser.create({
-                          relationship: 'access',
-                          state: 'active',
-                          spaceId,
-                          userId: accountId,
-                      })
+                    ? await SpaceUser.update(
+                          { state: 'active' },
+                          {
+                              where: {
+                                  relationship: 'access',
+                                  state: 'pending',
+                                  spaceId,
+                                  userId: accountId,
+                              },
+                          }
+                      )
                     : null
 
             const followSpace =

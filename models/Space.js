@@ -87,7 +87,7 @@ module.exports = (sequelize, DataTypes) => {
 
         Space.belongsToMany(models.User, {
             through: models.SpaceUser,
-            as: 'UsersWithAccess',
+            as: 'Members',
             foreignKey: 'spaceId',
         })
     }
