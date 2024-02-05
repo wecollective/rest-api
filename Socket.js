@@ -34,7 +34,7 @@ io.on('connection', (socket) => {
         if (user) {
             // exit rooms
             user.rooms.forEach((roomId) => {
-                io.in(roomId).emit('user-disconnected', user.id)
+                io.in(roomId).emit('user-exiting', user.id)
                 rooms[roomId] = rooms[roomId].filter((u) => u.id !== user.id)
             })
             // delete record
