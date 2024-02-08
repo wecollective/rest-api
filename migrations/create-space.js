@@ -51,6 +51,9 @@ module.exports = {
             totalFollowers: {
                 type: Sequelize.INTEGER,
             },
+            lastActivity: {
+                type: Sequelize.DATE,
+            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE,

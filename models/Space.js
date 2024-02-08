@@ -22,6 +22,7 @@ module.exports = (sequelize, DataTypes) => {
             totalPosts: DataTypes.INTEGER,
             totalComments: DataTypes.INTEGER,
             totalFollowers: DataTypes.INTEGER,
+            lastActivity: DataTypes.DATE,
         },
         {}
     )
