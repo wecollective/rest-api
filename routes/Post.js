@@ -1457,6 +1457,10 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post } = await createPost(postData, files, accountId)
         const { chatId, parent } = postData.links
+        const updateLastActivity = await Space.update(
+            { lastActivity: new Date() },
+            { where: { id: chatId }, silent: true }
+        )
         const spaceIds = [chatId]
         // store spaceIds and update with ancestors for response
         const allSpaceIds = [...spaceIds]
@@ -1507,7 +1511,7 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
         const io = req.app.get('socketio')
         io.to(`chat-${chatId}`).emit('new-message', post.id)
 
-        Promise.all([addSpaces, linkComment])
+        Promise.all([updateLastActivity, addSpaces, linkComment])
             .then(() => res.status(200).json(post))
             .catch((error) => res.status(500).json(error))
     }

@@ -212,6 +212,7 @@ router.get('/chats', authenticateToken, async (req, res) => {
             attributes: ['id', 'name', 'flagImagePath'],
             joinTableAttributes: ['state'],
             limit: 10,
+            order: [['lastActivity', 'DESC']],
         })
 
         Promise.all(
@@ -271,7 +272,7 @@ router.post('/messages', authenticateToken, async (req, res) => {
         const emptyMessages = await Post.findAndCountAll({
             where: { '$AllPostSpaces.id$': chatId },
             order: [['createdAt', 'DESC']],
-            limit: 20,
+            limit: 10,
             offset,
             subQuery: false,
             attributes: ['id'],
