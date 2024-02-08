@@ -219,6 +219,33 @@ router.get('/chats', authenticateToken, async (req, res) => {
             chats.map(
                 (chat) =>
                     new Promise(async (resolve) => {
+                        const lastMessage = await Post.findOne({
+                            where: { '$AllPostSpaces.id$': chat.id },
+                            order: [['createdAt', 'DESC']],
+                            subQuery: false,
+                            attributes: ['text'],
+                            include: [
+                                {
+                                    model: Space,
+                                    as: 'AllPostSpaces',
+                                    attributes: [],
+                                    through: {
+                                        where: { state: 'active', relationship: 'direct' },
+                                        attributes: [],
+                                    },
+                                },
+                                {
+                                    model: User,
+                                    as: 'Creator',
+                                    attributes: ['id', 'name'],
+                                },
+                            ],
+                        })
+                        if (lastMessage)
+                            chat.setDataValue('lastMessage', {
+                                Creator: lastMessage.Creator,
+                                text: lastMessage.text,
+                            })
                         // if no chat name, get the other users data to display
                         if (!chat.name) {
                             const otherUser = await SpaceUser.findOne({
