@@ -1,16 +1,19 @@
 require('dotenv').config()
+const { appURL, recaptchaSecretKey, vapidPublicKey, vapidPrivateKey } = require('../Config')
+const { User, Notification } = require('../models')
 const express = require('express')
 const router = express.Router()
-const { appURL, recaptchaSecretKey } = require('../Config')
 const sequelize = require('sequelize')
+const Op = sequelize.Op
 const bcrypt = require('bcrypt')
 const crypto = require('crypto')
 const axios = require('axios')
 const jwt = require('jsonwebtoken')
 const sgMail = require('@sendgrid/mail')
+const webpush = require('web-push')
+// webpush.setGCMAPIKey('<Your GCM API Key Here>')
+webpush.setVapidDetails('mailto:example@weco.io', vapidPublicKey, vapidPrivateKey)
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
-const { User, Notification } = require('../models')
-const Op = sequelize.Op
 
 async function verifyRecaptch(reCaptchaToken) {
     const secret = recaptchaSecretKey
@@ -18,6 +21,18 @@ async function verifyRecaptch(reCaptchaToken) {
     const response = await axios.post(`${url}?secret=${secret}&response=${reCaptchaToken}`)
     return response.data.success && response.data.score > 0.3
 }
+
+router.post('/subscribe', async (req, res) => {
+    const subscription = req.body
+    console.log(777, 'subscription: ', subscription)
+    // test webpush
+    webpush
+        .sendNotification(
+            subscription,
+            JSON.stringify({ title: 'Test message oooo', text: 'abcd...' })
+        )
+        .catch((error) => console.log(555, error))
+})
 
 // POST
 router.post('/log-in', async (req, res) => {
