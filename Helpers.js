@@ -1,5 +1,5 @@
 const fs = require('fs')
-const { appURL } = require('./Config')
+const { appURL, vapidPublicKey, vapidPrivateKey } = require('./Config')
 const db = require('./models/index')
 const { Op, QueryTypes, literal } = require('sequelize')
 const { scheduleGBGMoveJobs } = require('./ScheduledTasks')
@@ -22,8 +22,8 @@ const {
     GlassBeadGame,
     UserPost,
     Reaction,
+    WebPushSubscription,
 } = require('./models')
-
 var aws = require('aws-sdk')
 var multer = require('multer')
 var multerS3 = require('multer-s3')
@@ -33,7 +33,8 @@ aws.config.update({
     region: 'eu-west-1',
 })
 const s3 = new aws.S3({})
-
+const webpush = require('web-push')
+webpush.setVapidDetails('https://weco.io', vapidPublicKey, vapidPrivateKey)
 var ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 ffmpeg.setFfmpegPath(ffmpegPath)
@@ -2075,6 +2076,26 @@ function scheduleNextBeadDeadline(postId, settings, players) {
     })
 }
 
+async function pushNotification(userId, notification) {
+    const subscriptions = await WebPushSubscription.findAll({
+        where: { userId, state: 'active' },
+        attributes: ['id', 'endpoint', 'p256dhKey', 'authKey'],
+    })
+    Promise.all(
+        subscriptions.map((sub) =>
+            webpush
+                .sendNotification(
+                    { endpoint: sub.endpoint, keys: { p256dh: sub.p256dhKey, auth: sub.authKey } },
+                    JSON.stringify(notification)
+                )
+                .catch((error) => {
+                    // if no longer in use remove subscription from db
+                    if (error.statusCode === 410) sub.update({ state: 'deleted' })
+                })
+        )
+    )
+}
+
 // database operations
 async function updateAllSpaceStats(res) {
     // calculate and update all space stats
@@ -2196,6 +2217,7 @@ module.exports = {
     createPost,
     attachComment,
     scheduleNextBeadDeadline,
+    pushNotification,
     // database operations
     updateAllSpaceStats,
     updateAllSpaceUserStats,
