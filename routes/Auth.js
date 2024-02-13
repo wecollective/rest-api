@@ -1,6 +1,6 @@
 require('dotenv').config()
 const { appURL, recaptchaSecretKey, vapidPublicKey, vapidPrivateKey } = require('../Config')
-const { User, Notification } = require('../models')
+const { User, Notification, WebPushSubscription } = require('../models')
 const express = require('express')
 const router = express.Router()
 const sequelize = require('sequelize')
@@ -12,8 +12,9 @@ const jwt = require('jsonwebtoken')
 const sgMail = require('@sendgrid/mail')
 const webpush = require('web-push')
 // webpush.setGCMAPIKey('<Your GCM API Key Here>')
-webpush.setVapidDetails('mailto:example@weco.io', vapidPublicKey, vapidPrivateKey)
+webpush.setVapidDetails('https://weco.io', vapidPublicKey, vapidPrivateKey)
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
+const authenticateToken = require('../middleware/authenticateToken')
 
 async function verifyRecaptch(reCaptchaToken) {
     const secret = recaptchaSecretKey
@@ -22,19 +23,41 @@ async function verifyRecaptch(reCaptchaToken) {
     return response.data.success && response.data.score > 0.3
 }
 
-router.post('/subscribe', async (req, res) => {
-    const subscription = req.body
-    console.log(777, 'subscription: ', subscription)
-    // test webpush
-    webpush
-        .sendNotification(
-            subscription,
-            JSON.stringify({ title: 'Test message oooo', text: 'abcd...' })
-        )
-        .catch((error) => console.log(555, error))
+// POST
+router.post('/store-push-subscription', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { endpoint, keys } = req.body
+    WebPushSubscription.create({
+        userId: accountId,
+        endpoint,
+        p256dhKey: keys.p256dh,
+        authKey: keys.auth,
+        state: 'active',
+    })
+        .then(() => res.status(200).json({ message: 'Success' }))
+        .catch((error) => console.log('error: ', error))
 })
 
-// POST
+router.post('/remove-push-subscription', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { endpoint, keys } = req.body
+    console.log(333, 'unsub', req.body, accountId)
+    WebPushSubscription.update(
+        { state: 'deleted' },
+        {
+            where: {
+                userId: accountId,
+                endpoint,
+                p256dhKey: keys.p256dh,
+                authKey: keys.auth,
+                state: 'active',
+            },
+        }
+    )
+        .then(() => res.status(200).json({ message: 'Success' }))
+        .catch((error) => console.log('error: ', error))
+})
+
 router.post('/log-in', async (req, res) => {
     const { emailOrHandle, password } = req.body
     const user = await User.findOne({
