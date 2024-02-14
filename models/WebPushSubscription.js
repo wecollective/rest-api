@@ -1,7 +1,7 @@
 'use strict'
 const { Model } = require('sequelize')
 module.exports = (sequelize, DataTypes) => {
-    class WebPushSubscriptions extends Model {
+    class WebPushSubscription extends Model {
         /**
          * Helper method for defining associations.
          * This method is not a part of Sequelize lifecycle.
@@ -11,17 +11,18 @@ module.exports = (sequelize, DataTypes) => {
             // define association here
         }
     }
-    WebPushSubscriptions.init(
+    WebPushSubscription.init(
         {
             userId: DataTypes.INTEGER,
             endpoint: DataTypes.TEXT,
             p256dhKey: DataTypes.STRING,
             authKey: DataTypes.STRING,
+            state: DataTypes.STRING,
         },
         {
             sequelize,
-            modelName: 'WebPushSubscriptions',
+            modelName: 'WebPushSubscription',
         }
     )
-    return WebPushSubscriptions
+    return WebPushSubscription
 }
