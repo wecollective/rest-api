@@ -5,70 +5,78 @@ const axios = require('axios')
 const socketServer = require('http').createServer()
 const socketIo = require('socket.io')
 const io = socketIo(socketServer, { cors: { origin: whitelist } })
+// socket.io cheatsheet: https://socket.io/docs/v3/emit-cheatsheet/
 
 const sockets = []
-const rooms = [] // user, space, post, or game + id: `user-58`
+const rooms = [] // space, chat, post, or game + id: `space-58`
 
 // old
 const gameRooms = []
 const socketsToRooms = []
-const maxPlayers = 10
 
-// socket.io cheatsheet: https://socket.io/docs/v3/emit-cheatsheet/
 io.on('connection', (socket) => {
+    sockets[socket.id] = { id: null, rooms: [] }
+
     // account signals
-    socket.on('log-in', (userId) => {
-        console.log(999, 'connect', userId)
-        socket.join(`user-${userId}`)
-        sockets[socket.id] = { id: userId, rooms: [] }
+    socket.on('log-in', (user) => {
+        sockets[socket.id].rooms.forEach((roomId) => {
+            // signal to users in room so they can replace anon with user
+            io.in(roomId).emit('user-logged-in', user)
+            // replace anon with user in room in server state
+            const userIndex = rooms[roomId].findIndex((u) => u.socketId === socket.id)
+            rooms[roomId][userIndex] = user
+        })
+        // update socket data
+        sockets[socket.id] = { id: user.id, rooms: sockets[socket.id].rooms }
     })
 
-    socket.on('log-out', (userId) => {
-        console.log(888, 'log-out', userId)
-        socket.leave(`user-${userId}`)
+    socket.on('log-out', () => {
+        sockets[socket.id].rooms.forEach((roomId) => {
+            // signal to users in room so they can replace anon with user
+            io.in(roomId).emit('user-logged-out', socket.id)
+            // replace anon with user in server state
+            const userIndex = rooms[roomId].findIndex((u) => u.socketId === socket.id)
+            rooms[roomId][userIndex] = { socketId: socket.id, id: null }
+        })
+        // update socket data
+        sockets[socket.id] = { id: null, rooms: sockets[socket.id].rooms }
     })
 
     socket.on('disconnect', () => {
-        const user = sockets[socket.id]
-        console.log(999, 'disconnect', user)
-        if (user) {
-            // exit rooms
-            user.rooms.forEach((roomId) => {
-                io.in(roomId).emit('user-exiting', user.id)
-                rooms[roomId] = rooms[roomId].filter((u) => u.id !== user.id)
-            })
-            // delete record
-            delete sockets[socket.id]
-        }
+        // exit rooms
+        sockets[socket.id].rooms.forEach((roomId) => {
+            io.in(roomId).emit('user-exiting', socket.id)
+            rooms[roomId] = rooms[roomId].filter((u) => u.socketId !== socket.id)
+        })
+        // delete record
+        delete sockets[socket.id]
     })
 
     // room signals
     socket.on('enter-room', (data) => {
-        console.log(666, 'enter-room')
         const { roomId, user } = data
         // create room if not yet present
         if (!rooms[roomId]) rooms[roomId] = []
-        // add room id to socket
-        if (sockets[socket.id]) sockets[socket.id].rooms.push(roomId)
         // signal to other users in the room
         socket.to(roomId).emit('user-entering', user)
         // join the room
         socket.join(roomId)
         rooms[roomId].push(user)
+        // add room id to socket
+        sockets[socket.id].rooms.push(roomId)
+        // return users in room
         socket.emit('room-entered', rooms[roomId])
     })
 
-    socket.on('exit-room', (data) => {
-        const { roomId, userId } = data
+    socket.on('exit-room', (roomId) => {
         // notify other users
-        socket.to(roomId).emit('user-exiting', userId)
+        socket.to(roomId).emit('user-exiting', socket.id)
         // exit room
         socket.leave(roomId)
-        // remove user from room
-        if (rooms[roomId]) rooms[roomId] = rooms[roomId].filter((u) => u.id !== userId)
-        // remove room from socket rooms
-        if (sockets[socket.id])
-            sockets[socket.id].rooms = sockets[socket.id].rooms.filter((id) => id !== roomId)
+        // remove user from room in server state
+        rooms[roomId] = rooms[roomId].filter((u) => u.socketId !== socket.id)
+        // remove room from socket data
+        sockets[socket.id].rooms = sockets[socket.id].rooms.filter((id) => id !== roomId)
     })
 
     // chats
@@ -80,6 +88,18 @@ io.on('connection', (socket) => {
     socket.on('user-stopped-typing', (data) => {
         const { roomId, user } = data
         socket.to(roomId).emit('user-stopped-typing', user)
+    })
+
+    socket.on('new-message', (data) => {
+        // todo: signal message to everyone in the room
+        // todo: signal notification to logged in users
+        const { roomId, message } = data
+        const users = rooms[roomId]
+        users.forEach((user) => {
+            if (user.id !== message.Creator.id)
+                socket.to(`user-${user.id}`).emit('new-message', { roomId, message })
+        })
+        // socket.to(roomId).emit('new-message', message)
     })
 
     // game room signals (old)
