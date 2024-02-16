@@ -24,40 +24,6 @@ async function verifyRecaptch(reCaptchaToken) {
 }
 
 // POST
-router.post('/store-push-subscription', authenticateToken, async (req, res) => {
-    const accountId = req.user ? req.user.id : null
-    const { endpoint, keys } = req.body
-    WebPushSubscription.create({
-        userId: accountId,
-        endpoint,
-        p256dhKey: keys.p256dh,
-        authKey: keys.auth,
-        state: 'active',
-    })
-        .then(() => res.status(200).json({ message: 'Success' }))
-        .catch((error) => console.log('error: ', error))
-})
-
-router.post('/remove-push-subscription', authenticateToken, async (req, res) => {
-    const accountId = req.user ? req.user.id : null
-    const { endpoint, keys } = req.body
-    console.log(333, 'unsub', req.body, accountId)
-    WebPushSubscription.update(
-        { state: 'deleted' },
-        {
-            where: {
-                userId: accountId,
-                endpoint,
-                p256dhKey: keys.p256dh,
-                authKey: keys.auth,
-                state: 'active',
-            },
-        }
-    )
-        .then(() => res.status(200).json({ message: 'Success' }))
-        .catch((error) => console.log('error: ', error))
-})
-
 router.post('/log-in', async (req, res) => {
     const { emailOrHandle, password } = req.body
     const user = await User.findOne({
@@ -262,6 +228,39 @@ router.post('/claim-account', async (req, res) => {
             .then(() => res.status(200).send({ message: 'Success' }))
             .catch((error) => res.status(500).send(error))
     }
+})
+
+router.post('/store-push-subscription', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { endpoint, keys } = req.body
+    WebPushSubscription.create({
+        userId: accountId,
+        endpoint,
+        p256dhKey: keys.p256dh,
+        authKey: keys.auth,
+        state: 'active',
+    })
+        .then(() => res.status(200).json({ message: 'Success' }))
+        .catch((error) => console.log('error: ', error))
+})
+
+router.post('/remove-push-subscription', authenticateToken, async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { endpoint, keys } = req.body
+    WebPushSubscription.update(
+        { state: 'deleted' },
+        {
+            where: {
+                userId: accountId,
+                endpoint,
+                p256dhKey: keys.p256dh,
+                authKey: keys.auth,
+                state: 'active',
+            },
+        }
+    )
+        .then(() => res.status(200).json({ message: 'Success' }))
+        .catch((error) => console.log('error: ', error))
 })
 
 module.exports = router

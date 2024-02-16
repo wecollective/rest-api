@@ -74,7 +74,7 @@ io.on('connection', (socket) => {
         // exit room
         socket.leave(roomId)
         // remove user from room in server state
-        rooms[roomId] = rooms[roomId].filter((u) => u.socketId !== socket.id)
+        if (rooms[roomId]) rooms[roomId] = rooms[roomId].filter((u) => u.socketId !== socket.id)
         // remove room from socket data
         sockets[socket.id].rooms = sockets[socket.id].rooms.filter((id) => id !== roomId)
     })
@@ -88,18 +88,6 @@ io.on('connection', (socket) => {
     socket.on('user-stopped-typing', (data) => {
         const { roomId, user } = data
         socket.to(roomId).emit('user-stopped-typing', user)
-    })
-
-    socket.on('new-message', (data) => {
-        // todo: signal message to everyone in the room
-        // todo: signal notification to logged in users
-        const { roomId, message } = data
-        const users = rooms[roomId]
-        users.forEach((user) => {
-            if (user.id !== message.Creator.id)
-                socket.to(`user-${user.id}`).emit('new-message', { roomId, message })
-        })
-        // socket.to(roomId).emit('new-message', message)
     })
 
     // game room signals (old)

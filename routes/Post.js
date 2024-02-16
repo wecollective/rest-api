@@ -31,6 +31,7 @@ const {
     scheduleNextBeadDeadline,
     createUrl,
     attachComment,
+    pushNotification,
     fullPostAttributes,
     defaultPostValues,
 } = require('../Helpers')
@@ -1448,7 +1449,6 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
 })
 
 // todo: create seperate function addPostSpaces that can be used here and in create-post route
-// todo: send out signals and notifications...
 router.post('/create-chat-message', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
@@ -1456,11 +1456,12 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
         // upload files and create post
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post } = await createPost(postData, files, accountId)
-        const { chatId, parent } = postData.links
+        const { chatId, parent, membersNotInRoom } = postData.links
         const updateLastActivity = await Space.update(
             { lastActivity: new Date() },
             { where: { id: chatId }, silent: true }
         )
+        // todo: refactor (adapted from create post)
         const spaceIds = [chatId]
         // store spaceIds and update with ancestors for response
         const allSpaceIds = [...spaceIds]
@@ -1506,8 +1507,31 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
                       .catch((error) => resolve(error))
               })
             : null
+        // attach parent comment
         const linkComment = parent ? await attachComment(post, parent, accountId) : null
-        // signal post to users in room
+        // send push notifications to members not currently in the room
+        const creator = await User.findOne({
+            where: { id: accountId },
+            attributes: ['name'],
+        })
+        let text = post.searchableText
+        if (!text) {
+            const mediaTypes = post.mediaTypes.split(',')
+            const mediaType = mediaTypes[mediaTypes.length - 1]
+            if (mediaType === 'image') text = '📷'
+            else if (mediaType === 'audio') text = '🔊'
+            else if (mediaType === 'event') text = '🗓️'
+            else text = '...'
+        } else if (text.length > 100) text = text.substring(0, 100).concat('...')
+        membersNotInRoom.forEach((userId) =>
+            pushNotification(userId, {
+                type: 'message',
+                title: `${creator.name} 💬`,
+                text,
+                data: { chatId, messageId: post.id },
+            })
+        )
+        // signal message to members currently in room
         const io = req.app.get('socketio')
         io.to(`chat-${chatId}`).emit('new-message', post.id)
 
@@ -2201,13 +2225,16 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                   commentId,
               })
 
+        const { handle, name, flagImagePath } = await User.findOne({
+            where: { id: accountId },
+            attributes: ['handle', 'name', 'flagImagePath'],
+        })
+
         if (!skipNotification) {
-            const io = req.app.get('socketio')
-            io.to(`user-${item.Creator.id}`).emit('notification', {
-                type: 'like',
-                itemType: type,
-                itemId: id,
-                creatorId: accountId,
+            pushNotification(item.Creator.id, {
+                type: 'notification',
+                title: 'New like! ❤️',
+                text: `${name} just liked your ${type} on weco`,
             })
         }
 
@@ -2215,10 +2242,6 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         if (type === 'link') itemUrl = `${appURL}/linkmap?item=${sourceType}&id=${sourceId}`
         else itemUrl = `${appURL}/p/${id}`
 
-        const { handle, name } = await User.findOne({
-            where: { id: accountId },
-            attributes: ['handle', 'name'],
-        })
         const sendEmail = skipEmail
             ? null
             : await sgMail.send({

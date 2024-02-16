@@ -223,7 +223,7 @@ router.get('/chats', authenticateToken, async (req, res) => {
                             where: { '$AllPostSpaces.id$': chat.id },
                             order: [['createdAt', 'DESC']],
                             subQuery: false,
-                            attributes: ['text'],
+                            attributes: ['text', 'mediaTypes'],
                             include: [
                                 {
                                     model: Space,
@@ -245,6 +245,7 @@ router.get('/chats', authenticateToken, async (req, res) => {
                             chat.setDataValue('lastMessage', {
                                 Creator: lastMessage.Creator,
                                 text: lastMessage.text,
+                                mediaTypes: lastMessage.mediaTypes,
                             })
                         // if no chat name, get the other users data to display
                         if (!chat.name) {
@@ -343,9 +344,7 @@ router.post('/messages', authenticateToken, async (req, res) => {
                     })
             )
         )
-            .then(() =>
-                res.status(200).json({ chat, messages, totalMessages: emptyMessages.count })
-            )
+            .then(() => res.status(200).json({ chat, messages, total: emptyMessages.count }))
             .catch((error) => res.status(500).json({ error }))
     }
 })
