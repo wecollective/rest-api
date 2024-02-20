@@ -286,13 +286,13 @@ function createAudio(accountId, postId, postType, audio, index, files) {
     })
 }
 
-function notifyMention(creator, user, postId) {
+function notifyMention(creator, user, postId, type) {
     // creator attributes: id, name, handle
     // user attributes (must be model for accountMuted function): id, name, email, emailsDisabled
     return new Promise(async (resolve) => {
         const sendNotification = await Notification.create({
             ownerId: user.id,
-            type: 'post-mention',
+            type: `${type}-mention`,
             seen: false,
             userId: creator.id,
             postId,
@@ -305,7 +305,7 @@ function notifyMention(creator, user, postId) {
                   from: { email: 'admin@weco.io', name: 'we { collective }' },
                   subject: 'New notification',
                   text: `
-                        Hi ${user.name}, ${creator.name} just mentioned you in a post on weco:
+                        Hi ${user.name}, ${creator.name} just mentioned you in a ${type} on weco:
                         http://${appURL}/p/${postId}
                     `,
                   html: `
@@ -314,7 +314,7 @@ function notifyMention(creator, user, postId) {
                             <br/>
                             <a href='${appURL}/u/${creator.handle}'>${creator.name}</a>
                             just mentioned you in a 
-                            <a href='${appURL}/p/${postId}'>post</a>
+                            <a href='${appURL}/p/${postId}'>${type}</a>
                             on weco
                         </p>
                     `,
@@ -1730,7 +1730,7 @@ function createPost(data, files, accountId) {
                       where: { id: mentions, state: 'active' },
                       attributes: ['id', 'name', 'email', 'emailsDisabled'],
                   })
-                  Promise.all(users.map((user) => notifyMention(creator, user, post.id)))
+                  Promise.all(users.map((user) => notifyMention(creator, user, post.id, type)))
                       .then(() => resolve())
                       .catch((error) => resolve(data, error))
               })
@@ -2211,7 +2211,6 @@ module.exports = {
     createImage,
     createAudio,
     createUrl,
-    notifyMention,
     createSpacePost,
     accountReaction,
     accountComment,
