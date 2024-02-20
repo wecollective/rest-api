@@ -48,6 +48,13 @@ io.on('connection', (socket) => {
             io.in(roomId).emit('user-exiting', socket.id)
             rooms[roomId] = rooms[roomId].filter((u) => u.socketId !== socket.id)
         })
+        // old game room (todo: remove when updated)
+        const roomId = socketsToRooms[socket.id]
+        if (gameRooms[roomId]) {
+            const user = gameRooms[roomId].find((users) => users.socketId === socket.id)
+            io.in(roomId).emit('incoming-user-left', user)
+            gameRooms[roomId] = gameRooms[roomId].filter((users) => users.socketId !== socket.id)
+        }
         // delete record
         delete sockets[socket.id]
     })
