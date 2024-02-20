@@ -1324,7 +1324,10 @@ router.get('/users-with-access', async (req, res) => {
                 model: User,
                 as: 'Members',
                 attributes: ['id'],
-                through: { where: { relationship: 'access', state: 'active' }, attributes: [] },
+                through: {
+                    where: { relationship: 'access', state: ['active', 'pending'] },
+                    attributes: [],
+                },
             },
         ],
     })
@@ -1658,11 +1661,16 @@ router.post('/invite-space-users', authenticateToken, async (req, res) => {
             where: { id: userIds },
             attributes: ['id', 'name', 'email', 'emailsDisabled'],
         })
-
         Promise.all(
             invitedUsers.map(
                 (user) =>
                     new Promise(async (resolve) => {
+                        const createPendingAccess = await SpaceUser.create({
+                            relationship: 'access',
+                            state: 'pending',
+                            spaceId,
+                            userId: user.id,
+                        })
                         const createNotification = await Notification.create({
                             ownerId: user.id,
                             type: 'space-invite',
@@ -1697,7 +1705,7 @@ router.post('/invite-space-users', authenticateToken, async (req, res) => {
                                 </p>
                             `,
                               })
-                        Promise.all([createNotification, sendEmail])
+                        Promise.all([createPendingAccess, createNotification, sendEmail])
                             .then(() => resolve())
                             .catch((error) => resolve(error))
                     })
@@ -1710,7 +1718,7 @@ router.post('/invite-space-users', authenticateToken, async (req, res) => {
 
 router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { notificationId, spaceId, userId, type, response } = req.body
+    const { notificationId, spaceId, userId, response } = req.body
 
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
@@ -1761,7 +1769,7 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
             const notifyInviteCreator = await new Promise(async (resolve) => {
                 const createNotification = await Notification.create({
                     ownerId: userId,
-                    type: `${type}-invite-response`,
+                    type: 'space-invite-response',
                     state: response,
                     seen: false,
                     spaceAId: spaceId,
@@ -1787,16 +1795,14 @@ router.post('/respond-to-space-invite', authenticateToken, async (req, res) => {
                           from: { email: 'admin@weco.io', name: 'we { collective }' },
                           subject: 'New notification',
                           text: `
-                            Hi ${invitor.name}, ${responder.name} just ${response} your invite to ${
-                              type === 'chat' ? 'chat' : 'join'
-                          } ${space.name}: ${appURL}/s/${space.handle} on weco.
+                            Hi ${invitor.name}, ${responder.name} just ${response} your invite to join ${space.name}: ${appURL}/s/${space.handle} on weco.
                         `,
                           html: `
                             <p>
                                 Hi ${invitor.name},
                                 <br/>
                                 <a href='${appURL}/u/${responder.handle}'>${responder.name}</a>
-                                just ${response} your invite to ${type === 'chat' ? 'chat' : 'join'}
+                                just ${response} your invite to join'
                                 <a href='${appURL}/s/${space.handle}'>${space.name}</a>
                                 on weco.
                                 <br/>
