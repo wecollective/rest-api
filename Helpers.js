@@ -965,6 +965,7 @@ const fullPostAttributes = [
     'totalReposts',
     'totalRatings',
     'totalLinks',
+    'game'
 ]
 
 // todo: replace all use cases with const fullPostAttributes above
@@ -984,6 +985,7 @@ function findFullPostAttributes(model, accountId) {
         'totalReposts',
         'totalRatings',
         'totalLinks',
+        'game',
         // accountLike('post', model, accountId),
         // accountComment('post', model, accountId),
         // accountLink('post', model, accountId),
@@ -1630,12 +1632,10 @@ function sendGBGInvite(player, postId, creator, settings) {
                             <br/>
                             Allowed bead types: ${allowedBeadTypes.join(',')}
                             <br/>
-                            Time window for moves: ${
-                                moveTimeWindow ? `${moveTimeWindow} minutes` : 'Off'
+                            Time window for moves: ${moveTimeWindow ? `${moveTimeWindow} minutes` : 'Off'
                             }
                             <br/>
-                            Character limit: ${
-                                characterLimit ? `${characterLimit} characters` : 'Off'
+                            Character limit: ${characterLimit ? `${characterLimit} characters` : 'Off'
                             }
                             <br/>
                             Audio time limit: ${moveDuration ? `${moveDuration} seconds` : 'Off'}
@@ -1700,6 +1700,7 @@ function createPost(data, files, accountId) {
             event,
             poll,
             glassBeadGame,
+            game,
             card,
             color,
             watermark,
@@ -1721,6 +1722,7 @@ function createPost(data, files, accountId) {
             color: color || null,
             watermark: !!watermark,
             lastActivity: new Date(),
+            game,
         })
 
         // todo: add the correct notification type
