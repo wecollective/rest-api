@@ -12,7 +12,7 @@ const jwt = require('jsonwebtoken')
 const sgMail = require('@sendgrid/mail')
 const webpush = require('web-push')
 // webpush.setGCMAPIKey('<Your GCM API Key Here>')
-// webpush.setVapidDetails('https://weco.io', vapidPublicKey, vapidPrivateKey)
+webpush.setVapidDetails('https://weco.io', vapidPublicKey, vapidPrivateKey)
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const authenticateToken = require('../middleware/authenticateToken')
 
