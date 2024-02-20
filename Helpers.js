@@ -1509,7 +1509,10 @@ async function uploadFiles(req, res, accountId) {
             if (noMulterErrors(error, res)) {
                 Promise.all(req.files.map((file) => uploadFile(accountId, file)))
                     .then((files) =>
-                        resolve({ postData: JSON.parse(req.body['post-data']), files })
+                        resolve({
+                            postData: req.body['post-data'] && JSON.parse(req.body['post-data']),
+                            files,
+                        })
                     )
                     .catch((error) => res.status(500).json(error))
             }

@@ -4,9 +4,14 @@ const router = express.Router()
 
 var aws = require('aws-sdk')
 var multer = require('multer')
-var multerS3 = require('multer-s3')
+aws.config.update({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    region: 'eu-west-1',
+})
+const s3 = new aws.S3({})
 
-const { defaultPostValues } = require('../Helpers')
+const { defaultPostValues, uploadFiles } = require('../Helpers')
 
 const { User, Space, GlassBeadGame, Post, Link, Audio } = require('../models')
 
@@ -17,78 +22,44 @@ var ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 ffmpeg.setFfmpegPath(ffmpegPath)
 
-aws.config.update({
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    region: 'eu-west-1',
-})
-
-const s3 = new aws.S3({})
-
-// todo: revisit upload process
+// todo: revisit routes and merge with Helpers upload process
 
 router.post('/image-upload', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { type, id } = req.query
     const { imageURL } = req.body
 
-    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
-    else {
-        function saveImage(imageType, url) {
-            switch (imageType) {
-                case 'user-flag':
-                    return User.update({ flagImagePath: url }, { where: { id: accountId } })
-                case 'user-cover':
-                    return User.update({ coverImagePath: url }, { where: { id: accountId } })
-                case 'space-flag':
-                    return Space.update({ flagImagePath: url }, { where: { id } })
-                case 'space-cover':
-                    return Space.update({ coverImagePath: url }, { where: { id } })
-                case 'gbg-topic':
-                    return GlassBeadGame.update({ topicImage: url }, { where: { id } })
-                default:
-                    break
-            }
+    function saveImage(imageType, url) {
+        switch (imageType) {
+            case 'user-flag':
+                return User.update({ flagImagePath: url }, { where: { id: accountId } })
+            case 'user-cover':
+                return User.update({ coverImagePath: url }, { where: { id: accountId } })
+            case 'space-flag':
+                return Space.update({ flagImagePath: url }, { where: { id } })
+            case 'space-cover':
+                return Space.update({ coverImagePath: url }, { where: { id } })
+            case 'gbg-topic':
+                return GlassBeadGame.update({ topicImage: url }, { where: { id } })
+            default:
+                break
         }
+    }
 
-        if (imageURL) {
-            saveImage(type, imageURL)
-                .then(() => res.status(200).json({ message: 'Success', imageURL }))
-                .catch((error) => res.status(500).json({ message: 'Error', error }))
-        } else {
-            multer({
-                storage: multerS3({
-                    s3: s3,
-                    bucket: `weco-${process.env.NODE_ENV}-${type}-images`,
-                    acl: 'public-read',
-                    metadata: function (req, file, cb) {
-                        cb(null, { mimetype: file.mimetype })
-                    },
-                    key: function (req, file, cb) {
-                        const name = file.originalname
-                            .replace(/[^A-Za-z0-9]/g, '-')
-                            .substring(0, 30)
-                        const date = Date.now().toString()
-                        const extension = file.mimetype.split('/')[1]
-                        const fileName = `${type}-image-${id}-${accountId}-${name}-${date}.${extension}`
-                        cb(null, fileName)
-                    },
-                }),
-            }).single('image')(req, res, (err) => {
-                const { file } = req
-                if (file) {
-                    saveImage(type, file.location)
-                        .then(() =>
-                            res.status(200).json({ message: 'Success', imageURL: file.location })
-                        )
-                        .catch((error) => res.status(500).json({ message: 'Error', error }))
-                } else res.status(500).json({ message: 'Error', error: err })
-            })
-        }
+    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+    else if (imageURL) {
+        saveImage(type, imageURL)
+            .then(() => res.status(200).json({ message: 'Success', imageURL }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
+    } else {
+        const { files } = await uploadFiles(req, res, accountId)
+        saveImage(type, files[0].url)
+            .then(() => res.status(200).json({ message: 'Success', imageURL: files[0].url }))
+            .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
-router.post('/gbg-background', authenticateToken, (req, res) => {
+router.post('/gbg-background', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { gameId } = req.query
     const { imageURL, videoURL, videoStartTime } = req.body
@@ -114,37 +85,15 @@ router.post('/gbg-background', authenticateToken, (req, res) => {
                 { where: { id: gameId } }
             ).then(res.status(200).json({ message: 'Success' }))
         } else {
-            multer({
-                storage: multerS3({
-                    s3: s3,
-                    bucket: `weco-${process.env.NODE_ENV}-gbg-background-images`,
-                    acl: 'public-read',
-                    metadata: function (req, file, cb) {
-                        cb(null, { mimetype: file.mimetype })
-                    },
-                    key: function (req, file, cb) {
-                        const name = file.originalname
-                            .replace(/[^A-Za-z0-9]/g, '-')
-                            .substring(0, 30)
-                        const date = Date.now().toString()
-                        const extension = file.mimetype.split('/')[1]
-                        const fileName = `gbg-background-image-${gameId}-${accountId}-${name}-${date}.${extension}`
-                        cb(null, fileName)
-                    },
-                }),
-            }).single('image')(req, res, (err) => {
-                const { file } = req
-                if (file) {
-                    GlassBeadGame.update(
-                        {
-                            backgroundImage: file.location,
-                            backgroundVideo: null,
-                            backgroundVideoStartTime: null,
-                        },
-                        { where: { id: gameId } }
-                    ).then(res.status(200).json({ message: 'Success', imageURL: file.location }))
-                } else res.status(500).json({ message: 'Failed', error: err })
-            })
+            const { files } = await uploadFiles(req, res, accountId)
+            GlassBeadGame.update(
+                {
+                    backgroundImage: files[0].url,
+                    backgroundVideo: null,
+                    backgroundVideoStartTime: null,
+                },
+                { where: { id: gameId } }
+            ).then(res.status(200).json({ message: 'Success', imageURL: files[0].url }))
         }
     }
 })
