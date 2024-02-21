@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
             spaceId: DataTypes.INTEGER,
             userId: DataTypes.INTEGER,
             totalPostLikes: DataTypes.INTEGER,
+            totalUnseenMessages: DataTypes.INTEGER,
         },
         {}
     )
