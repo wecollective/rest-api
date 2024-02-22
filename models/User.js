@@ -21,6 +21,8 @@ module.exports = (sequelize, DataTypes) => {
             accountVerified: DataTypes.BOOLEAN,
             passwordResetToken: DataTypes.TEXT,
             gcId: DataTypes.STRING,
+            unseenNotifications: DataTypes.INTEGER,
+            unseenMessages: DataTypes.INTEGER,
             state: DataTypes.STRING,
         },
         {}

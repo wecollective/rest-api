@@ -75,6 +75,61 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
+
+        // update totalUnseenMessages null to 0
+        // SpaceUserStat.update(
+        //     { totalUnseenMessages: 0 },
+        //     { where: { totalUnseenMessages: null }, silent: true }
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json({ message: 'Error', error }))
+
+        // // add space user stats for the members of all existing chats
+        // const chats = await Space.findAll({
+        //     where: { type: 'chat' },
+        //     attributes: ['id'],
+        //     include: {
+        //         model: User,
+        //         as: 'Members',
+        //         attributes: ['id'],
+        //         through: { where: { relationship: 'access' } },
+        //     },
+        // })
+        // Promise.all(
+        //     chats.map((chat) =>
+        //         Promise.all(
+        //             chat.Members.map(
+        //                 (member) =>
+        //                     new Promise(async (resolve) => {
+        //                         const stats = await SpaceUserStat.findOne({
+        //                             where: { spaceId: chat.id, userId: member.id },
+        //                         })
+        //                         const createStats = stats
+        //                             ? null
+        //                             : await SpaceUserStat.create({
+        //                                   spaceId: chat.id,
+        //                                   userId: member.id,
+        //                                   totalPostLikes: 0,
+        //                                   totalUnseenMessages: 0,
+        //                               })
+        //                         Promise.all([createStats])
+        //                             .then(() => resolve())
+        //                             .catch((error) => resolve(error))
+        //                     })
+        //             )
+        //         )
+        //     )
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json({ message: 'Error', error }))
+
+        // // update unseenMessages & unseenNotifications null to 0
+        // User.update(
+        //     { unseenNotifications: 0, unseenMessages: 0 },
+        //     { where: { unseenMessages: null }, silent: true }
+        // )
+        //     .then(() => res.status(200).json({ message: 'Success' }))
+        //     .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
@@ -1456,7 +1511,7 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
         // upload files and create post
         const { postData, files } = await uploadFiles(req, res, accountId)
         const { post } = await createPost(postData, files, accountId)
-        const { chatId, parent, membersNotInRoom } = postData.links
+        const { chatId, chatName, parent, membersNotInRoom } = postData.links
         const updateLastActivity = await Space.update(
             { lastActivity: new Date() },
             { where: { id: chatId }, silent: true }
@@ -1510,10 +1565,7 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
         // attach parent comment
         const linkComment = parent ? await attachComment(post, parent, accountId) : null
         // send push notifications to members not currently in the room
-        const creator = await User.findOne({
-            where: { id: accountId },
-            attributes: ['name'],
-        })
+        const creator = await User.findOne({ where: { id: accountId }, attributes: ['name'] })
         let text = post.searchableText
         if (!text) {
             const mediaTypes = post.mediaTypes.split(',')
@@ -1523,14 +1575,18 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
             else if (mediaType === 'event') text = '🗓️'
             else text = '...'
         } else if (text.length > 100) text = text.substring(0, 100).concat('...')
-        membersNotInRoom.forEach((userId) =>
+        membersNotInRoom.forEach((userId) => {
+            // update unseen message stats
+            SpaceUserStat.increment('totalUnseenMessages', { where: { spaceId: chatId, userId } })
+            User.increment('unseenMessages', { where: { id: userId } })
+            // send push notification
             pushNotification(userId, {
                 type: 'message',
-                title: `${creator.name} 💬`,
+                title: `${creator.name} 💬${chatName ? ` in ${chatName}` : ''}`,
                 text,
                 data: { chatId, messageId: post.id },
             })
-        )
+        })
         // signal message to members currently in room
         const io = req.app.get('socketio')
         io.to(`chat-${chatId}`).emit('new-message', post.id)
@@ -2022,6 +2078,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                                   spaceId: id,
                                   userId: post.Creator.id,
                                   totalPostLikes: post.totalLikes,
+                                  totalUnseenMessages: 0,
                               })
                         Promise.all([
                             createSpacePost,
@@ -2091,14 +2148,14 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                                     attributes: ['id', 'totalPostLikes'],
                                 })
                                 const updateSpaceUserStat = spaceUserStat
-                                    ? await spaceUserStat.update({
-                                          totalPostLikes:
-                                              spaceUserStat.totalPostLikes + post.totalLikes,
+                                    ? await spaceUserStat.increment('totalPostLikes', {
+                                          by: post.totalLikes,
                                       })
                                     : await SpaceUserStat.create({
                                           spaceId: id,
                                           userId: post.Creator.id,
                                           totalPostLikes: post.totalLikes,
+                                          totalUnseenMessages: 0,
                                       })
                                 Promise.all([
                                     createSpacePost,
@@ -2128,6 +2185,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
     }
 })
 
+// todo: create space user stats when user submits first post? (in order to save checks on each like...)
 router.post('/add-like', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { type, id, sourceType, sourceId, spaceId } = req.body
@@ -2178,6 +2236,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                                             spaceId: space.id,
                                             userId: item.Creator.id,
                                             totalPostLikes: 1,
+                                            totalUnseenMessages: 0,
                                         })
                                   Promise.all([updateSpaceStat, updateSpaceUserStat])
                                       .then(() => resolve())

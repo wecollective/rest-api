@@ -74,6 +74,8 @@ router.post('/register', async (req, res) => {
                 emailVerified: false,
                 emailToken,
                 state: 'active',
+                unseenNotifications: 0,
+                unseenMessages: 0,
             })
             const createNotification = await Notification.create({
                 ownerId: createUser.id,

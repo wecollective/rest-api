@@ -47,6 +47,12 @@ module.exports = {
             gcId: {
                 type: Sequelize.STRING,
             },
+            unseenNotifications: {
+                type: Sequelize.INTEGER,
+            },
+            unseenMessages: {
+                type: Sequelize.INTEGER,
+            },
             state: {
                 type: Sequelize.STRING,
             },

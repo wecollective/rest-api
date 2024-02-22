@@ -4,6 +4,7 @@ const express = require('express')
 const router = express.Router()
 const sequelize = require('sequelize')
 const { Op } = sequelize
+const db = require('../models/index')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 const crypto = require('crypto')
@@ -14,6 +15,7 @@ const {
     User,
     Notification,
     SpaceUser,
+    SpaceUserStat,
     UserUser,
     UserPost,
     Post,
@@ -45,20 +47,30 @@ const {
     findFullPostAttributes,
     findPostThrough,
     findPostInclude,
-    noMulterErrors,
     getToyboxItem,
     uploadFiles,
+    pushNotification,
 } = require('../Helpers')
 const { v4: uuidv4 } = require('uuid')
 
 // GET
+// todo: store an increment unseen notifications rather than calculating here
 router.get('/account-data', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     else {
         const user = await User.findOne({
             where: { id: accountId },
-            attributes: ['id', 'name', 'handle', 'bio', 'email', 'flagImagePath', 'emailsDisabled'],
+            attributes: [
+                'id',
+                'name',
+                'handle',
+                'bio',
+                'email',
+                'flagImagePath',
+                'emailsDisabled',
+                'unseenMessages',
+            ],
         })
         const mutedUsers = await user.getMutedUsers({
             where: { state: 'active' },
@@ -219,6 +231,12 @@ router.get('/chats', authenticateToken, async (req, res) => {
             chats.map(
                 (chat) =>
                     new Promise(async (resolve) => {
+                        // todo: include user stats in chats above if possible
+                        const userStats = await SpaceUserStat.findOne({
+                            where: { spaceId: chat.id, userId: accountId },
+                            attributes: ['totalUnseenMessages'],
+                        })
+                        chat.setDataValue('unseenMessages', userStats.totalUnseenMessages)
                         const lastMessage = await Post.findOne({
                             where: { '$AllPostSpaces.id$': chat.id },
                             order: [['createdAt', 'DESC']],
@@ -290,13 +308,14 @@ router.post('/messages', authenticateToken, async (req, res) => {
           })
     if (!+offset && !chat) res.status(404).json({ message: 'Chat not found' })
     else {
-        // if not a group chat
+        // if one on one chat, get other user data
         if (chat && !chat.name) {
             chat.setDataValue(
                 'otherUser',
                 chat.Members.find((c) => c.id !== accountId)
             )
         }
+        // get messages with count
         const emptyMessages = await Post.findAndCountAll({
             where: { '$AllPostSpaces.id$': chatId },
             order: [['createdAt', 'DESC']],
@@ -311,7 +330,37 @@ router.post('/messages', authenticateToken, async (req, res) => {
                 through: { where: { state: 'active', relationship: 'direct' }, attributes: [] },
             },
         })
-
+        // decrement unseen messages
+        const decrementUnseenMessages = await db.sequelize.transaction(async (t) => {
+            const user = await User.findOne({
+                where: { id: accountId },
+                attributes: ['id', 'unseenMessages'],
+                transaction: t,
+            })
+            const stat = await SpaceUserStat.findOne({
+                where: { spaceId: chatId, userId: accountId },
+                attributes: ['id', 'totalUnseenMessages'],
+                transaction: t,
+            })
+            if (stat && user) {
+                // update user
+                const limit = emptyMessages.rows.length
+                const decrementUserBy =
+                    stat.totalUnseenMessages > limit ? limit : stat.totalUnseenMessages
+                let newUserValue = user.unseenMessages - decrementUserBy
+                if (newUserValue < 0) newUserValue = 0
+                user.unseenMessages = newUserValue
+                await user.save({ transaction: t })
+                // update stat
+                let newStatValue = stat.totalUnseenMessages - limit
+                if (newStatValue < 0) newStatValue = 0
+                stat.totalUnseenMessages = newStatValue
+                await stat.save({ transaction: t })
+                return
+            }
+            return
+        })
+        // add includes to messages
         const messages = await Post.findAll({
             where: { id: emptyMessages.rows.map((post) => post.id) },
             attributes: fullPostAttributes,
@@ -319,8 +368,9 @@ router.post('/messages', authenticateToken, async (req, res) => {
             include: findPostInclude(accountId),
         })
 
-        Promise.all(
-            messages.map(
+        Promise.all([
+            decrementUnseenMessages,
+            ...messages.map(
                 (post) =>
                     new Promise(async (resolve) => {
                         if (post.type === 'chat-reply') {
@@ -342,8 +392,8 @@ router.post('/messages', authenticateToken, async (req, res) => {
                             resolve()
                         } else resolve()
                     })
-            )
-        )
+            ),
+        ])
             .then(() => res.status(200).json({ chat, messages, total: emptyMessages.count }))
             .catch((error) => res.status(500).json({ error }))
     }
@@ -750,8 +800,11 @@ router.post('/liked-posts', authenticateToken, async (req, res) => {
 router.post('/create-chat', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
     const { userId } = req.body
-    const user = await User.findOne({ where: { id: accountId }, attributes: ['id'] })
-    const chats = await user.getUserSpaces({
+    const creator = await User.findOne({
+        where: { id: accountId },
+        attributes: ['id', 'name', 'handle', 'flagImagePath'],
+    })
+    const chats = await creator.getUserSpaces({
         where: { state: 'active', type: 'chat', name: null, '$Members.id$': userId },
         through: { where: { relationship: 'access', state: 'active' } },
         attributes: ['id'],
@@ -775,7 +828,8 @@ router.post('/create-chat', authenticateToken, async (req, res) => {
             totalPostLikes: 0,
             totalPosts: 0,
             totalComments: 0,
-            totalFollowers: 1,
+            totalFollowers: 2,
+            lastActivity: new Date(),
         })
 
         const connectUsers = await Promise.all(
@@ -794,32 +848,62 @@ router.post('/create-chat', authenticateToken, async (req, res) => {
                             spaceId: newChat.id,
                             userId: id,
                         })
-                        Promise.all([createFollower, createAccess])
+                        const createStats = await SpaceUserStat.create({
+                            spaceId: newChat.id,
+                            userId: id,
+                            totalPostLikes: 0,
+                            totalUnseenMessages: 0,
+                        })
+                        Promise.all([createFollower, createAccess, createStats])
                             .then(() => resolve())
                             .catch((error) => resolve(error))
                     })
             )
         )
 
-        //sgMail.send({
-        //     to: user.email,
-        //     from: { email: 'admin@weco.io', name: 'we { collective }' },
-        //     subject: 'New notification',
-        //     text: `
-        //         Hi ${user.name}, ${creator.name} just invited you to a chat on weco:
-        //         http://${appURL}/s/${newChat.handle}
-        //     `,
-        //     html: `
-        //         <p>
-        //             Hi ${user.name},
-        //             <br/>
-        //             <a href='${appURL}/u/${creator.handle}'>${creator.name}</a>
-        //             just invited you to a
-        //             <a href='${appURL}/s/${newChat.handle}'>chat</a>
-        //             on weco
-        //         </p>
-        //     `,
-        // })
+        const otherUser = await User.findOne({
+            where: { id: userId },
+            attributes: ['handle', 'name', 'email'],
+        })
+        const url = `${appURL}/u/${otherUser.handle}/messages?chatId=${newChat.id}`
+        // notify other user
+        pushNotification(userId, {
+            type: 'chat-invite',
+            title: `${creator.name} invited you to chat 💬`,
+            text: 'Click here to open the chat',
+            data: {
+                url,
+                chat: {
+                    id: newChat.id,
+                    name: newChat.name,
+                    flagImagePath: newChat.flagImagePath,
+                    otherUser: creator,
+                    unseenMessages: 0,
+                },
+            },
+        })
+
+        // email other user
+        sgMail.send({
+            to: otherUser.email,
+            from: { email: 'admin@weco.io', name: 'we { collective }' },
+            subject: 'Chat invite',
+            text: `
+                Hi ${otherUser.name}, ${creator.name} just invited you to chat on weco.
+                Log in and go here to view the thread: ${url}
+            `,
+            html: `
+                <p>
+                    Hi ${otherUser.name},
+                    <br/>
+                    <a href='${appURL}/u/${creator.handle}'>${creator.name}</a>
+                    just invited you to chat on weco.
+                    <br/>
+                    Log in and go <a href='${url}'>here</a>
+                    to view the thread.
+                </p>
+            `,
+        })
 
         Promise.all([connectUsers])
             .then(() => res.status(200).json(newChat))
@@ -846,7 +930,8 @@ router.post('/create-chat-group', authenticateToken, async (req, res) => {
             totalPostLikes: 0,
             totalPosts: 0,
             totalComments: 0,
-            totalFollowers: 1,
+            totalFollowers: userIds.length + 1,
+            lastActivity: new Date(),
         })
 
         const createMod = await SpaceUser.create({
@@ -856,68 +941,78 @@ router.post('/create-chat-group', authenticateToken, async (req, res) => {
             userId: accountId,
         })
 
-        // const createFollower = await SpaceUser.create({
-        //     relationship: 'follower',
-        //     state: 'active',
-        //     spaceId: newChat.id,
-        //     userId: accountId,
-        // })
-
-        // const users = await User.findAll({
-        //     where: { id: [accountId, ...userIds] },
-        //     attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
-        // })
-        // const creator = users.find((u) => u.id === accountId)
-
+        const creator = await User.findOne({
+            where: { id: accountId },
+            attributes: ['id', 'name', 'handle'],
+        })
+        const users = await User.findAll({
+            where: { id: [accountId, ...userIds] },
+            attributes: ['id', 'handle', 'name', 'email'],
+        })
         const addUsers = Promise.all(
-            [accountId, ...userIds].map(
-                (userId) =>
+            users.map(
+                (user) =>
                     new Promise(async (resolve) => {
-                        // const isOwnAccount = user.id === accountId
                         const createAccess = await SpaceUser.create({
                             relationship: 'access',
                             state: 'active',
                             spaceId: newChat.id,
-                            userId,
+                            userId: user.id,
                         })
                         const createFollower = await SpaceUser.create({
                             relationship: 'follower',
                             state: 'active',
                             spaceId: newChat.id,
-                            userId,
+                            userId: user.id,
                         })
-                        // const sendNotification = isOwnAccount
-                        //     ? null
-                        //     : await Notification.create({
-                        //           ownerId: user.id,
-                        //           type: 'chat-invite',
-                        //           seen: false,
-                        //           userId: accountId,
-                        //           spaceAId: newChat.id,
-                        //           state: 'pending',
-                        //       })
-                        // const sendEmail = isOwnAccount
-                        //     ? null
-                        //     : sgMail.send({
-                        //           to: user.email,
-                        //           from: { email: 'admin@weco.io', name: 'we { collective }' },
-                        //           subject: 'New notification',
-                        //           text: `
-                        //                 Hi ${user.name}, ${creator.name} just invited you to a chat on weco:
-                        //                 http://${appURL}/s/${newChat.handle}
-                        //             `,
-                        //           html: `
-                        //                 <p>
-                        //                     Hi ${user.name},
-                        //                     <br/>
-                        //                     <a href='${appURL}/u/${creator.handle}'>${creator.name}</a>
-                        //                     just invited you to a
-                        //                     <a href='${appURL}/s/${newChat.handle}'>chat</a>
-                        //                     on weco
-                        //                 </p>
-                        //             `,
-                        //       })
-                        Promise.all([createAccess, createFollower])
+                        const createStats = await SpaceUserStat.create({
+                            spaceId: newChat.id,
+                            userId: user.id,
+                            totalPostLikes: 0,
+                            totalUnseenMessages: 0,
+                        })
+
+                        if (user.id !== accountId) {
+                            // notify other user
+                            const url = `${appURL}/u/${user.handle}/messages?chatId=${newChat.id}`
+                            pushNotification(user.id, {
+                                type: 'chat-invite',
+                                title: `${creator.name} invited you to chat 💬`,
+                                text: 'Click here to open the chat',
+                                data: {
+                                    url,
+                                    chat: {
+                                        id: newChat.id,
+                                        name: newChat.name,
+                                        flagImagePath: newChat.flagImagePath,
+                                        unseenMessages: 0,
+                                    },
+                                },
+                            })
+
+                            // email other users
+                            sgMail.send({
+                                to: user.email,
+                                from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                subject: 'Chat invite',
+                                text: `
+                                    Hi ${user.name}, ${creator.name} just invited you to chat on weco.
+                                    Log in and go here to view the thread: ${url}
+                                `,
+                                html: `
+                                    <p>
+                                        Hi ${user.name},
+                                        <br/>
+                                        <a href='${appURL}/u/${creator.handle}'>${creator.name}</a>
+                                        just invited you to chat on weco.
+                                        <br/>
+                                        Log in and go <a href='${url}'>here</a>
+                                        to view the thread.
+                                    </p>
+                                `,
+                            })
+                        }
+                        Promise.all([createAccess, createFollower, createStats])
                             .then(() => resolve())
                             .catch((error) => resolve(error))
                     })
