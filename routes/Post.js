@@ -75,61 +75,6 @@ router.get('/test', async (req, res) => {
     } else {
         console.log('first attempt')
         testIndex += 1
-
-        // update totalUnseenMessages null to 0
-        // SpaceUserStat.update(
-        //     { totalUnseenMessages: 0 },
-        //     { where: { totalUnseenMessages: null }, silent: true }
-        // )
-        //     .then(() => res.status(200).json({ message: 'Success' }))
-        //     .catch((error) => res.status(500).json({ message: 'Error', error }))
-
-        // // add space user stats for the members of all existing chats
-        // const chats = await Space.findAll({
-        //     where: { type: 'chat' },
-        //     attributes: ['id'],
-        //     include: {
-        //         model: User,
-        //         as: 'Members',
-        //         attributes: ['id'],
-        //         through: { where: { relationship: 'access' } },
-        //     },
-        // })
-        // Promise.all(
-        //     chats.map((chat) =>
-        //         Promise.all(
-        //             chat.Members.map(
-        //                 (member) =>
-        //                     new Promise(async (resolve) => {
-        //                         const stats = await SpaceUserStat.findOne({
-        //                             where: { spaceId: chat.id, userId: member.id },
-        //                         })
-        //                         const createStats = stats
-        //                             ? null
-        //                             : await SpaceUserStat.create({
-        //                                   spaceId: chat.id,
-        //                                   userId: member.id,
-        //                                   totalPostLikes: 0,
-        //                                   totalUnseenMessages: 0,
-        //                               })
-        //                         Promise.all([createStats])
-        //                             .then(() => resolve())
-        //                             .catch((error) => resolve(error))
-        //                     })
-        //             )
-        //         )
-        //     )
-        // )
-        //     .then(() => res.status(200).json({ message: 'Success' }))
-        //     .catch((error) => res.status(500).json({ message: 'Error', error }))
-
-        // // update unseenMessages & unseenNotifications null to 0
-        // User.update(
-        //     { unseenNotifications: 0, unseenMessages: 0 },
-        //     { where: { unseenMessages: null }, silent: true }
-        // )
-        //     .then(() => res.status(200).json({ message: 'Success' }))
-        //     .catch((error) => res.status(500).json({ message: 'Error', error }))
     }
 })
 
