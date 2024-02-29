@@ -26,6 +26,7 @@ module.exports = (sequelize, DataTypes) => {
             totalRatings: DataTypes.INTEGER,
             totalGlassBeadGames: DataTypes.INTEGER,
             game: DataTypes.JSON,
+            play: DataTypes.JSON,
             lastActivity: DataTypes.DATE,
         },
         {}

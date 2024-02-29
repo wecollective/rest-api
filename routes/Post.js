@@ -685,7 +685,7 @@ router.get('/post-comments', async (req, res) => {
     // failed approaches:
     // + full nested include with no recursive promises (doesn't allow limit beyond first generation)
     // + get links first instead of using getBlocks function ~1.5s
-    const { postId, offset, filter } = req.query
+    const { postId, offset, filter, limit } = req.query
     const limits = [5, 4, 3, 2, 1] // number of comments to inlcude per generation (length of array determines max depth)
     const post = await Post.findOne({
         where: { id: postId },
@@ -708,7 +708,7 @@ router.get('/post-comments', async (req, res) => {
             ['id', 'ASC'],
         ]
 
-    async function getChildComments(parent, depth) {
+    async function getChildComments(parent, depth, limit) {
         return new Promise(async (resolve) => {
             const comments = await parent.getBlocks({
                 attributes: [...fullPostAttributes, 'totalChildComments'],
@@ -727,7 +727,7 @@ router.get('/post-comments', async (req, res) => {
                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     },
                 ],
-                limit: limits[depth],
+                limit: limit || limits[depth],
                 offset: depth ? 0 : +offset,
                 order,
             })
@@ -748,7 +748,7 @@ router.get('/post-comments', async (req, res) => {
         })
     }
 
-    getChildComments(post, 0)
+    getChildComments(post, 0, +limit)
         .then(() =>
             res.status(200).json({
                 totalChildren: post.totalChildComments,
@@ -1734,7 +1734,7 @@ router.post('/update-post', authenticateToken, async (req, res) => {
     if (!post) res.status(401).json({ message: 'Unauthorized' })
     else {
         const toUpdate = {};
-        for (const key of ['mediaTypes', 'title', 'text', 'searchableText', 'game']) {
+        for (const key of ['mediaTypes', 'title', 'text', 'searchableText', 'game', 'play']) {
             if (key in req.body) {
                 toUpdate[key] = req.body[key]
             }
