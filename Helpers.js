@@ -1147,6 +1147,17 @@ function findPostInclude(accountId) {
             },
         },
         {
+            model: Link,
+            as: 'Plays',
+            separate: true,
+            where: { relationship: 'play', state: 'active' },
+            order: [['index', 'ASC']],
+            include: {
+                model: Post,
+                attributes: ['id', 'title', 'play', 'state']
+            }
+        },
+        {
             model: Reaction,
             where: { creatorId: accountId, state: 'active' },
             attributes: ['type'],

@@ -1350,7 +1350,7 @@ router.post('/create-post', authenticateToken, async (req, res) => {
                 const createNewLink = await Link.create({
                     state: 'active',
                     creatorId: accountId,
-                    relationship: 'link',
+                    relationship: source.relationship ?? 'link',
                     itemAType: source.type,
                     itemBType: 'post',
                     itemAId: source.id,
@@ -3057,6 +3057,25 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
             { state: 'deleted' },
             { where: { id: postId, creatorId: accountId } }
         )
+
+        await Link.update(
+            { state: 'deleted', },
+            {
+                where: {
+                    state: 'active',
+                    [Op.or]: [
+                        {
+                            itemAType: 'post',
+                            itemAId: postId
+                        },
+                        {
+                            itemBType: 'post',
+                            itemBId: postId
+                        }
+                    ]
+                }
+            }
+        );
 
         const updateSpaceStats = await Promise.all(
             post.AllPostSpaces.map(
