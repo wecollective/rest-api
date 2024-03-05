@@ -5,6 +5,7 @@ const { Op } = sequelize
 const { User, Event, UserEvent, Notification, Post, Weave, GlassBeadGame } = require('./models')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
+const { initializePlayTasks } = require('./Play')
 
 function scheduleEventNotification(data) {
     const {
@@ -187,37 +188,33 @@ async function scheduleGBGMoveJobs(postId, player, moveNumber, deadline) {
                                     const sendEmail = p.emailsDisabled
                                         ? null
                                         : await sgMail.send({
-                                              to: p.email,
-                                              from: {
-                                                  email: 'admin@weco.io',
-                                                  name: 'we { collective }',
-                                              },
-                                              subject: 'New notification',
-                                              text: `
-                                            Hi ${p.name}, ${
-                                                  you ? 'You' : player.name
-                                              } failed to make ${
-                                                  you ? 'your' : 'their'
-                                              } move in time on this glass bead game:
+                                            to: p.email,
+                                            from: {
+                                                email: 'admin@weco.io',
+                                                name: 'we { collective }',
+                                            },
+                                            subject: 'New notification',
+                                            text: `
+                                            Hi ${p.name}, ${you ? 'You' : player.name
+                                                } failed to make ${you ? 'your' : 'their'
+                                                } move in time on this glass bead game:
                                             http://${config.appURL}/p/${postId}
                                             The game has now ended!
                                         `,
-                                              html: `
+                                            html: `
                                             <p>
                                                 Hi ${p.name},
                                                 <br/>
                                                 <br/>
-                                                ${you ? 'You' : player.name} failed to make ${
-                                                  you ? 'your' : 'their'
-                                              } move in time on <a href='${
-                                                  config.appURL
-                                              }/p/${postId}'>this glass bead game</a>.
+                                                ${you ? 'You' : player.name} failed to make ${you ? 'your' : 'their'
+                                                } move in time on <a href='${config.appURL
+                                                }/p/${postId}'>this glass bead game</a>.
                                                 <br/>
                                                 <br/>
                                                 The game has now ended!
                                             </p>
                                         `,
-                                          })
+                                        })
                                     Promise.all([createNotification, sendEmail])
                                         .then(() => resolve())
                                         .catch((error) => resolve(error))
@@ -344,6 +341,8 @@ async function initializeScheduledTasks() {
             if (nextPlayer) scheduleGBGMoveJobs(id, nextPlayer, moveNumber, nextMoveDeadline)
         }
     })
+
+    initializePlayTasks()
 }
 
 module.exports = {

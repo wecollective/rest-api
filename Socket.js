@@ -6,6 +6,7 @@ const socketServer = require('http').createServer()
 const socketIo = require('socket.io')
 const io = socketIo(socketServer, { cors: { origin: whitelist } })
 // socket.io cheatsheet: https://socket.io/docs/v3/emit-cheatsheet/
+const { registerPlaySocketEvents } = require('./Play')
 
 const sockets = []
 const rooms = [] // space, chat, post, or game + id: `space-58`
@@ -200,6 +201,8 @@ io.on('connection', (socket) => {
     //         gameRooms[roomId] = gameRooms[roomId].filter((users) => users.socketId !== socket.id)
     //     }
     // })
+
+    registerPlaySocketEvents(socket, io)
 })
 
 socketServer.listen(5001)
