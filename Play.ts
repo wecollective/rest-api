@@ -1,20 +1,114 @@
-const sequelize = require('sequelize')
-const { Op } = sequelize
-const { User, Event, UserEvent, Notification, Post, Weave, GlassBeadGame } = require('./models')
-const schedule = require('node-schedule')
-const { createPost } = require('./Helpers')
-const parseDuration = require('parse-duration')
+import { isEqual, omit } from 'lodash'
+import schedule from 'node-schedule'
+import sequelize from 'sequelize'
+import { Server, Socket } from 'socket.io'
 
-const getFirstLeafStep = (step, variables, playerIds) => {
+const { Post } = require('./models')
+
+const { Op } = sequelize
+
+export const POST_TYPE = [
+'post',
+    'play',
+    'comment',
+    'bead',
+    'poll-answer',
+    'card-face',
+    'gbg-room-comment',
+    'url-block',
+    'image-block',
+    'audio-block',
+] as const
+
+export type PostType = (typeof POST_TYPE)[number]
+
+export type Post = {
+    id: number
+    type: PostType
+    mediaTypes: string
+    title: string
+    text: string
+    createdAt: string
+    updatedAt: string
+    totalComments: number
+    totalLikes: number
+    totalRatings: number
+    totalReposts: number
+    totalLinks: number
+    creatorId: number
+    game?: Game
+    play?: Play
+}
+
+export type Step = {
+    id: string
+} & (
+    | {
+          type: 'post'
+          post: {
+              title: string
+              text: string
+              timeout: number
+          }
+      }
+    | {
+          type: 'game'
+          gameId: number
+      }
+    | {
+          type: 'rounds'
+          amount: string
+          steps: Step[]
+      }
+    | {
+          type: 'turns'
+          steps: Step[]
+      }
+)
+
+export type LeafStep = Extract<Step, { type: 'post' }>
+
+export type Game = {
+    steps: Step[]
+}
+
+export type PlayVariables = Record<string, string | number | boolean>
+
+export type Play = {
+    game: Game
+    gameId: number
+    playerIds: number[]
+    status: 'waiting' | 'started' | 'paused' | 'stopped' | 'ended'
+    variables: PlayVariables
+} & (
+    | { status: 'waiting' | 'stopped' | 'ended' }
+    | { status: 'paused'; step: LeafStep }
+    | { status: 'started'; step: LeafStep; stepTimeout: number }
+)
+
+async function getPost(id: number) {
+    return await Post.findOne({
+        where: {
+            state: 'active',
+            id
+        }
+    })
+}
+
+const getFirstLeafStep = (
+    step: Step | undefined,
+    variables: PlayVariables,
+    playerIds: number[]
+): undefined | { step: LeafStep; variables: PlayVariables } => {
     if (!step) {
         return undefined
     }
     switch (step.type) {
-        case "game":
-            throw new Error("TODO")
-        case "post":
+        case 'game':
+            throw new Error('TODO')
+        case 'post':
             return { step, variables }
-        case "rounds": {
+        case 'rounds': {
             const firstStep = getFirstLeafStep(step.steps[0], variables, playerIds)
             if (!firstStep) {
                 return undefined
@@ -23,11 +117,11 @@ const getFirstLeafStep = (step, variables, playerIds) => {
                 step: firstStep.step,
                 variables: {
                     ...firstStep.variables,
-                    [`${step.id}_round`]: firstStep.variables[`${step.id}_round`] ?? 1
-                }
+                    [`${step.id}_round`]: firstStep.variables[`${step.id}_round`] ?? 1,
+                },
             }
         }
-        case "turns": {
+        case 'turns': {
             const firstStep = getFirstLeafStep(step.steps[0], variables, playerIds)
             if (!firstStep) {
                 return undefined
@@ -36,20 +130,24 @@ const getFirstLeafStep = (step, variables, playerIds) => {
                 step: firstStep.step,
                 variables: {
                     ...firstStep.variables,
-                    [`${step.id}_player`]:
-                        firstStep.variables[`${step.id}_player`] ?? playerIds[0]
-                }
+                    [`${step.id}_player`]: firstStep.variables[`${step.id}_player`] ?? playerIds[0],
+                },
             }
         }
         default: {
-            const exhaustivenessCheck = step
+            const exhaustivenessCheck: never = step
             throw exhaustivenessCheck
         }
     }
 }
 
-const getTransition = (steps, stepId, variables, playerIds) => {
-    let current
+const getTransition = (
+    steps: Step[],
+    stepId: string,
+    variables: PlayVariables,
+    playerIds: number[]
+): undefined | { current: LeafStep; next?: LeafStep; variables: PlayVariables } => {
+    let current: LeafStep | undefined
     let currentVariables = variables
     for (let i = 0; i < steps.length; i++) {
         const step = steps[i]
@@ -61,20 +159,15 @@ const getTransition = (steps, stepId, variables, playerIds) => {
             }
         } else {
             switch (step.type) {
-                case "game":
-                    throw new Error("TODO")
-                case "post":
+                case 'game':
+                    throw new Error('TODO')
+                case 'post':
                     if (step.id === stepId) {
                         current = step
                     }
                     break
-                case "rounds": {
-                    const result = getTransition(
-                        step.steps,
-                        stepId,
-                        currentVariables,
-                        playerIds
-                    )
+                case 'rounds': {
+                    const result = getTransition(step.steps, stepId, currentVariables, playerIds)
                     if (!result) {
                         break
                     }
@@ -84,13 +177,13 @@ const getTransition = (steps, stepId, variables, playerIds) => {
                     }
 
                     const roundKey = `${step.id}_round`
-                    const currentRound = currentVariables[roundKey]
+                    const currentRound = currentVariables[roundKey] as number
                     if (currentRound < +step.amount) {
                         const firstStep = getFirstLeafStep(
                             step,
                             {
                                 ...result.variables,
-                                [roundKey]: currentRound + 1
+                                [roundKey]: currentRound + 1,
                             },
                             playerIds
                         )
@@ -98,7 +191,7 @@ const getTransition = (steps, stepId, variables, playerIds) => {
                             return {
                                 current: result.current,
                                 next: firstStep.step,
-                                variables: firstStep.variables
+                                variables: firstStep.variables,
                             }
                         }
                     }
@@ -107,13 +200,8 @@ const getTransition = (steps, stepId, variables, playerIds) => {
                     currentVariables = omit(result.variables, roundKey)
                     break
                 }
-                case "turns": {
-                    const result = getTransition(
-                        step.steps,
-                        stepId,
-                        currentVariables,
-                        playerIds
-                    )
+                case 'turns': {
+                    const result = getTransition(step.steps, stepId, currentVariables, playerIds)
                     if (!result) {
                         break
                     }
@@ -123,14 +211,14 @@ const getTransition = (steps, stepId, variables, playerIds) => {
                     }
 
                     const playerKey = `${step.id}_player`
-                    const currentPlayerId = result.variables[playerKey]
+                    const currentPlayerId = result.variables[playerKey] as number
                     const currentPlayerIndex = playerIds.indexOf(currentPlayerId)
                     if (currentPlayerIndex < playerIds.length - 1) {
                         const firstStep = getFirstLeafStep(
                             step,
                             {
                                 ...result.variables,
-                                [playerKey]: playerIds[currentPlayerIndex + 1]
+                                [playerKey]: playerIds[currentPlayerIndex + 1],
                             },
                             playerIds
                         )
@@ -138,7 +226,7 @@ const getTransition = (steps, stepId, variables, playerIds) => {
                             return {
                                 current: result.current,
                                 next: firstStep.step,
-                                variables: firstStep.variables
+                                variables: firstStep.variables,
                             }
                         }
                     }
@@ -148,7 +236,7 @@ const getTransition = (steps, stepId, variables, playerIds) => {
                     break
                 }
                 default: {
-                    const exhaustivenessCheck = step
+                    const exhaustivenessCheck: never = step
                     throw exhaustivenessCheck
                 }
             }
@@ -162,40 +250,37 @@ const getTransition = (steps, stepId, variables, playerIds) => {
     return undefined
 }
 
-async function startStep(post) {
-    const { current, next, variables } = getTransition(post)
 
-    switch (current.type) {
-        case 'post':
-            const timeout = parseDuration(current.post.timeout)
-            await createPost({
-                type: 'post',
-                title: current.post.title,
-                text: current.post.text,
-            }, [], post.creatorId)
-            scheduleEndStep()
-            break;
-        default:
-            throw new Error('TODO')
-    }
+async function startStep(post: Post) {
+    const play = post.play!
+    // const { current, next, variables } = getTransition(play.game.steps, play.step.id, play.variables, play.playerIds)
 
-    const newPost = {};
-    scheduleEndStep(post);
+    // switch (current.type) {
+    //     case 'post':
+    //         const timeout = parseDuration(current.post.timeout)
+    //         await createPost({
+    //             type: 'post',
+    //             title: current.post.title,
+    //             text: current.post.text,
+    //         }, [], post.creatorId)
+    //         scheduleEndStep(post)
+    //         break;
+    //     default:
+    //         throw new Error('TODO')
+    // }
+
+    // const newPost = {};
+    // scheduleEndStep(post);
 }
 
-async function endStep(post) {
+async function endStep(post: Post) {
     // TODO
 }
 
-function scheduleEndStep(post) {
-    schedule.scheduleJob(post.play.stepTimeout, async () => {
-        const currentPost = await Post.findOne({
-            where: {
-                state: 'active',
-                id: post.id
-            }
-        })
-        if (!deepEquals(currentPost?.play, post.play)) {
+function scheduleEndStep(post: Post, timeout: number) {
+    schedule.scheduleJob(timeout, async () => {
+        const currentPost = await getPost(post.id)
+        if (!isEqual(currentPost?.play, post.play)) {
             // The state of the play has changed, this job is outdated.
             return
         }
@@ -204,7 +289,7 @@ function scheduleEndStep(post) {
 }
 
 async function initializePlayTasks() {
-    const plays = await Post.findAll({
+    const plays: Post[] = await Post.findAll({
         where: {
             state: 'active',
             'play': { [Op.not]: null }
@@ -212,7 +297,7 @@ async function initializePlayTasks() {
     })
 
     for (const post of plays) {
-        const play = post.play
+        const play = post.play!
         if (play.status !== 'started') {
             continue
         }
@@ -221,7 +306,7 @@ async function initializePlayTasks() {
         if (stepTimeout < new Date()) {
             endStep(post)
         } else {
-            scheduleEndStep(post)
+            scheduleEndStep(post, play.stepTimeout)
         }
     }
 }
@@ -239,13 +324,9 @@ const EVENTS = {
     }
 }
 
-function registerPlaySocketEvents(socket, io) {
-    socket.on(EVENTS.outgoing.updateGame, async ({ id, game }) => {
-        const post = await Post.findOne({
-            where: {
-                id
-            }
-        })
+function registerPlaySocketEvents(socket: Socket, io: Server) {
+    socket.on(EVENTS.outgoing.updateGame, async ({ id, game }: { id: number, game: Game }) => {
+        const post = await getPost(id)
 
         const newPlay = {
             ...post.play,
@@ -263,28 +344,32 @@ function registerPlaySocketEvents(socket, io) {
             }
         })
 
-        io.in(id).emit(EVENTS.incoming.updated, { play: newPlay })
+        io.in(`${id}`).emit(EVENTS.incoming.updated, { play: newPlay })
     })
 
-    socket.on(EVENTS.outgoing.start, async ({ id }) => {
-        const post = await Post.findOne({
+    socket.on(EVENTS.outgoing.start, async ({ id }: { id: number }) => {
+        const post: Post = await Post.findOne({
             where: {
                 id
             }
         })
+        const play = post.play!
 
-        let newPlay;
-        if (post.play.status === 'paused') {
+        let newPlay: Play;
+        if (play.status === 'paused') {
             newPlay = {
-                ...post.play,
+                ...play,
                 status: 'started',
-                stepTimeout: +new Date() + post.play.step.post.timeout
+                stepTimeout: +new Date() + play.step.post.timeout
             }
         } else {
-            const firstStep = getFirstLeafStep(post.play.game.steps[0]);
+            const firstStep = getFirstLeafStep(play.game.steps[0], play.variables, play.playerIds);
+            if (!firstStep) {
+                throw new Error('No step.')
+            }
 
             newPlay = {
-                ...post.play,
+                ...play,
                 status: 'started',
                 step: firstStep.step,
                 variables: firstStep.variables,
@@ -301,13 +386,13 @@ function registerPlaySocketEvents(socket, io) {
                 id
             }
         })
-        io.in(id).emit(EVENTS.incoming.updated, { play: newPlay })
+        io.in(`${id}`).emit(EVENTS.incoming.updated, { play: newPlay })
 
         const newPost = { ...post, play: newPlay }
         await startStep(newPost)
     })
 
-    socket.on(EVENTS.outgoing.next, async ({ id }) => {
+    socket.on(EVENTS.outgoing.next, async ({ id }: { id: number }) => {
         const post = await Post.findOne({
             where: {
                 id
@@ -339,10 +424,10 @@ function registerPlaySocketEvents(socket, io) {
                 id
             }
         })
-        io.in(id).emit(EVENTS.incoming.updated, { play: newPlay })
+        io.in(`${id}`).emit(EVENTS.incoming.updated, { play: newPlay })
     })
 
-    socket.on(EVENTS.outgoing.pause, async ({ id }) => {
+    socket.on(EVENTS.outgoing.pause, async ({ id }: { id: number }) => {
         const post = await Post.findOne({
             where: {
                 id
@@ -361,10 +446,10 @@ function registerPlaySocketEvents(socket, io) {
                 id
             }
         })
-        io.in(id).emit(EVENTS.incoming.updated, { play: newPlay })
+        io.in(`${id}`).emit(EVENTS.incoming.updated, { play: newPlay })
     })
 
-    socket.on(EVENTS.outgoing.stop, async ({ id }) => {
+    socket.on(EVENTS.outgoing.stop, async ({ id }: { id: number }) => {
         const post = await Post.findOne({
             where: {
                 id
@@ -383,7 +468,7 @@ function registerPlaySocketEvents(socket, io) {
                 id
             }
         })
-        io.in(id).emit(EVENTS.incoming.updated, { play: newPlay })
+        io.in(`${id}`).emit(EVENTS.incoming.updated, { play: newPlay })
     })
 }
 

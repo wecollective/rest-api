@@ -42,7 +42,10 @@
         "web-push": "^3.6.7"
     },
     "devDependencies": {
+        "@types/lodash": "^4.17.0",
+        "@types/node-schedule": "^2.1.6",
         "eslint": "^8.56.0",
-        "eslint-config-airbnb-typescript-prettier": "^5.0.0"
+        "eslint-config-airbnb-typescript-prettier": "^5.0.0",
+        "typescript": "^5.4.2"
     }
 }
