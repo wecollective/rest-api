@@ -2,21 +2,19 @@ const sequelize = require('sequelize')
 const { Op } = sequelize
 const { User, Event, UserEvent, Notification, Post, Weave, GlassBeadGame } = require('./models')
 const schedule = require('node-schedule')
+const { createPost } = require('./Helpers')
+const parseDuration = require('parse-duration')
 
-function getFirstLeafStep(
-    step,
-    variables,
-    playerIds
-) {
+const getFirstLeafStep = (step, variables, playerIds) => {
     if (!step) {
         return undefined
     }
     switch (step.type) {
-        case 'game':
-            throw new Error('TODO')
-        case 'post':
+        case "game":
+            throw new Error("TODO")
+        case "post":
             return { step, variables }
-        case 'rounds': {
+        case "rounds": {
             const firstStep = getFirstLeafStep(step.steps[0], variables, playerIds)
             if (!firstStep) {
                 return undefined
@@ -25,11 +23,11 @@ function getFirstLeafStep(
                 step: firstStep.step,
                 variables: {
                     ...firstStep.variables,
-                    [`${step.id}_round`]: firstStep.variables[`${step.id}_round`] ?? 1,
-                },
+                    [`${step.id}_round`]: firstStep.variables[`${step.id}_round`] ?? 1
+                }
             }
         }
-        case 'turns': {
+        case "turns": {
             const firstStep = getFirstLeafStep(step.steps[0], variables, playerIds)
             if (!firstStep) {
                 return undefined
@@ -38,8 +36,9 @@ function getFirstLeafStep(
                 step: firstStep.step,
                 variables: {
                     ...firstStep.variables,
-                    [`${step.id}_player`]: firstStep.variables[`${step.id}_player`] ?? playerIds[0],
-                },
+                    [`${step.id}_player`]:
+                        firstStep.variables[`${step.id}_player`] ?? playerIds[0]
+                }
             }
         }
         default: {
@@ -49,38 +48,38 @@ function getFirstLeafStep(
     }
 }
 
-const getNextLeafStep = (
-    steps,
-    stepId,
-    variables,
-    playerIds
-) => {
-    let currentFound = false
+const getTransition = (steps, stepId, variables, playerIds) => {
+    let current
     let currentVariables = variables
     for (let i = 0; i < steps.length; i++) {
         const step = steps[i]
 
-        if (currentFound) {
+        if (current) {
             const nextStep = getFirstLeafStep(step, currentVariables, playerIds)
             if (nextStep) {
-                return nextStep
+                return { current, next: nextStep.step, variables: nextStep.variables }
             }
         } else {
             switch (step.type) {
-                case 'game':
-                    throw new Error('TODO')
-                case 'post':
+                case "game":
+                    throw new Error("TODO")
+                case "post":
                     if (step.id === stepId) {
-                        currentFound = true
+                        current = step
                     }
                     break
-                case 'rounds': {
-                    const result = getNextLeafStep(step.steps, stepId, currentVariables, playerIds)
+                case "rounds": {
+                    const result = getTransition(
+                        step.steps,
+                        stepId,
+                        currentVariables,
+                        playerIds
+                    )
                     if (!result) {
                         break
                     }
 
-                    if (result.step) {
+                    if (result.next) {
                         return result
                     }
 
@@ -91,26 +90,35 @@ const getNextLeafStep = (
                             step,
                             {
                                 ...result.variables,
-                                [roundKey]: currentRound + 1,
+                                [roundKey]: currentRound + 1
                             },
                             playerIds
                         )
                         if (firstStep) {
-                            return firstStep
+                            return {
+                                current: result.current,
+                                next: firstStep.step,
+                                variables: firstStep.variables
+                            }
                         }
                     }
 
-                    currentFound = true
-                    currentVariables = omit(currentVariables, roundKey)
+                    current = result.current
+                    currentVariables = omit(result.variables, roundKey)
                     break
                 }
-                case 'turns': {
-                    const result = getNextLeafStep(step.steps, stepId, currentVariables, playerIds)
+                case "turns": {
+                    const result = getTransition(
+                        step.steps,
+                        stepId,
+                        currentVariables,
+                        playerIds
+                    )
                     if (!result) {
                         break
                     }
 
-                    if (result.step) {
+                    if (result.next) {
                         return result
                     }
 
@@ -122,17 +130,21 @@ const getNextLeafStep = (
                             step,
                             {
                                 ...result.variables,
-                                [playerKey]: playerIds[currentPlayerIndex + 1],
+                                [playerKey]: playerIds[currentPlayerIndex + 1]
                             },
                             playerIds
                         )
                         if (firstStep) {
-                            return firstStep
+                            return {
+                                current: result.current,
+                                next: firstStep.step,
+                                variables: firstStep.variables
+                            }
                         }
                     }
 
-                    currentFound = true
-                    currentVariables = omit(currentVariables, playerKey)
+                    current = result.current
+                    currentVariables = omit(result.variables, playerKey)
                     break
                 }
                 default: {
@@ -143,11 +155,32 @@ const getNextLeafStep = (
         }
     }
 
-    if (currentFound) {
-        return { variables: currentVariables }
+    if (current) {
+        return { current, variables: currentVariables }
     }
 
     return undefined
+}
+
+async function startStep(post) {
+    const { current, next, variables } = getTransition(post)
+
+    switch (current.type) {
+        case 'post':
+            const timeout = parseDuration(current.post.timeout)
+            await createPost({
+                type: 'post',
+                title: current.post.title,
+                text: current.post.text,
+            }, [], post.creatorId)
+            scheduleEndStep()
+            break;
+        default:
+            throw new Error('TODO')
+    }
+
+    const newPost = {};
+    scheduleEndStep(post);
 }
 
 async function endStep(post) {
@@ -163,7 +196,7 @@ function scheduleEndStep(post) {
             }
         })
         if (!deepEquals(currentPost?.play, post.play)) {
-            // The state of the play has changed, we assume a new scheduled job has been triggered.
+            // The state of the play has changed, this job is outdated.
             return
         }
         endStep(currentPost)
@@ -261,7 +294,6 @@ function registerPlaySocketEvents(socket, io) {
 
         }
 
-
         await Post.update({
             play: newPlay
         }, {
@@ -270,6 +302,9 @@ function registerPlaySocketEvents(socket, io) {
             }
         })
         io.in(id).emit(EVENTS.incoming.updated, { play: newPlay })
+
+        const newPost = { ...post, play: newPlay }
+        await startStep(newPost)
     })
 
     socket.on(EVENTS.outgoing.next, async ({ id }) => {
@@ -279,16 +314,16 @@ function registerPlaySocketEvents(socket, io) {
             }
         })
         const play = post.play;
-        const nextStep = getNextLeafStep(
+        const transition = getTransition(
             play.game.steps,
             play.step.id,
             play.variables,
             play.playerIds
         )
-        const newPlay = nextStep?.step ? {
+        const newPlay = transition?.next ? {
             ...play,
-            step: nextStep.step,
-            variables: nextStep.variables
+            step: transition.next,
+            variables: transition.variables
         } : {
             game: play.game,
             gameId: play.gameId,
