@@ -5,8 +5,8 @@ const { Op } = sequelize
 const { User, Event, UserEvent, Notification, Post, Weave, GlassBeadGame } = require('./models')
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
-const { io } = require('./Socket')
-const { initializePlayServerTasks } = require('./PlayServer')
+const io = require('./Socket')
+const { initializeGameServerTasks } = require('./GameServer')
 
 async function scheduleEventNotification(data) {
     const {
@@ -343,7 +343,7 @@ async function initializeScheduledTasks() {
         }
     })
 
-    await initializePlayServerTasks(io)
+    await initializeGameServerTasks(io)
 }
 
 module.exports = {

@@ -26,7 +26,6 @@ module.exports = (sequelize, DataTypes) => {
             totalRatings: DataTypes.INTEGER,
             totalGlassBeadGames: DataTypes.INTEGER,
             game: DataTypes.JSON,
-            play: DataTypes.JSON,
             move: DataTypes.JSON,
             lastActivity: DataTypes.DATE,
         },
@@ -51,7 +50,8 @@ module.exports = (sequelize, DataTypes) => {
         Post.hasMany(models.Link, { as: 'UrlBlocks', foreignKey: 'itemAId' })
         Post.hasMany(models.Link, { as: 'ImageBlocks', foreignKey: 'itemAId' })
         Post.hasMany(models.Link, { as: 'AudioBlocks', foreignKey: 'itemAId' })
-        Post.hasMany(models.Link, { as: 'Plays', foreignKey: 'itemAId' })
+        Post.hasOne(models.Link, { as: 'Original', foreignKey: 'itemBId' })
+        Post.hasMany(models.Link, { as: 'Spawns', foreignKey: 'itemAId' })
         Post.hasOne(models.Link, { as: 'MediaLink', foreignKey: 'itemAId' })
         // used for post map (todo: rethink...)
         Post.hasMany(models.Link, { as: 'OutgoingPostLinks', foreignKey: 'itemAId' })

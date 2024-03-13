@@ -11,7 +11,6 @@ const { Op } = sequelize
 
 const POST_TYPE = [
     'post',
-    'play',
     'comment',
     'bead',
     'poll-answer',
@@ -39,7 +38,6 @@ type Post = {
     totalLinks: number
     creatorId: number
     game?: Game
-    play?: Play
     move?: Move
 }
 
@@ -73,28 +71,28 @@ type MoveStep = Extract<Step, { type: 'move' }>
 
 type Game = {
     steps: Step[]
+    play: Play
 }
 
 type Move = (
-    | { status: 'skipped' | 'ended' }
-    | { status: 'paused'; elapsedTime: number }
+    | { status: 'skipped' | 'ended' | 'stopped' }
+    | { status: 'paused'; elapsedTime: number; remainingTime: number }
     | {
         status: 'started'
+        elapsedTime: number
         startedAt: number
         timeout: number
     }
-) & { playId?: number }
+) & { gameId?: number }
 
 type PlayVariables = Record<string, string | number | boolean>
 
 export type Play = {
-    game: Game
-    gameId: number
     playerIds: number[]
     variables: PlayVariables
 } & (
         | { status: 'waiting' | 'stopped' | 'ended' }
-        | { status: 'started'; stepId: string; moveId: number }
+        | { status: 'started' | 'paused'; step: MoveStep; moveId: number }
     )
 
 async function getPost(id: number): Promise<Post> {
@@ -271,16 +269,18 @@ function insertVariables(text: string, variables: PlayVariables) {
     })
 }
 
-async function startStep(playPost: Post, step: MoveStep, variables: PlayVariables, io: Server) {
-    const play = playPost.play!
+async function startStep(gamePost: Post, step: MoveStep, variables: PlayVariables, io: Server) {
+    const game = gamePost.game!
+    const play = game.play
     const now = +new Date();
     const timeout = now + parseDuration(step.timeout)!
 
     const move: Move = {
         status: 'started',
+        elapsedTime: 0,
         startedAt: now,
         timeout,
-        playId: playPost.id
+        gameId: gamePost.id
     }
     const movePost = await createChild({
         type: 'post',
@@ -288,96 +288,103 @@ async function startStep(playPost: Post, step: MoveStep, variables: PlayVariable
         title: insertVariables(step.title, variables),
         text: insertVariables(step.text, variables),
         move
-    }, playPost)
+    }, gamePost)
 
-    const newPlay: Play = {
-        ...play,
-        status: 'started',
-        stepId: step.id,
-        moveId: movePost.id,
-        variables: variables,
+    const newGame: Game = {
+        ...game,
+        play: {
+            ...play,
+            status: 'started',
+            step,
+            moveId: movePost.id,
+            variables: variables,
+        }
     }
 
-    await updatePost(playPost.id, { play: newPlay })
+    await updatePost(gamePost.id, { game: newGame })
 
-    scheduleMoveTimeout(movePost, timeout, io)
-    io.in(playPost.id as any).emit(EVENTS.incoming.updated, { play: newPlay })
+    scheduleMoveTimeout(movePost.id, move, timeout, io)
+    console.log('hu')
+    io.in(gamePost.id as any).emit(EVENTS.incoming.updated, { game: newGame })
 }
 
-async function moveTimeout(movePost: Post, io: Server) {
-    const move = movePost.move!
+async function moveTimeout(id: number, move: Move, io: Server) {
+    console.log('move timeout!')
     const newMove: Move = {
         ...move,
         status: 'ended'
     }
-    updatePost(movePost.id, {
+    await updatePost(id, {
         move: newMove
     })
-    if (move.playId) {
-        const playPost = await getPost(move.playId);
-        nextStep(playPost, io)
+    if (move.gameId) {
+        const gamePost = await getPost(move.gameId);
+        console.log(gamePost)
+        nextStep(gamePost, io)
     }
 }
 
-async function nextStep(playPost: Post, io: Server) {
-    const play = playPost.play!;
+async function nextStep(gamePost: Post, io: Server) {
+    const game = gamePost.game!;
+    const play = game.play!;
     if (play.status !== 'started') {
         return;
     }
     const transition = getTransition(
-        play.game.steps,
-        play.stepId,
+        game.steps,
+        play.step.id,
         play.variables,
         play.playerIds
     )
 
     if (transition?.next) {
-        console.log('next', transition.next, transition.variables)
-        await startStep(playPost, transition.next, transition.variables, io)
+        await startStep(gamePost, transition.next, transition.variables, io)
     } else {
-        const newPlay: Play = {
-            game: play.game,
-            gameId: play.gameId,
-            playerIds: play.playerIds,
-            status: 'ended',
-            variables: transition?.variables ?? play.variables
+        const newGame: Game = {
+            ...game,
+            play: {
+                playerIds: play.playerIds,
+                status: 'ended',
+                variables: transition?.variables ?? play.variables
+            }
         }
         // await createChild({
         //     type: 'post',
         //     mediaTypes: '',
         //     text: 'Play ended!',
         // }, playPost)
-        await updatePost(playPost.id, { play: newPlay })
-        io.in(playPost.id as any).emit(EVENTS.incoming.updated, { play: newPlay })
+        await updatePost(gamePost.id, { game: newGame })
+        io.in(gamePost.id as any).emit(EVENTS.incoming.updated, { game: newGame })
     }
 }
 
-function scheduleMoveTimeout(post: Post, timeout: number, io: Server) {
+function scheduleMoveTimeout(id: number, move: Move, timeout: number, io: Server) {
     schedule.scheduleJob(timeout, async () => {
-        const currentPost = await getPost(post.id)
-        if (!isEqual(currentPost.move, post.move)) {
+        const currentPost = await getPost(id)
+        if (!isEqual(currentPost.move, move)) {
+            console.log(currentPost.move, move)
             // The state of the move has changed, this job is outdated.
             return
         }
-        moveTimeout(currentPost, io)
+        moveTimeout(id, move, io)
     })
 }
 
 const EVENTS = {
     outgoing: {
-        updateGame: 'outgoing-update-play-game',
-        start: 'outgoing-start-play',
-        stop: 'outgoing-stop-play',
+        update: 'gs:outgoing-update-game',
+        start: 'gs:outgoing-start-game',
+        stop: 'gs:outgoing-stop-game',
 
-        skip: 'outgoing-skip-move',
-        pause: 'outgoing-pause-move',
+        skip: 'gs:outgoing-skip-move',
+        pause: 'gs:outgoing-pause-move',
     },
     incoming: {
-        updated: 'incoming-play-updated'
+        updated: 'gs:incoming-updated-game'
     }
 }
 
-export async function initializePlayServerTasks(io: Server) {
+export async function initializeGameServerTasks(io: Server) {
     const moves: Post[] = await Post.findAll({
         where: {
             state: 'active',
@@ -391,127 +398,174 @@ export async function initializePlayServerTasks(io: Server) {
             continue
         }
 
-        console.log(move.timeout, +new Date())
         if (move.timeout < +new Date()) {
-            moveTimeout(post, io)
+            moveTimeout(post.id, move, io)
         } else {
-            scheduleMoveTimeout(post, move.timeout, io)
+            scheduleMoveTimeout(post.id, move, move.timeout, io)
         }
     }
 }
 
-export async function registerPlayServerEvents(socket: Socket, io: Server) {
-    socket.on(EVENTS.outgoing.updateGame, async ({ id, game }: { id: number, game: Game }) => {
-        const post = await getPost(id)
-
-        const newPlay: Play = {
-            ...post.play!,
-            game
-        }
-
+export async function registerGameServerEvents(socket: Socket, io: Server) {
+    socket.on(EVENTS.outgoing.update, async ({ id, game }: { id: number, game: Game }) => {
         await updatePost(id, {
-            play: newPlay
+            game
         })
 
-        io.in(id as any).emit(EVENTS.incoming.updated, { play: newPlay })
+        io.in(id as any).emit(EVENTS.incoming.updated, { game })
     })
 
     socket.on(EVENTS.outgoing.start, async ({ id }: { id: number }) => {
-        const playPost: Post = await Post.findOne({
+        const gamePost: Post = await Post.findOne({
             where: {
                 id
             }
         })
-        const play = playPost.play!
+        const game = gamePost.game!
+        const play = game.play;
 
         if (play.status === 'started') {
             return
         }
 
-        const step = getFirstMove(play.game.steps[0], play.variables, play.playerIds);
-        if (!step) {
-            throw new Error('No step.')
-        }
+        if (play.status === 'paused') {
+            const newGame: Game = {
+                ...game,
+                play: {
+                    ...play,
+                    status: 'started'
+                }
+            }
+            await updatePost(id, {
+                game: newGame
+            })
+            const movePost = await getPost(play.moveId);
+            const move = movePost.move!;
+            if (move.status === 'paused') {
+                const now = + new Date();
+                const timeout = now + parseDuration(play.step.timeout)! - move.elapsedTime;
+                const newMove: Move = {
+                    ...move,
+                    status: 'started',
+                    elapsedTime: move.elapsedTime,
+                    startedAt: now,
+                    timeout,
+                }
+                await updatePost(play.moveId, {
+                    move: newMove
+                })
+                scheduleMoveTimeout(play.moveId, newMove, timeout, io)
+            }
+            io.in(id as any).emit(EVENTS.incoming.updated, { game: newGame })
+        } else {
+            const step = getFirstMove(game.steps[0], play.variables, play.playerIds);
+            if (!step) {
+                throw new Error('No step.')
+            }
 
-        await startStep(playPost, step.step, step.variables, io)
+            await startStep(gamePost, step.step, step.variables, io)
+        }
     })
 
     socket.on(EVENTS.outgoing.skip, async ({ id }: { id: number }) => {
-        const post = await Post.findOne({
-            where: {
-                id
-            }
-        })
-        const play = post.play;
+        const post = await getPost(id);
+        const game = post.game!;
+        const play = game.play;
+        if (play.status !== 'started') {
+            return
+        }
         const transition = getTransition(
-            play.game.steps,
+            game.steps,
             play.step.id,
             play.variables,
             play.playerIds
         )
-        const newPlay = transition?.next ? {
-            ...play,
-            step: transition.next,
-            variables: transition.variables
-        } : {
-            game: play.game,
-            gameId: play.gameId,
-            playerIds: play.playerIds,
-            status: 'ended',
-            variables: {}
+        const newGame: Game = {
+            ...game,
+            play: transition?.next ? {
+                ...play,
+                step: transition.next,
+                variables: transition.variables
+            } : {
+                playerIds: play.playerIds,
+                status: 'ended',
+                variables: {}
+            }
         }
 
-        await Post.update({
-            play: newPlay
-        }, {
-            where: {
-                id
-            }
+        await updatePost(id, {
+            game: newGame
         })
-        io.in(id as any).emit(EVENTS.incoming.updated, { play: newPlay })
+        io.in(id as any).emit(EVENTS.incoming.updated, { game: newGame })
     })
 
     socket.on(EVENTS.outgoing.pause, async ({ id }: { id: number }) => {
-        const post = await Post.findOne({
-            where: {
-                id
-            }
-        })
+        const post = await getPost(id)
+        const game = post.game!
+        const play = game.play;
 
-        const newPlay = {
-            ...post.play,
-            status: 'paused'
+        if (play.status !== 'started') {
+            return;
         }
 
-        await Post.update({
-            play: newPlay
-        }, {
-            where: {
-                id
+
+        const newGame: Game = {
+            ...game,
+            play: {
+                ...play,
+                status: 'paused'
             }
-        })
-        io.in(id as any).emit(EVENTS.incoming.updated, { play: newPlay })
+        }
+        await updatePost(id, { game: newGame })
+
+        const movePost = await getPost(play.moveId);
+        const move = movePost.move!;
+        if (move.status === 'started') {
+            const now = + new Date();
+            const newMove: Move = {
+                ...move,
+                status: 'paused',
+                elapsedTime: move.elapsedTime + now - move.startedAt,
+                remainingTime: move.timeout - now
+            }
+            await updatePost(play.moveId, {
+                move: newMove
+            })
+        }
+
+        io.in(id as any).emit(EVENTS.incoming.updated, { game: newGame })
     })
 
     socket.on(EVENTS.outgoing.stop, async ({ id }: { id: number }) => {
-        const post = await Post.findOne({
-            where: {
-                id
-            }
-        })
+        const post = await getPost(id)
+        const game = post.game!
+        const play = game.play;
 
-        const newPlay = {
-            ...post.play,
-            status: 'stopped'
+        if (play.status !== 'started' && play.status !== 'paused') {
+            return
         }
 
-        await Post.update({
-            play: newPlay
-        }, {
-            where: {
-                id
+        const newGame: Game = {
+            ...game,
+            play: {
+                ...play,
+                status: 'stopped'
             }
-        })
-        io.in(id as any).emit(EVENTS.incoming.updated, { play: newPlay })
+        }
+        await updatePost(id, { game: newGame })
+
+        const movePost = await getPost(play.moveId);
+        const move = movePost.move!;
+        if (move.status === 'started' || move.status === 'paused') {
+            const newMove: Move = {
+                ...move,
+                status: 'stopped',
+            }
+            await updatePost(play.moveId, {
+                move: newMove
+            })
+        }
+
+        io.in(id as any).emit(EVENTS.incoming.updated, { game: newGame })
     })
 }

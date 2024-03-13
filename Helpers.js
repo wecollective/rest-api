@@ -966,7 +966,6 @@ const fullPostAttributes = [
     'totalRatings',
     'totalLinks',
     'game',
-    'play',
     'move'
 ]
 
@@ -988,7 +987,6 @@ function findFullPostAttributes(model, accountId) {
         'totalRatings',
         'totalLinks',
         'game',
-        'play',
         'move',
         // accountLike('post', model, accountId),
         // accountComment('post', model, accountId),
@@ -1150,13 +1148,24 @@ function findPostInclude(accountId) {
         },
         {
             model: Link,
-            as: 'Plays',
+            as: 'Original',
+            required: false,
+            where: { relationship: 'spawn', state: 'active' },
+            include: {
+                model: Post,
+                as: 'Parent',
+                attributes: ['id', 'title', 'game', 'state']
+            }
+        },
+        {
+            model: Link,
+            as: 'Spawns',
             separate: true,
-            where: { relationship: 'play', state: 'active' },
+            where: { relationship: 'spawn', state: 'active' },
             order: [['index', 'ASC']],
             include: {
                 model: Post,
-                attributes: ['id', 'title', 'play', 'state']
+                attributes: ['id', 'title', 'game', 'state']
             }
         },
         {
@@ -1716,7 +1725,6 @@ function createPost(data, files, accountId) {
             poll,
             glassBeadGame,
             game,
-            play,
             move,
             card,
             color,
@@ -1740,7 +1748,6 @@ function createPost(data, files, accountId) {
             watermark: !!watermark,
             lastActivity: new Date(),
             game,
-            play,
             move,
         })
 

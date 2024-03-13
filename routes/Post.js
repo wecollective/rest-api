@@ -1766,7 +1766,7 @@ router.post('/update-post', authenticateToken, async (req, res) => {
     if (!post) res.status(401).json({ message: 'Unauthorized' })
     else {
         const toUpdate = {};
-        for (const key of ['mediaTypes', 'title', 'text', 'searchableText', 'game', 'play', 'move']) {
+        for (const key of ['mediaTypes', 'title', 'text', 'searchableText', 'game', 'move']) {
             if (key in req.body) {
                 toUpdate[key] = req.body[key]
             }
