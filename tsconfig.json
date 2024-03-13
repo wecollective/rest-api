@@ -9,7 +9,6 @@
     "allowJs": false,
     "outDir": "./",
     "noEmitOnError": false,
-    "incremental": true,
   },
   "include": [
     "./**/*"

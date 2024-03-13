@@ -7,7 +7,7 @@
         "deps": "docker-compose up --build mysql",
         "migrate": "sequelize db:migrate",
         "seed": "sequelize db:seed:all",
-        "dev": "nodemon Server.js",
+        "dev": "concurrently -n node,ts 'nodemon Server.js' 'tsc --watch'",
         "start": "node Server.js"
     },
     "keywords": [],
@@ -44,6 +44,7 @@
     "devDependencies": {
         "@types/lodash": "^4.17.0",
         "@types/node-schedule": "^2.1.6",
+        "concurrently": "^8.2.2",
         "eslint": "^8.56.0",
         "eslint-config-airbnb-typescript-prettier": "^5.0.0",
         "typescript": "^5.4.2"

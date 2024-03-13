@@ -758,6 +758,38 @@ router.get('/post-comments', async (req, res) => {
         .catch((error) => res.status(500).json({ message: 'Error', error }))
 })
 
+router.get('/post-children', async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId, limit, offset } = req.query;
+
+    const links = await Link.findAll({
+        offset: +offset,
+        limit: +limit,
+        order: [['createdAt', 'DESC']],
+        attributes: ['state'],
+        include: [
+            {
+                model: Post,
+                attributes: fullPostAttributes,
+                include: [
+                    {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath', 'coverImagePath'],
+                    }
+                ]
+            }
+        ],
+        where: {
+            state: 'active',
+            relationship: 'parent',
+            itemAType: 'post',
+            itemAId: postId,
+        }
+    })
+    res.status(200).json({ children: links.map(link => link.Post) })
+})
+
 router.get('/post-indirect-spaces', async (req, res) => {
     const { postId } = req.query
     const post = await Post.findOne({
@@ -1734,7 +1766,7 @@ router.post('/update-post', authenticateToken, async (req, res) => {
     if (!post) res.status(401).json({ message: 'Unauthorized' })
     else {
         const toUpdate = {};
-        for (const key of ['mediaTypes', 'title', 'text', 'searchableText', 'game', 'play']) {
+        for (const key of ['mediaTypes', 'title', 'text', 'searchableText', 'game', 'play', 'move']) {
             if (key in req.body) {
                 toUpdate[key] = req.body[key]
             }
@@ -3126,6 +3158,22 @@ router.post('/delete-comment', authenticateToken, async (req, res) => {
             { state: 'deleted' },
             { where: { id: postId, creatorId: accountId } }
         )
+        await Link.update(
+            { state: 'deleted', },
+            {
+                where: {
+                    state: 'active',
+                    [Op.or]: [
+                        {
+                            itemAId: postId
+                        },
+                        {
+                            itemBId: postId
+                        }
+                    ]
+                }
+            }
+        );
         // get links & root post for tally updates
         const rootLink = await Link.findOne({
             where: { itemBId: postId, itemBType: 'comment', relationship: 'root' },

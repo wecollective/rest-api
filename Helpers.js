@@ -966,7 +966,8 @@ const fullPostAttributes = [
     'totalRatings',
     'totalLinks',
     'game',
-    'play'
+    'play',
+    'move'
 ]
 
 // todo: replace all use cases with const fullPostAttributes above
@@ -988,6 +989,7 @@ function findFullPostAttributes(model, accountId) {
         'totalLinks',
         'game',
         'play',
+        'move',
         // accountLike('post', model, accountId),
         // accountComment('post', model, accountId),
         // accountLink('post', model, accountId),
@@ -1715,6 +1717,7 @@ function createPost(data, files, accountId) {
             glassBeadGame,
             game,
             play,
+            move,
             card,
             color,
             watermark,
@@ -1738,6 +1741,7 @@ function createPost(data, files, accountId) {
             lastActivity: new Date(),
             game,
             play,
+            move,
         })
 
         // todo: add the correct notification type
