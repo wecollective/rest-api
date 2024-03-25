@@ -41,28 +41,20 @@ type Post = {
     move?: Move
 }
 
-type Step = {
+export type Step = {
     id: string
+    name: string
+    originalStep?: { gameId: number; stepId: string }
 } & (
         | {
             type: 'move'
-            title: string
+            title?: string
             text: string
             timeout: string
         }
         | {
-            type: 'game'
-            gameId: number
-        }
-        | {
-            type: 'rounds'
-            name: string
-            amount: string
-            steps: Step[]
-        }
-        | {
-            type: 'turns'
-            name: string
+            type: 'sequence'
+            repeat?: { type: 'rounds'; amount: number } | { type: 'turns' }
             steps: Step[]
         }
     )
@@ -92,6 +84,7 @@ export type Play = {
     variables: PlayVariables
 } & (
         | { status: 'waiting' | 'stopped' | 'ended' }
+        | { status: 'paused'; step: MoveStep; moveId?: number }
         | { status: 'started' | 'paused'; step: MoveStep; moveId: number }
     )
 
@@ -123,33 +116,22 @@ const getFirstMove = (
         return undefined
     }
     switch (step.type) {
-        case 'game':
-            throw new Error('TODO')
         case 'move':
             return { step, variables }
-        case 'rounds': {
+        case 'sequence': {
             const firstStep = getFirstMove(step.steps[0], variables, playerIds)
             if (!firstStep) {
                 return undefined
             }
+            if (!step.repeat) {
+                return firstStep
+            }
+
             return {
                 step: firstStep.step,
                 variables: {
                     ...firstStep.variables,
-                    [step.name]: firstStep.variables[step.name] ?? 1,
-                },
-            }
-        }
-        case 'turns': {
-            const firstStep = getFirstMove(step.steps[0], variables, playerIds)
-            if (!firstStep) {
-                return undefined
-            }
-            return {
-                step: firstStep.step,
-                variables: {
-                    ...firstStep.variables,
-                    [step.name]: firstStep.variables[step.name] ?? playerIds[0],
+                    [step.name]: firstStep.variables[step.name] ?? (step.repeat.type === 'rounds' ? 1 : playerIds[0]),
                 },
             }
         }
@@ -178,15 +160,12 @@ const getTransition = (
             }
         } else {
             switch (step.type) {
-                case 'game':
-                    throw new Error('TODO')
                 case 'move':
                     if (step.id === stepId) {
                         current = step
                     }
                     break
-                case 'rounds':
-                case 'turns': {
+                case 'sequence': {
                     const result = getTransition(step.steps, stepId, currentVariables, playerIds)
                     if (!result) {
                         break
@@ -196,29 +175,31 @@ const getTransition = (
                         return result
                     }
 
-                    let next;
-                    if (step.type === 'rounds') {
-                        const round = currentVariables[step.name] as number
-                        next = round < +step.amount ? round + 1 : undefined
-                    } else {
-                        const playerId = currentVariables[step.name] as number
-                        const playerIndex = playerIds.indexOf(playerId)
-                        next = playerIds[playerIndex + 1]
-                    }
-                    if (next) {
-                        const firstStep = getFirstMove(
-                            step,
-                            {
-                                ...result.variables,
-                                [step.name]: next,
-                            },
-                            playerIds
-                        )
-                        if (firstStep) {
-                            return {
-                                current: result.current,
-                                next: firstStep.step,
-                                variables: firstStep.variables,
+                    if (step.repeat) {
+                        let nextValue;
+                        if (step.repeat.type === 'rounds') {
+                            const round = currentVariables[step.name] as number
+                            nextValue = round < +step.repeat.amount ? round + 1 : undefined
+                        } else {
+                            const playerId = currentVariables[step.name] as number
+                            const playerIndex = playerIds.indexOf(playerId)
+                            nextValue = playerIds[playerIndex + 1]
+                        }
+                        if (nextValue) {
+                            const firstStep = getFirstMove(
+                                step,
+                                {
+                                    ...result.variables,
+                                    [step.name]: nextValue,
+                                },
+                                playerIds
+                            )
+                            if (firstStep) {
+                                return {
+                                    current: result.current,
+                                    next: firstStep.step,
+                                    variables: firstStep.variables,
+                                }
                             }
                         }
                     }
@@ -260,8 +241,8 @@ async function createChild(data: any, parent: Post) {
     return post
 }
 
-function insertVariables(text: string, variables: PlayVariables) {
-    return text?.replace(/\(([^)]+)\)/, (substring, variableName) => {
+function insertVariables(text: string | undefined, variables: PlayVariables) {
+    return text?.replace(/\[([^\]]+)\]/, (substring, variableName) => {
         if (variableName in variables) {
             return `${variables[variableName]}`
         }
@@ -293,18 +274,17 @@ async function startStep(gamePost: Post, step: MoveStep, variables: PlayVariable
     const newGame: Game = {
         ...game,
         play: {
-            ...play,
             status: 'started',
             step,
             moveId: movePost.id,
             variables: variables,
+            playerIds: play.playerIds,
         }
     }
 
     await updatePost(gamePost.id, { game: newGame })
 
     scheduleMoveTimeout(movePost.id, move, timeout, io)
-    console.log('hu')
     io.in(gamePost.id as any).emit(EVENTS.incoming.updated, { game: newGame })
 }
 
@@ -327,7 +307,7 @@ async function moveTimeout(id: number, move: Move, io: Server) {
 async function nextStep(gamePost: Post, io: Server) {
     const game = gamePost.game!;
     const play = game.play!;
-    if (play.status !== 'started') {
+    if (play.status !== 'started' && play.status !== 'paused') {
         return;
     }
     const transition = getTransition(
@@ -338,7 +318,21 @@ async function nextStep(gamePost: Post, io: Server) {
     )
 
     if (transition?.next) {
-        await startStep(gamePost, transition.next, transition.variables, io)
+        if (play.status === 'started') {
+            await startStep(gamePost, transition.next, transition.variables, io)
+        } else {
+            const newGame: Game = {
+                ...game,
+                play: {
+                    status: 'paused',
+                    step: transition.next,
+                    variables: transition.variables,
+                    playerIds: play.playerIds,
+                }
+            }
+            await updatePost(gamePost.id, { game: newGame })
+            io.in(gamePost.id as any).emit(EVENTS.incoming.updated, { game: newGame })
+        }
     } else {
         const newGame: Game = {
             ...game,
@@ -348,11 +342,6 @@ async function nextStep(gamePost: Post, io: Server) {
                 variables: transition?.variables ?? play.variables
             }
         }
-        // await createChild({
-        //     type: 'post',
-        //     mediaTypes: '',
-        //     text: 'Play ended!',
-        // }, playPost)
         await updatePost(gamePost.id, { game: newGame })
         io.in(gamePost.id as any).emit(EVENTS.incoming.updated, { game: newGame })
     }
@@ -372,15 +361,15 @@ function scheduleMoveTimeout(id: number, move: Move, timeout: number, io: Server
 
 const EVENTS = {
     outgoing: {
-        update: 'gs:outgoing-update-game',
-        start: 'gs:outgoing-start-game',
-        stop: 'gs:outgoing-stop-game',
+        update: 'gs:outgoing-update',
+        start: 'gs:outgoing-start',
+        stop: 'gs:outgoing-stop',
 
-        skip: 'gs:outgoing-skip-move',
-        pause: 'gs:outgoing-pause-move',
+        skip: 'gs:outgoing-skip',
+        pause: 'gs:outgoing-pause',
     },
     incoming: {
-        updated: 'gs:incoming-updated-game'
+        updated: 'gs:incoming-updated'
     }
 }
 
@@ -424,41 +413,52 @@ export async function registerGameServerEvents(socket: Socket, io: Server) {
         const game = gamePost.game!
         const play = game.play;
 
+        console.log(play)
+
         if (play.status === 'started') {
             return
         }
 
         if (play.status === 'paused') {
-            const newGame: Game = {
-                ...game,
-                play: {
-                    ...play,
-                    status: 'started'
+            const moveId = play.moveId;
+            if (!moveId) {
+                console.log('startstep')
+                await startStep(gamePost, play.step, play.variables, io)
+            } else {
+                const newGame: Game = {
+                    ...game,
+                    play: {
+                        status: 'started',
+                        moveId,
+                        playerIds: play.playerIds,
+                        step: play.step,
+                        variables: play.variables,
+                    }
                 }
-            }
-            await updatePost(id, {
-                game: newGame
-            })
-            const movePost = await getPost(play.moveId);
-            const move = movePost.move!;
-            if (move.status === 'paused') {
-                const now = + new Date();
-                const timeout = now + parseDuration(play.step.timeout)! - move.elapsedTime;
-                const newMove: Move = {
-                    ...move,
-                    status: 'started',
-                    elapsedTime: move.elapsedTime,
-                    startedAt: now,
-                    timeout,
-                }
-                await updatePost(play.moveId, {
-                    move: newMove
+                await updatePost(id, {
+                    game: newGame
                 })
-                scheduleMoveTimeout(play.moveId, newMove, timeout, io)
+                const movePost = await getPost(moveId);
+                const move = movePost.move!;
+                if (move.status === 'paused') {
+                    const now = + new Date();
+                    const timeout = now + parseDuration(play.step.timeout)! - move.elapsedTime;
+                    const newMove: Move = {
+                        ...move,
+                        status: 'started',
+                        elapsedTime: move.elapsedTime,
+                        startedAt: now,
+                        timeout,
+                    }
+                    await updatePost(moveId, {
+                        move: newMove
+                    })
+                    scheduleMoveTimeout(moveId, newMove, timeout, io)
+                }
+                io.in(id as any).emit(EVENTS.incoming.updated, { game: newGame })
             }
-            io.in(id as any).emit(EVENTS.incoming.updated, { game: newGame })
         } else {
-            const step = getFirstMove(game.steps[0], play.variables, play.playerIds);
+            const step = getFirstMove(game.steps[0], {}, play.playerIds);
             if (!step) {
                 throw new Error('No step.')
             }
@@ -468,35 +468,22 @@ export async function registerGameServerEvents(socket: Socket, io: Server) {
     })
 
     socket.on(EVENTS.outgoing.skip, async ({ id }: { id: number }) => {
-        const post = await getPost(id);
-        const game = post.game!;
-        const play = game.play;
-        if (play.status !== 'started') {
-            return
-        }
-        const transition = getTransition(
-            game.steps,
-            play.step.id,
-            play.variables,
-            play.playerIds
-        )
-        const newGame: Game = {
-            ...game,
-            play: transition?.next ? {
-                ...play,
-                step: transition.next,
-                variables: transition.variables
-            } : {
-                playerIds: play.playerIds,
-                status: 'ended',
-                variables: {}
+        const gamePost = await getPost(id);
+        const play = gamePost.game!.play
+        if ((play.status === 'started' || play.status === 'paused') && play.moveId) {
+            const movePost = await getPost(play.moveId);
+            const move = movePost.move!;
+            if (move.status === 'started' || move.status === 'paused') {
+                const newMove: Move = {
+                    ...move,
+                    status: 'skipped',
+                }
+                await updatePost(play.moveId, {
+                    move: newMove
+                })
             }
         }
-
-        await updatePost(id, {
-            game: newGame
-        })
-        io.in(id as any).emit(EVENTS.incoming.updated, { game: newGame })
+        await nextStep(gamePost, io)
     })
 
     socket.on(EVENTS.outgoing.pause, async ({ id }: { id: number }) => {
@@ -508,12 +495,14 @@ export async function registerGameServerEvents(socket: Socket, io: Server) {
             return;
         }
 
-
         const newGame: Game = {
             ...game,
             play: {
-                ...play,
-                status: 'paused'
+                status: 'paused',
+                step: play.step,
+                variables: play.variables,
+                moveId: play.moveId,
+                playerIds: play.playerIds,
             }
         }
         await updatePost(id, { game: newGame })
@@ -548,22 +537,25 @@ export async function registerGameServerEvents(socket: Socket, io: Server) {
         const newGame: Game = {
             ...game,
             play: {
-                ...play,
-                status: 'stopped'
+                status: 'stopped',
+                variables: play.variables,
+                playerIds: play.playerIds,
             }
         }
         await updatePost(id, { game: newGame })
 
-        const movePost = await getPost(play.moveId);
-        const move = movePost.move!;
-        if (move.status === 'started' || move.status === 'paused') {
-            const newMove: Move = {
-                ...move,
-                status: 'stopped',
+        if (play.moveId) {
+            const movePost = await getPost(play.moveId);
+            const move = movePost.move!;
+            if (move.status === 'started' || move.status === 'paused') {
+                const newMove: Move = {
+                    ...move,
+                    status: 'stopped',
+                }
+                await updatePost(play.moveId, {
+                    move: newMove
+                })
             }
-            await updatePost(play.moveId, {
-                move: newMove
-            })
         }
 
         io.in(id as any).emit(EVENTS.incoming.updated, { game: newGame })

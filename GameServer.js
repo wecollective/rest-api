@@ -51,33 +51,24 @@ function updatePost(id, data) {
     });
 }
 const getFirstMove = (step, variables, playerIds) => {
-    var _a, _b;
+    var _a;
     if (!step) {
         return undefined;
     }
     switch (step.type) {
-        case 'game':
-            throw new Error('TODO');
         case 'move':
             return { step, variables };
-        case 'rounds': {
+        case 'sequence': {
             const firstStep = getFirstMove(step.steps[0], variables, playerIds);
             if (!firstStep) {
                 return undefined;
             }
-            return {
-                step: firstStep.step,
-                variables: Object.assign(Object.assign({}, firstStep.variables), { [step.name]: (_a = firstStep.variables[step.name]) !== null && _a !== void 0 ? _a : 1 }),
-            };
-        }
-        case 'turns': {
-            const firstStep = getFirstMove(step.steps[0], variables, playerIds);
-            if (!firstStep) {
-                return undefined;
+            if (!step.repeat) {
+                return firstStep;
             }
             return {
                 step: firstStep.step,
-                variables: Object.assign(Object.assign({}, firstStep.variables), { [step.name]: (_b = firstStep.variables[step.name]) !== null && _b !== void 0 ? _b : playerIds[0] }),
+                variables: Object.assign(Object.assign({}, firstStep.variables), { [step.name]: (_a = firstStep.variables[step.name]) !== null && _a !== void 0 ? _a : (step.repeat.type === 'rounds' ? 1 : playerIds[0]) }),
             };
         }
         default: {
@@ -99,15 +90,12 @@ const getTransition = (steps, stepId, variables, playerIds) => {
         }
         else {
             switch (step.type) {
-                case 'game':
-                    throw new Error('TODO');
                 case 'move':
                     if (step.id === stepId) {
                         current = step;
                     }
                     break;
-                case 'rounds':
-                case 'turns': {
+                case 'sequence': {
                     const result = getTransition(step.steps, stepId, currentVariables, playerIds);
                     if (!result) {
                         break;
@@ -115,24 +103,26 @@ const getTransition = (steps, stepId, variables, playerIds) => {
                     if (result.next) {
                         return result;
                     }
-                    let next;
-                    if (step.type === 'rounds') {
-                        const round = currentVariables[step.name];
-                        next = round < +step.amount ? round + 1 : undefined;
-                    }
-                    else {
-                        const playerId = currentVariables[step.name];
-                        const playerIndex = playerIds.indexOf(playerId);
-                        next = playerIds[playerIndex + 1];
-                    }
-                    if (next) {
-                        const firstStep = getFirstMove(step, Object.assign(Object.assign({}, result.variables), { [step.name]: next }), playerIds);
-                        if (firstStep) {
-                            return {
-                                current: result.current,
-                                next: firstStep.step,
-                                variables: firstStep.variables,
-                            };
+                    if (step.repeat) {
+                        let nextValue;
+                        if (step.repeat.type === 'rounds') {
+                            const round = currentVariables[step.name];
+                            nextValue = round < +step.repeat.amount ? round + 1 : undefined;
+                        }
+                        else {
+                            const playerId = currentVariables[step.name];
+                            const playerIndex = playerIds.indexOf(playerId);
+                            nextValue = playerIds[playerIndex + 1];
+                        }
+                        if (nextValue) {
+                            const firstStep = getFirstMove(step, Object.assign(Object.assign({}, result.variables), { [step.name]: nextValue }), playerIds);
+                            if (firstStep) {
+                                return {
+                                    current: result.current,
+                                    next: firstStep.step,
+                                    variables: firstStep.variables,
+                                };
+                            }
                         }
                     }
                     current = result.current;
@@ -170,7 +160,7 @@ function createChild(data, parent) {
     });
 }
 function insertVariables(text, variables) {
-    return text === null || text === void 0 ? void 0 : text.replace(/\(([^)]+)\)/, (substring, variableName) => {
+    return text === null || text === void 0 ? void 0 : text.replace(/\[([^\]]+)\]/, (substring, variableName) => {
         if (variableName in variables) {
             return `${variables[variableName]}`;
         }
@@ -197,10 +187,15 @@ function startStep(gamePost, step, variables, io) {
             text: insertVariables(step.text, variables),
             move
         }, gamePost);
-        const newGame = Object.assign(Object.assign({}, game), { play: Object.assign(Object.assign({}, play), { status: 'started', step, moveId: movePost.id, variables: variables }) });
+        const newGame = Object.assign(Object.assign({}, game), { play: {
+                status: 'started',
+                step,
+                moveId: movePost.id,
+                variables: variables,
+                playerIds: play.playerIds,
+            } });
         yield updatePost(gamePost.id, { game: newGame });
         scheduleMoveTimeout(movePost.id, move, timeout, io);
-        console.log('hu');
         io.in(gamePost.id).emit(EVENTS.incoming.updated, { game: newGame });
     });
 }
@@ -223,12 +218,24 @@ function nextStep(gamePost, io) {
         var _a;
         const game = gamePost.game;
         const play = game.play;
-        if (play.status !== 'started') {
+        if (play.status !== 'started' && play.status !== 'paused') {
             return;
         }
         const transition = getTransition(game.steps, play.step.id, play.variables, play.playerIds);
         if (transition === null || transition === void 0 ? void 0 : transition.next) {
-            yield startStep(gamePost, transition.next, transition.variables, io);
+            if (play.status === 'started') {
+                yield startStep(gamePost, transition.next, transition.variables, io);
+            }
+            else {
+                const newGame = Object.assign(Object.assign({}, game), { play: {
+                        status: 'paused',
+                        step: transition.next,
+                        variables: transition.variables,
+                        playerIds: play.playerIds,
+                    } });
+                yield updatePost(gamePost.id, { game: newGame });
+                io.in(gamePost.id).emit(EVENTS.incoming.updated, { game: newGame });
+            }
         }
         else {
             const newGame = Object.assign(Object.assign({}, game), { play: {
@@ -236,11 +243,6 @@ function nextStep(gamePost, io) {
                     status: 'ended',
                     variables: (_a = transition === null || transition === void 0 ? void 0 : transition.variables) !== null && _a !== void 0 ? _a : play.variables
                 } });
-            // await createChild({
-            //     type: 'post',
-            //     mediaTypes: '',
-            //     text: 'Play ended!',
-            // }, playPost)
             yield updatePost(gamePost.id, { game: newGame });
             io.in(gamePost.id).emit(EVENTS.incoming.updated, { game: newGame });
         }
@@ -259,14 +261,14 @@ function scheduleMoveTimeout(id, move, timeout, io) {
 }
 const EVENTS = {
     outgoing: {
-        update: 'gs:outgoing-update-game',
-        start: 'gs:outgoing-start-game',
-        stop: 'gs:outgoing-stop-game',
-        skip: 'gs:outgoing-skip-move',
-        pause: 'gs:outgoing-pause-move',
+        update: 'gs:outgoing-update',
+        start: 'gs:outgoing-start',
+        stop: 'gs:outgoing-stop',
+        skip: 'gs:outgoing-skip',
+        pause: 'gs:outgoing-pause',
     },
     incoming: {
-        updated: 'gs:incoming-updated-game'
+        updated: 'gs:incoming-updated'
     }
 };
 function initializeGameServerTasks(io) {
@@ -308,29 +310,43 @@ function registerGameServerEvents(socket, io) {
             });
             const game = gamePost.game;
             const play = game.play;
+            console.log(play);
             if (play.status === 'started') {
                 return;
             }
             if (play.status === 'paused') {
-                const newGame = Object.assign(Object.assign({}, game), { play: Object.assign(Object.assign({}, play), { status: 'started' }) });
-                yield updatePost(id, {
-                    game: newGame
-                });
-                const movePost = yield getPost(play.moveId);
-                const move = movePost.move;
-                if (move.status === 'paused') {
-                    const now = +new Date();
-                    const timeout = now + (0, parse_duration_1.default)(play.step.timeout) - move.elapsedTime;
-                    const newMove = Object.assign(Object.assign({}, move), { status: 'started', elapsedTime: move.elapsedTime, startedAt: now, timeout });
-                    yield updatePost(play.moveId, {
-                        move: newMove
-                    });
-                    scheduleMoveTimeout(play.moveId, newMove, timeout, io);
+                const moveId = play.moveId;
+                if (!moveId) {
+                    console.log('startstep');
+                    yield startStep(gamePost, play.step, play.variables, io);
                 }
-                io.in(id).emit(EVENTS.incoming.updated, { game: newGame });
+                else {
+                    const newGame = Object.assign(Object.assign({}, game), { play: {
+                            status: 'started',
+                            moveId,
+                            playerIds: play.playerIds,
+                            step: play.step,
+                            variables: play.variables,
+                        } });
+                    yield updatePost(id, {
+                        game: newGame
+                    });
+                    const movePost = yield getPost(moveId);
+                    const move = movePost.move;
+                    if (move.status === 'paused') {
+                        const now = +new Date();
+                        const timeout = now + (0, parse_duration_1.default)(play.step.timeout) - move.elapsedTime;
+                        const newMove = Object.assign(Object.assign({}, move), { status: 'started', elapsedTime: move.elapsedTime, startedAt: now, timeout });
+                        yield updatePost(moveId, {
+                            move: newMove
+                        });
+                        scheduleMoveTimeout(moveId, newMove, timeout, io);
+                    }
+                    io.in(id).emit(EVENTS.incoming.updated, { game: newGame });
+                }
             }
             else {
-                const step = getFirstMove(game.steps[0], play.variables, play.playerIds);
+                const step = getFirstMove(game.steps[0], {}, play.playerIds);
                 if (!step) {
                     throw new Error('No step.');
                 }
@@ -338,22 +354,19 @@ function registerGameServerEvents(socket, io) {
             }
         }));
         socket.on(EVENTS.outgoing.skip, (_c) => __awaiter(this, [_c], void 0, function* ({ id }) {
-            const post = yield getPost(id);
-            const game = post.game;
-            const play = game.play;
-            if (play.status !== 'started') {
-                return;
+            const gamePost = yield getPost(id);
+            const play = gamePost.game.play;
+            if ((play.status === 'started' || play.status === 'paused') && play.moveId) {
+                const movePost = yield getPost(play.moveId);
+                const move = movePost.move;
+                if (move.status === 'started' || move.status === 'paused') {
+                    const newMove = Object.assign(Object.assign({}, move), { status: 'skipped' });
+                    yield updatePost(play.moveId, {
+                        move: newMove
+                    });
+                }
             }
-            const transition = getTransition(game.steps, play.step.id, play.variables, play.playerIds);
-            const newGame = Object.assign(Object.assign({}, game), { play: (transition === null || transition === void 0 ? void 0 : transition.next) ? Object.assign(Object.assign({}, play), { step: transition.next, variables: transition.variables }) : {
-                    playerIds: play.playerIds,
-                    status: 'ended',
-                    variables: {}
-                } });
-            yield updatePost(id, {
-                game: newGame
-            });
-            io.in(id).emit(EVENTS.incoming.updated, { game: newGame });
+            yield nextStep(gamePost, io);
         }));
         socket.on(EVENTS.outgoing.pause, (_d) => __awaiter(this, [_d], void 0, function* ({ id }) {
             const post = yield getPost(id);
@@ -362,7 +375,13 @@ function registerGameServerEvents(socket, io) {
             if (play.status !== 'started') {
                 return;
             }
-            const newGame = Object.assign(Object.assign({}, game), { play: Object.assign(Object.assign({}, play), { status: 'paused' }) });
+            const newGame = Object.assign(Object.assign({}, game), { play: {
+                    status: 'paused',
+                    step: play.step,
+                    variables: play.variables,
+                    moveId: play.moveId,
+                    playerIds: play.playerIds,
+                } });
             yield updatePost(id, { game: newGame });
             const movePost = yield getPost(play.moveId);
             const move = movePost.move;
@@ -382,15 +401,21 @@ function registerGameServerEvents(socket, io) {
             if (play.status !== 'started' && play.status !== 'paused') {
                 return;
             }
-            const newGame = Object.assign(Object.assign({}, game), { play: Object.assign(Object.assign({}, play), { status: 'stopped' }) });
+            const newGame = Object.assign(Object.assign({}, game), { play: {
+                    status: 'stopped',
+                    variables: play.variables,
+                    playerIds: play.playerIds,
+                } });
             yield updatePost(id, { game: newGame });
-            const movePost = yield getPost(play.moveId);
-            const move = movePost.move;
-            if (move.status === 'started' || move.status === 'paused') {
-                const newMove = Object.assign(Object.assign({}, move), { status: 'stopped' });
-                yield updatePost(play.moveId, {
-                    move: newMove
-                });
+            if (play.moveId) {
+                const movePost = yield getPost(play.moveId);
+                const move = movePost.move;
+                if (move.status === 'started' || move.status === 'paused') {
+                    const newMove = Object.assign(Object.assign({}, move), { status: 'stopped' });
+                    yield updatePost(play.moveId, {
+                        move: newMove
+                    });
+                }
             }
             io.in(id).emit(EVENTS.incoming.updated, { game: newGame });
         }));

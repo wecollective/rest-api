@@ -34,6 +34,7 @@ const {
     pushNotification,
     fullPostAttributes,
     defaultPostValues,
+    addRemixes,
 } = require('../Helpers')
 const {
     Space,
@@ -363,20 +364,29 @@ router.get('/link-data', authenticateToken, async (req, res) => {
     res.status(200).json({ source, link, target })
 })
 
-router.get('/target-from-text', authenticateToken, async (req, res) => {
+router.get('/search', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { type, sourceId, text, userId } = req.query
+    const { type, sourceId, search, userId, mediaType } = req.query
     const where = {
         type: type.toLowerCase(),
         state: 'active',
-        [Op.or]: [{ text: { [Op.like]: `%${text}%` } }, { title: { [Op.like]: `%${text}%` } }],
+        [Op.or]: [{ text: { [Op.like]: `%${search}%` } }, { title: { [Op.like]: `%${search}%` } }],
     }
     if (sourceId) where[Op.not] = { id: sourceId }
     if (userId) where.creatorId = userId
+    if (mediaType) {
+        if (mediaType === 'game') {
+            where[Op.and] = [{ mediaTypes: { [Op.like]: `%${mediaType}%` } }, { [Op.not]: { mediaTypes: { [Op.like]: `%glass-bead-game%` } } }]
+        }
+    } else {
+        where.mediaTypes = { [Op.like]: `%${mediaType}%` }
+    }
+
     const matchingPosts = await Post.findAll({
         where,
         limit: 10,
-        include: findPostInclude(accountId),
+        // TODO: no idea why this fails
+        include: findPostInclude(accountId).filter(include => !['UrlBlocks', 'ImageBlocks', 'AudioBlocks'].includes(include.as)),
     })
     res.status(200).json(matchingPosts)
 })
@@ -1777,6 +1787,9 @@ router.post('/update-post', authenticateToken, async (req, res) => {
             { where: { id, creatorId: accountId } }
         )
         promises.push(updatePost)
+        if ('game' in req.body) {
+            await addRemixes(accountId, req.body.game, id)
+        }
         if ('urls' in req.body) {
             const newUrls = req.body.urls;
             // update urls

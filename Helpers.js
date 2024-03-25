@@ -39,6 +39,7 @@ var ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 ffmpeg.setFfmpegPath(ffmpegPath)
 const sgMail = require('@sendgrid/mail')
+const { uniq } = require('lodash')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
 const imageMBLimit = 10
@@ -1148,9 +1149,9 @@ function findPostInclude(accountId) {
         },
         {
             model: Link,
-            as: 'Original',
+            as: 'Originals',
             required: false,
-            where: { relationship: 'spawn', state: 'active' },
+            where: { relationship: 'remix', state: 'active' },
             include: {
                 model: Post,
                 as: 'Parent',
@@ -1159,9 +1160,9 @@ function findPostInclude(accountId) {
         },
         {
             model: Link,
-            as: 'Spawns',
+            as: 'Remixes',
             separate: true,
-            where: { relationship: 'spawn', state: 'active' },
+            where: { relationship: 'remix', state: 'active' },
             order: [['index', 'ASC']],
             include: {
                 model: Post,
@@ -1707,6 +1708,50 @@ function addGBGPlayers(postId, creator, settings) {
     })
 }
 
+async function addRemixes(accountId, game, postId) {
+    let originals = []
+    function findOriginals(steps) {
+        for (const step of steps) {
+            if (step.originalStep) {
+                originals.push(step.originalStep.gameId)
+            }
+            if (step.type === 'sequence') {
+                findOriginals(step.steps)
+            }
+        }
+    }
+    findOriginals(game.steps)
+    originals = uniq(originals);
+    const links = await Link.findAll({
+        attributes: ['itemAId'],
+        where: {
+            state: 'active',
+            itemAType: 'post',
+            itemBType: 'post',
+            itemAId: originals,
+            itemBId: postId,
+            relationship: 'remix'
+        }
+    })
+    for (const originalId of originals) {
+        if (links?.some(link => link.itemAId === originalId)) {
+            continue
+        }
+        await Link.create({
+            creatorId: accountId,
+            state: 'active',
+            itemAType: 'post',
+            itemBType: 'post',
+            itemAId: originalId,
+            itemBId: postId,
+            relationship: 'remix',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0
+        })
+    }
+}
+
 // todo:
 // + check notifyMentions is adding the correct notification type
 function createPost(data, files, accountId) {
@@ -1750,6 +1795,10 @@ function createPost(data, files, accountId) {
             game,
             move,
         })
+
+        if (game) {
+            await addRemixes(accountId, game, post.id)
+        }
 
         // todo: add the correct notification type
         const notifyMentions = mentions?.length
@@ -2245,6 +2294,7 @@ module.exports = {
     accountLink,
     uploadFiles,
     createPost,
+    addRemixes,
     attachComment,
     scheduleNextBeadDeadline,
     pushNotification,
