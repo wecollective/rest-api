@@ -34,10 +34,12 @@ const POST_TYPE = [
 function getPost(id) {
     return __awaiter(this, void 0, void 0, function* () {
         const post = yield Post.findOne({
+            raw: true,
+            nest: true,
             where: {
                 state: 'active',
                 id
-            }
+            },
         });
         if (!post) {
             throw new Error(`Post ${id}  not found`);
@@ -45,9 +47,10 @@ function getPost(id) {
         return post;
     });
 }
-function updatePost(id, data) {
+function updatePost(post, data) {
     return __awaiter(this, void 0, void 0, function* () {
-        return yield Post.update(data, { where: { id } });
+        yield Post.update(data, { where: { id: post.id } });
+        return Object.assign(Object.assign({}, post), data);
     });
 }
 const getFirstMove = (step, variables, playerIds) => {
@@ -167,7 +170,7 @@ function insertVariables(text, variables) {
         return substring;
     });
 }
-function startStep(gamePost, step, variables, io) {
+function startNewMove(gamePost, step, variables, io) {
     return __awaiter(this, void 0, void 0, function* () {
         const game = gamePost.game;
         const play = game.play;
@@ -187,33 +190,20 @@ function startStep(gamePost, step, variables, io) {
             text: insertVariables(step.text, variables),
             move
         }, gamePost);
-        const newGame = Object.assign(Object.assign({}, game), { play: {
-                status: 'started',
-                step,
-                moveId: movePost.id,
-                variables: variables,
-                playerIds: play.playerIds,
-            } });
-        yield updatePost(gamePost.id, { game: newGame });
-        scheduleMoveTimeout(movePost.id, move, timeout, io);
-        io.in(gamePost.id).emit(EVENTS.incoming.updated, { game: newGame });
-    });
-}
-function moveTimeout(id, move, io) {
-    return __awaiter(this, void 0, void 0, function* () {
-        console.log('move timeout!');
-        const newMove = Object.assign(Object.assign({}, move), { status: 'ended' });
-        yield updatePost(id, {
-            move: newMove
+        scheduleMoveTimeout(movePost, io);
+        const changedGamePost = yield updatePost(gamePost, {
+            game: Object.assign(Object.assign({}, game), { play: {
+                    status: 'started',
+                    step,
+                    moveId: movePost.id,
+                    variables: variables,
+                    playerIds: play.playerIds,
+                } })
         });
-        if (move.gameId) {
-            const gamePost = yield getPost(move.gameId);
-            console.log(gamePost);
-            nextStep(gamePost, io);
-        }
+        return { changedGamePost, changedMoves: [movePost] };
     });
 }
-function nextStep(gamePost, io) {
+function nextMove(gamePost, io) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a;
         const game = gamePost.game;
@@ -224,39 +214,58 @@ function nextStep(gamePost, io) {
         const transition = getTransition(game.steps, play.step.id, play.variables, play.playerIds);
         if (transition === null || transition === void 0 ? void 0 : transition.next) {
             if (play.status === 'started') {
-                yield startStep(gamePost, transition.next, transition.variables, io);
+                return yield startNewMove(gamePost, transition.next, transition.variables, io);
             }
             else {
-                const newGame = Object.assign(Object.assign({}, game), { play: {
-                        status: 'paused',
-                        step: transition.next,
-                        variables: transition.variables,
-                        playerIds: play.playerIds,
-                    } });
-                yield updatePost(gamePost.id, { game: newGame });
-                io.in(gamePost.id).emit(EVENTS.incoming.updated, { game: newGame });
+                const changedGamePost = yield updatePost(gamePost, {
+                    game: Object.assign(Object.assign({}, game), { play: {
+                            status: 'paused',
+                            step: transition.next,
+                            variables: transition.variables,
+                            playerIds: play.playerIds,
+                        } })
+                });
+                return {
+                    changedGamePost,
+                };
             }
         }
         else {
-            const newGame = Object.assign(Object.assign({}, game), { play: {
-                    playerIds: play.playerIds,
-                    status: 'ended',
-                    variables: (_a = transition === null || transition === void 0 ? void 0 : transition.variables) !== null && _a !== void 0 ? _a : play.variables
-                } });
-            yield updatePost(gamePost.id, { game: newGame });
-            io.in(gamePost.id).emit(EVENTS.incoming.updated, { game: newGame });
+            const changedGamePost = yield updatePost(gamePost, {
+                game: Object.assign(Object.assign({}, game), { play: {
+                        playerIds: play.playerIds,
+                        status: 'ended',
+                        variables: (_a = transition === null || transition === void 0 ? void 0 : transition.variables) !== null && _a !== void 0 ? _a : play.variables
+                    } })
+            });
+            return { changedGamePost };
         }
     });
 }
-function scheduleMoveTimeout(id, move, timeout, io) {
-    node_schedule_1.default.scheduleJob(timeout, () => __awaiter(this, void 0, void 0, function* () {
-        const currentPost = yield getPost(id);
-        if (!(0, lodash_1.isEqual)(currentPost.move, move)) {
-            console.log(currentPost.move, move);
-            // The state of the move has changed, this job is outdated.
+function moveTimeout(movePost, io) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a;
+        const move = movePost.move;
+        const newMovePost = yield updatePost(movePost, {
+            move: Object.assign(Object.assign({}, move), { status: 'ended' })
+        });
+        if (move.gameId) {
+            const gamePost = yield getPost(move.gameId);
+            const changes = yield nextMove(gamePost, io);
+            if (changes) {
+                emitChanges(io, Object.assign(Object.assign({}, changes), { changedMoves: [newMovePost, ...(_a = changes.changedMoves) !== null && _a !== void 0 ? _a : []] }));
+            }
+        }
+    });
+}
+function scheduleMoveTimeout(movePost, io) {
+    node_schedule_1.default.scheduleJob(movePost.move.timeout, () => __awaiter(this, void 0, void 0, function* () {
+        const currentMovePost = yield getPost(movePost.id);
+        if (!(0, lodash_1.isEqual)(currentMovePost.move, movePost.move)) {
+            console.log('The state of the move has changed, skipping job.');
             return;
         }
-        moveTimeout(id, move, io);
+        yield moveTimeout(currentMovePost, io);
     }));
 }
 const EVENTS = {
@@ -285,64 +294,69 @@ function initializeGameServerTasks(io) {
                 continue;
             }
             if (move.timeout < +new Date()) {
-                moveTimeout(post.id, move, io);
+                yield moveTimeout(post, io);
             }
             else {
-                scheduleMoveTimeout(post.id, move, move.timeout, io);
+                scheduleMoveTimeout(post, io);
             }
         }
     });
 }
 exports.initializeGameServerTasks = initializeGameServerTasks;
+function emitChanges(io, { changedGamePost, changedMoves }) {
+    io.in(changedGamePost.id).emit(EVENTS.incoming.updated, { game: changedGamePost.game, changedChildren: changedMoves });
+}
 function registerGameServerEvents(socket, io) {
     return __awaiter(this, void 0, void 0, function* () {
         socket.on(EVENTS.outgoing.update, (_a) => __awaiter(this, [_a], void 0, function* ({ id, game }) {
-            yield updatePost(id, {
+            const post = yield getPost(id);
+            const changedGamePost = yield updatePost(post, {
                 game
             });
-            io.in(id).emit(EVENTS.incoming.updated, { game });
+            emitChanges(io, { changedGamePost });
         }));
         socket.on(EVENTS.outgoing.start, (_b) => __awaiter(this, [_b], void 0, function* ({ id }) {
-            const gamePost = yield Post.findOne({
-                where: {
-                    id
-                }
-            });
+            const gamePost = yield getPost(id);
             const game = gamePost.game;
             const play = game.play;
-            console.log(play);
             if (play.status === 'started') {
                 return;
             }
+            let changes;
             if (play.status === 'paused') {
                 const moveId = play.moveId;
                 if (!moveId) {
-                    console.log('startstep');
-                    yield startStep(gamePost, play.step, play.variables, io);
+                    changes = yield startNewMove(gamePost, play.step, play.variables, io);
                 }
                 else {
-                    const newGame = Object.assign(Object.assign({}, game), { play: {
-                            status: 'started',
-                            moveId,
-                            playerIds: play.playerIds,
-                            step: play.step,
-                            variables: play.variables,
-                        } });
-                    yield updatePost(id, {
-                        game: newGame
+                    const changedGamePost = yield updatePost(gamePost, {
+                        game: Object.assign(Object.assign({}, game), { play: {
+                                status: 'started',
+                                moveId,
+                                playerIds: play.playerIds,
+                                step: play.step,
+                                variables: play.variables,
+                            } })
                     });
                     const movePost = yield getPost(moveId);
                     const move = movePost.move;
                     if (move.status === 'paused') {
                         const now = +new Date();
                         const timeout = now + (0, parse_duration_1.default)(play.step.timeout) - move.elapsedTime;
-                        const newMove = Object.assign(Object.assign({}, move), { status: 'started', elapsedTime: move.elapsedTime, startedAt: now, timeout });
-                        yield updatePost(moveId, {
-                            move: newMove
+                        const newMovePost = yield updatePost(movePost, {
+                            move: Object.assign(Object.assign({}, move), { status: 'started', elapsedTime: move.elapsedTime, startedAt: now, timeout })
                         });
-                        scheduleMoveTimeout(moveId, newMove, timeout, io);
+                        scheduleMoveTimeout(newMovePost, io);
+                        changes = {
+                            changedGamePost,
+                            changedMoves: [newMovePost]
+                        };
                     }
-                    io.in(id).emit(EVENTS.incoming.updated, { game: newGame });
+                    else {
+                        changes = {
+                            changedGamePost
+                        };
+                    }
                 }
             }
             else {
@@ -350,23 +364,25 @@ function registerGameServerEvents(socket, io) {
                 if (!step) {
                     throw new Error('No step.');
                 }
-                yield startStep(gamePost, step.step, step.variables, io);
+                changes = yield startNewMove(gamePost, step.step, step.variables, io);
             }
+            emitChanges(io, changes);
         }));
         socket.on(EVENTS.outgoing.skip, (_c) => __awaiter(this, [_c], void 0, function* ({ id }) {
             const gamePost = yield getPost(id);
             const play = gamePost.game.play;
+            let skippedMovePost;
             if ((play.status === 'started' || play.status === 'paused') && play.moveId) {
                 const movePost = yield getPost(play.moveId);
                 const move = movePost.move;
                 if (move.status === 'started' || move.status === 'paused') {
-                    const newMove = Object.assign(Object.assign({}, move), { status: 'skipped' });
-                    yield updatePost(play.moveId, {
-                        move: newMove
+                    skippedMovePost = yield updatePost(movePost, {
+                        move: Object.assign(Object.assign({}, move), { status: 'skipped' })
                     });
                 }
             }
-            yield nextStep(gamePost, io);
+            const changes = yield nextMove(gamePost, io);
+            emitChanges(io, Object.assign(Object.assign({}, changes), { changedMoves: skippedMovePost && [skippedMovePost] }));
         }));
         socket.on(EVENTS.outgoing.pause, (_d) => __awaiter(this, [_d], void 0, function* ({ id }) {
             const post = yield getPost(id);
@@ -375,24 +391,25 @@ function registerGameServerEvents(socket, io) {
             if (play.status !== 'started') {
                 return;
             }
-            const newGame = Object.assign(Object.assign({}, game), { play: {
-                    status: 'paused',
-                    step: play.step,
-                    variables: play.variables,
-                    moveId: play.moveId,
-                    playerIds: play.playerIds,
-                } });
-            yield updatePost(id, { game: newGame });
+            const changedGamePost = yield updatePost(post, {
+                game: Object.assign(Object.assign({}, game), { play: {
+                        status: 'paused',
+                        step: play.step,
+                        variables: play.variables,
+                        moveId: play.moveId,
+                        playerIds: play.playerIds,
+                    } })
+            });
             const movePost = yield getPost(play.moveId);
             const move = movePost.move;
+            let pausedMovePost;
             if (move.status === 'started') {
                 const now = +new Date();
-                const newMove = Object.assign(Object.assign({}, move), { status: 'paused', elapsedTime: move.elapsedTime + now - move.startedAt, remainingTime: move.timeout - now });
-                yield updatePost(play.moveId, {
-                    move: newMove
+                pausedMovePost = yield updatePost(movePost, {
+                    move: Object.assign(Object.assign({}, move), { status: 'paused', elapsedTime: move.elapsedTime + now - move.startedAt, remainingTime: move.timeout - now })
                 });
             }
-            io.in(id).emit(EVENTS.incoming.updated, { game: newGame });
+            emitChanges(io, { changedGamePost, changedMoves: pausedMovePost && [pausedMovePost] });
         }));
         socket.on(EVENTS.outgoing.stop, (_e) => __awaiter(this, [_e], void 0, function* ({ id }) {
             const post = yield getPost(id);
@@ -401,23 +418,24 @@ function registerGameServerEvents(socket, io) {
             if (play.status !== 'started' && play.status !== 'paused') {
                 return;
             }
-            const newGame = Object.assign(Object.assign({}, game), { play: {
-                    status: 'stopped',
-                    variables: play.variables,
-                    playerIds: play.playerIds,
-                } });
-            yield updatePost(id, { game: newGame });
+            const changedGamePost = yield updatePost(post, {
+                game: Object.assign(Object.assign({}, game), { play: {
+                        status: 'stopped',
+                        variables: play.variables,
+                        playerIds: play.playerIds,
+                    } })
+            });
+            let stoppedMovePost;
             if (play.moveId) {
                 const movePost = yield getPost(play.moveId);
                 const move = movePost.move;
                 if (move.status === 'started' || move.status === 'paused') {
-                    const newMove = Object.assign(Object.assign({}, move), { status: 'stopped' });
-                    yield updatePost(play.moveId, {
-                        move: newMove
+                    stoppedMovePost = yield updatePost(movePost, {
+                        move: Object.assign(Object.assign({}, move), { status: 'stopped' })
                     });
                 }
             }
-            io.in(id).emit(EVENTS.incoming.updated, { game: newGame });
+            emitChanges(io, { changedGamePost, changedMoves: stoppedMovePost && [stoppedMovePost] });
         }));
     });
 }

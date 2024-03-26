@@ -366,7 +366,7 @@ router.get('/link-data', authenticateToken, async (req, res) => {
 
 router.get('/search', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { type, sourceId, search, userId, mediaType } = req.query
+    const { type, sourceId, search, userId, mediaType, ids } = req.query
     const where = {
         type: type.toLowerCase(),
         state: 'active',
@@ -770,11 +770,9 @@ router.get('/post-comments', async (req, res) => {
 
 router.get('/post-children', async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { postId, limit, offset } = req.query;
+    const { postId, limit, offset, childrenIds } = req.query;
 
-    const links = await Link.findAll({
-        offset: +offset,
-        limit: +limit,
+    const query = {
         order: [['createdAt', 'DESC']],
         attributes: ['state'],
         include: [
@@ -796,7 +794,16 @@ router.get('/post-children', async (req, res) => {
             itemAType: 'post',
             itemAId: postId,
         }
-    })
+    }
+
+    if (childrenIds) {
+        query.where.itemBId = childrenIds.split(',')
+    } else {
+        query.offset = +offset;
+        query.limit = +limit;
+    }
+
+    const links = await Link.findAll(query)
     res.status(200).json({ children: links.map(link => link.Post) })
 })
 
