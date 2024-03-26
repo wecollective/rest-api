@@ -1442,7 +1442,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             })
             const parentPost = await Post.findOne({
                 where: { id: parent.id },
-                attributes: ['id', 'type'],
+                attributes: ['id', 'type', 'game'],
                 include: {
                     model: User,
                     as: 'Creator',
@@ -1486,6 +1486,12 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                         </p>
                     `,
                 })
+
+            if (parentPost.game) {
+                const io = req.app.get('socketio')
+                io.to(parent.id).emit('gs:incoming-updated', { changedChildren: [post] })
+            }
+
             Promise.all([createNotification, sendEmail])
                 .then(() => resolve())
                 .catch((error) => resolve(error))
