@@ -180,18 +180,14 @@ function insertVariables(text, variables) {
 }
 function startNewMove(gamePost, step, variables, io) {
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b;
         const game = gamePost.game;
         const play = game.play;
         const now = +new Date();
-        const timeout = now + (0, parse_duration_1.default)(step.timeout);
-        const move = {
-            status: 'started',
-            elapsedTime: 0,
-            startedAt: now,
-            timeout,
-            gameId: gamePost.id,
-            submission: step.submission && (Object.assign(Object.assign({}, step.submission), { player: variables[step.submission.player] }))
-        };
+        const timeout = now + ((_a = (0, parse_duration_1.default)(step.timeout)) !== null && _a !== void 0 ? _a : 0);
+        const move = Object.assign({ status: 'started', elapsedTime: 0, startedAt: now, timeout, gameId: gamePost.id }, step.submission && ({
+            submission: Object.assign(Object.assign({}, step.submission.type === 'audio' ? Object.assign(Object.assign({}, step.submission), { maxDuration: (_b = (0, parse_duration_1.default)(step.submission.maxDuration)) !== null && _b !== void 0 ? _b : 0 }) : Object.assign({}, step.submission)), { player: variables[step.submission.player] })
+        }));
         const movePost = yield createChild({
             type: 'post',
             mediaTypes: '',

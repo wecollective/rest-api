@@ -51,7 +51,11 @@ export type Step = {
             title?: string
             text: string
             timeout: string
-            submission?: SubmissionConfig & { player: string }
+            submission?: { player: string } & ({
+                type: 'audio'
+                maxDuration: string
+            }
+                | { type: 'text' })
         }
         | {
             type: 'sequence'
@@ -75,17 +79,8 @@ export type BaseUser = {
     flagImagePath: string
 }
 
-
-type SubmissionConfig = (
-    | {
-        type: 'audio'
-        maxDuration: number
-    }
-    | { type: 'text' }
-)
-
 export type Move = (
-    | { status: 'skipped' | 'ended' | 'stopped' }
+    | { status: 'skipped' | 'ended' | 'stopped' | 'timeout' }
     | { status: 'paused'; elapsedTime: number; remainingTime: number }
     | {
         status: 'started'
@@ -93,7 +88,15 @@ export type Move = (
         startedAt: number
         timeout: number
     }
-) & { gameId?: number; submission?: { player?: BaseUser } & SubmissionConfig }
+) & { gameId?: number; submission?: MoveSubmission }
+export type MoveSubmission = { player?: BaseUser } & ({
+    type: 'audio'
+    maxDuration: number
+}
+    | { type: 'text' })
+export type MoveSubmissionAudio = Extract<MoveSubmission, { type: 'audio' }>
+
+export type MoveStatus = Move['status']
 
 type PlayVariables = Record<string, string | number | boolean | BaseUser>
 
@@ -289,7 +292,7 @@ async function startNewMove(gamePost: Post, step: MoveStep, variables: PlayVaria
     const game = gamePost.game!
     const play = game.play
     const now = +new Date();
-    const timeout = now + parseDuration(step.timeout)!
+    const timeout = now + (parseDuration(step.timeout) ?? 0)
 
 
     const move: Move = {
@@ -298,9 +301,16 @@ async function startNewMove(gamePost: Post, step: MoveStep, variables: PlayVaria
         startedAt: now,
         timeout,
         gameId: gamePost.id,
-        submission: step.submission && ({
-            ...step.submission,
-            player: variables[step.submission.player] as BaseUser
+        ...step.submission && ({
+            submission: {
+                ...step.submission.type === 'audio' ? {
+                    ...step.submission,
+                    maxDuration: parseDuration(step.submission.maxDuration) ?? 0
+                } : {
+                    ...step.submission
+                },
+                player: variables[step.submission.player] as BaseUser,
+            }
         })
     }
     const movePost = await createChild({
