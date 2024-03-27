@@ -64,7 +64,16 @@ type MoveStep = Extract<Step, { type: 'move' }>
 type Game = {
     steps: Step[]
     play: Play
+    players: BaseUser[]
 }
+
+export type BaseUser = {
+    id: number
+    handle: string
+    name: string
+    flagImagePath: string
+}
+
 
 type Move = (
     | { status: 'skipped' | 'ended' | 'stopped' }
@@ -77,10 +86,9 @@ type Move = (
     }
 ) & { gameId?: number }
 
-type PlayVariables = Record<string, string | number | boolean>
+type PlayVariables = Record<string, string | number | boolean | BaseUser>
 
 export type Play = {
-    playerIds: number[]
     variables: PlayVariables
 } & (
         | { status: 'waiting' | 'stopped' | 'ended' }
@@ -116,7 +124,7 @@ async function updatePost(post: Post, data: Partial<Post>): Promise<Post> {
 const getFirstMove = (
     step: Step | undefined,
     variables: PlayVariables,
-    playerIds: number[]
+    players: BaseUser[]
 ): undefined | { step: MoveStep; variables: PlayVariables } => {
     if (!step) {
         return undefined
@@ -125,7 +133,11 @@ const getFirstMove = (
         case 'move':
             return { step, variables }
         case 'sequence': {
-            const firstStep = getFirstMove(step.steps[0], variables, playerIds)
+            if (step.repeat && ((step.repeat.type === 'rounds' && step.repeat.amount === 0) || (step.repeat.type === 'turns' && players.length === 0))) {
+                return undefined
+            }
+
+            const firstStep = getFirstMove(step.steps[0], variables, players)
             if (!firstStep) {
                 return undefined
             }
@@ -137,7 +149,7 @@ const getFirstMove = (
                 step: firstStep.step,
                 variables: {
                     ...firstStep.variables,
-                    [step.name]: firstStep.variables[step.name] ?? (step.repeat.type === 'rounds' ? 1 : playerIds[0]),
+                    [step.name]: firstStep.variables[step.name] ?? (step.repeat.type === 'rounds' ? 1 : players[0]),
                 },
             }
         }
@@ -152,7 +164,7 @@ const getTransition = (
     steps: Step[],
     stepId: string,
     variables: PlayVariables,
-    playerIds: number[]
+    players: BaseUser[]
 ): undefined | { current: MoveStep; next?: MoveStep; variables: PlayVariables } => {
     let current: MoveStep | undefined
     let currentVariables = variables
@@ -160,7 +172,7 @@ const getTransition = (
         const step = steps[i]
 
         if (current) {
-            const nextStep = getFirstMove(step, currentVariables, playerIds)
+            const nextStep = getFirstMove(step, currentVariables, players)
             if (nextStep) {
                 return { current, next: nextStep.step, variables: nextStep.variables }
             }
@@ -172,7 +184,7 @@ const getTransition = (
                     }
                     break
                 case 'sequence': {
-                    const result = getTransition(step.steps, stepId, currentVariables, playerIds)
+                    const result = getTransition(step.steps, stepId, currentVariables, players)
                     if (!result) {
                         break
                     }
@@ -187,9 +199,9 @@ const getTransition = (
                             const round = currentVariables[step.name] as number
                             nextValue = round < +step.repeat.amount ? round + 1 : undefined
                         } else {
-                            const playerId = currentVariables[step.name] as number
-                            const playerIndex = playerIds.indexOf(playerId)
-                            nextValue = playerIds[playerIndex + 1]
+                            const player = currentVariables[step.name] as BaseUser
+                            const playerIndex = players.findIndex(p => p.id === player.id)
+                            nextValue = players[playerIndex + 1]
                         }
                         if (nextValue) {
                             const firstStep = getFirstMove(
@@ -198,7 +210,7 @@ const getTransition = (
                                     ...result.variables,
                                     [step.name]: nextValue,
                                 },
-                                playerIds
+                                players
                             )
                             if (firstStep) {
                                 return {
@@ -250,6 +262,10 @@ async function createChild(data: any, parent: Post): Promise<Post> {
 function insertVariables(text: string | undefined, variables: PlayVariables) {
     return text?.replace(/\[([^\]]+)\]/, (substring, variableName) => {
         if (variableName in variables) {
+            const value = variables[variableName]
+            if (typeof value === 'object') {
+                return `@${value.name}`
+            }
             return `${variables[variableName]}`
         }
         return substring
@@ -288,7 +304,6 @@ async function startNewMove(gamePost: Post, step: MoveStep, variables: PlayVaria
                 step,
                 moveId: movePost.id,
                 variables: variables,
-                playerIds: play.playerIds,
             }
         }
     })
@@ -306,7 +321,7 @@ async function nextMove(gamePost: Post, io: Server): Promise<Changes | undefined
         game.steps,
         play.step.id,
         play.variables,
-        play.playerIds
+        game.players
     )
 
     if (transition?.next) {
@@ -320,7 +335,6 @@ async function nextMove(gamePost: Post, io: Server): Promise<Changes | undefined
                         status: 'paused',
                         step: transition.next,
                         variables: transition.variables,
-                        playerIds: play.playerIds,
                     }
                 }
             })
@@ -333,7 +347,6 @@ async function nextMove(gamePost: Post, io: Server): Promise<Changes | undefined
             game: {
                 ...game,
                 play: {
-                    playerIds: play.playerIds,
                     status: 'ended',
                     variables: transition?.variables ?? play.variables
                 }
@@ -443,7 +456,6 @@ export async function registerGameServerEvents(socket: Socket, io: Server) {
                         play: {
                             status: 'started',
                             moveId,
-                            playerIds: play.playerIds,
                             step: play.step,
                             variables: play.variables,
                         }
@@ -475,12 +487,24 @@ export async function registerGameServerEvents(socket: Socket, io: Server) {
                 }
             }
         } else {
-            const step = getFirstMove(game.steps[0], {}, play.playerIds);
-            if (!step) {
-                throw new Error('No step.')
+            const variables = {}
+            const step = getFirstMove(game.steps[0], variables, game.players);
+            if (step) {
+                changes = await startNewMove(gamePost, step.step, step.variables, io)
+            } else {
+                const changedGamePost = await updatePost(gamePost, {
+                    game: {
+                        ...game,
+                        play: {
+                            status: 'ended',
+                            variables
+                        }
+                    }
+                })
+                changes = {
+                    changedGamePost
+                }
             }
-
-            changes = await startNewMove(gamePost, step.step, step.variables, io)
         }
         emitChanges(io, changes)
     })
@@ -522,7 +546,6 @@ export async function registerGameServerEvents(socket: Socket, io: Server) {
                     step: play.step,
                     variables: play.variables,
                     moveId: play.moveId,
-                    playerIds: play.playerIds,
                 }
             }
         })
@@ -560,7 +583,6 @@ export async function registerGameServerEvents(socket: Socket, io: Server) {
                 play: {
                     status: 'stopped',
                     variables: play.variables,
-                    playerIds: play.playerIds,
                 }
             }
         })

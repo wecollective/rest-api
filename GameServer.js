@@ -53,7 +53,7 @@ function updatePost(post, data) {
         return Object.assign(Object.assign({}, post), data);
     });
 }
-const getFirstMove = (step, variables, playerIds) => {
+const getFirstMove = (step, variables, players) => {
     var _a;
     if (!step) {
         return undefined;
@@ -62,7 +62,10 @@ const getFirstMove = (step, variables, playerIds) => {
         case 'move':
             return { step, variables };
         case 'sequence': {
-            const firstStep = getFirstMove(step.steps[0], variables, playerIds);
+            if (step.repeat && ((step.repeat.type === 'rounds' && step.repeat.amount === 0) || (step.repeat.type === 'turns' && players.length === 0))) {
+                return undefined;
+            }
+            const firstStep = getFirstMove(step.steps[0], variables, players);
             if (!firstStep) {
                 return undefined;
             }
@@ -71,7 +74,7 @@ const getFirstMove = (step, variables, playerIds) => {
             }
             return {
                 step: firstStep.step,
-                variables: Object.assign(Object.assign({}, firstStep.variables), { [step.name]: (_a = firstStep.variables[step.name]) !== null && _a !== void 0 ? _a : (step.repeat.type === 'rounds' ? 1 : playerIds[0]) }),
+                variables: Object.assign(Object.assign({}, firstStep.variables), { [step.name]: (_a = firstStep.variables[step.name]) !== null && _a !== void 0 ? _a : (step.repeat.type === 'rounds' ? 1 : players[0]) }),
             };
         }
         default: {
@@ -80,13 +83,13 @@ const getFirstMove = (step, variables, playerIds) => {
         }
     }
 };
-const getTransition = (steps, stepId, variables, playerIds) => {
+const getTransition = (steps, stepId, variables, players) => {
     let current;
     let currentVariables = variables;
     for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
         if (current) {
-            const nextStep = getFirstMove(step, currentVariables, playerIds);
+            const nextStep = getFirstMove(step, currentVariables, players);
             if (nextStep) {
                 return { current, next: nextStep.step, variables: nextStep.variables };
             }
@@ -99,7 +102,7 @@ const getTransition = (steps, stepId, variables, playerIds) => {
                     }
                     break;
                 case 'sequence': {
-                    const result = getTransition(step.steps, stepId, currentVariables, playerIds);
+                    const result = getTransition(step.steps, stepId, currentVariables, players);
                     if (!result) {
                         break;
                     }
@@ -113,12 +116,12 @@ const getTransition = (steps, stepId, variables, playerIds) => {
                             nextValue = round < +step.repeat.amount ? round + 1 : undefined;
                         }
                         else {
-                            const playerId = currentVariables[step.name];
-                            const playerIndex = playerIds.indexOf(playerId);
-                            nextValue = playerIds[playerIndex + 1];
+                            const player = currentVariables[step.name];
+                            const playerIndex = players.findIndex(p => p.id === player.id);
+                            nextValue = players[playerIndex + 1];
                         }
                         if (nextValue) {
-                            const firstStep = getFirstMove(step, Object.assign(Object.assign({}, result.variables), { [step.name]: nextValue }), playerIds);
+                            const firstStep = getFirstMove(step, Object.assign(Object.assign({}, result.variables), { [step.name]: nextValue }), players);
                             if (firstStep) {
                                 return {
                                     current: result.current,
@@ -165,6 +168,10 @@ function createChild(data, parent) {
 function insertVariables(text, variables) {
     return text === null || text === void 0 ? void 0 : text.replace(/\[([^\]]+)\]/, (substring, variableName) => {
         if (variableName in variables) {
+            const value = variables[variableName];
+            if (typeof value === 'object') {
+                return `@${value.name}`;
+            }
             return `${variables[variableName]}`;
         }
         return substring;
@@ -197,7 +204,6 @@ function startNewMove(gamePost, step, variables, io) {
                     step,
                     moveId: movePost.id,
                     variables: variables,
-                    playerIds: play.playerIds,
                 } })
         });
         return { changedGamePost, changedMoves: [movePost] };
@@ -211,7 +217,7 @@ function nextMove(gamePost, io) {
         if (play.status !== 'started' && play.status !== 'paused') {
             return;
         }
-        const transition = getTransition(game.steps, play.step.id, play.variables, play.playerIds);
+        const transition = getTransition(game.steps, play.step.id, play.variables, game.players);
         if (transition === null || transition === void 0 ? void 0 : transition.next) {
             if (play.status === 'started') {
                 return yield startNewMove(gamePost, transition.next, transition.variables, io);
@@ -222,7 +228,6 @@ function nextMove(gamePost, io) {
                             status: 'paused',
                             step: transition.next,
                             variables: transition.variables,
-                            playerIds: play.playerIds,
                         } })
                 });
                 return {
@@ -233,7 +238,6 @@ function nextMove(gamePost, io) {
         else {
             const changedGamePost = yield updatePost(gamePost, {
                 game: Object.assign(Object.assign({}, game), { play: {
-                        playerIds: play.playerIds,
                         status: 'ended',
                         variables: (_a = transition === null || transition === void 0 ? void 0 : transition.variables) !== null && _a !== void 0 ? _a : play.variables
                     } })
@@ -333,7 +337,6 @@ function registerGameServerEvents(socket, io) {
                         game: Object.assign(Object.assign({}, game), { play: {
                                 status: 'started',
                                 moveId,
-                                playerIds: play.playerIds,
                                 step: play.step,
                                 variables: play.variables,
                             } })
@@ -360,11 +363,22 @@ function registerGameServerEvents(socket, io) {
                 }
             }
             else {
-                const step = getFirstMove(game.steps[0], {}, play.playerIds);
-                if (!step) {
-                    throw new Error('No step.');
+                const variables = {};
+                const step = getFirstMove(game.steps[0], variables, game.players);
+                if (step) {
+                    changes = yield startNewMove(gamePost, step.step, step.variables, io);
                 }
-                changes = yield startNewMove(gamePost, step.step, step.variables, io);
+                else {
+                    const changedGamePost = yield updatePost(gamePost, {
+                        game: Object.assign(Object.assign({}, game), { play: {
+                                status: 'ended',
+                                variables
+                            } })
+                    });
+                    changes = {
+                        changedGamePost
+                    };
+                }
             }
             emitChanges(io, changes);
         }));
@@ -397,7 +411,6 @@ function registerGameServerEvents(socket, io) {
                         step: play.step,
                         variables: play.variables,
                         moveId: play.moveId,
-                        playerIds: play.playerIds,
                     } })
             });
             const movePost = yield getPost(play.moveId);
@@ -422,7 +435,6 @@ function registerGameServerEvents(socket, io) {
                 game: Object.assign(Object.assign({}, game), { play: {
                         status: 'stopped',
                         variables: play.variables,
-                        playerIds: play.playerIds,
                     } })
             });
             let stoppedMovePost;
