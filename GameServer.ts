@@ -51,7 +51,7 @@ export type Step = {
             title?: string
             text: string
             timeout: string
-            move: MoveConfig & { player: string }
+            submission?: SubmissionConfig & { player: string }
         }
         | {
             type: 'sequence'
@@ -76,7 +76,7 @@ export type BaseUser = {
 }
 
 
-type MoveConfig = (
+type SubmissionConfig = (
     | {
         type: 'audio'
         maxDuration: number
@@ -93,7 +93,7 @@ export type Move = (
         startedAt: number
         timeout: number
     }
-) & { gameId?: number; player?: BaseUser } & MoveConfig
+) & { gameId?: number; submission?: { player?: BaseUser } & SubmissionConfig }
 
 type PlayVariables = Record<string, string | number | boolean | BaseUser>
 
@@ -283,14 +283,6 @@ function insertVariables(text: string | undefined, variables: PlayVariables) {
     })
 }
 
-function resolveVariable(text: string | undefined, variables: PlayVariables) {
-    const match = text?.match(variableRegex);
-    console.log(text, match, variables)
-    if (match) {
-        return variables[match[1]]
-    }
-}
-
 type Changes = { changedGamePost: Post, changedMoves?: Post[] }
 
 async function startNewMove(gamePost: Post, step: MoveStep, variables: PlayVariables, io: Server): Promise<Changes> {
@@ -299,14 +291,17 @@ async function startNewMove(gamePost: Post, step: MoveStep, variables: PlayVaria
     const now = +new Date();
     const timeout = now + parseDuration(step.timeout)!
 
+
     const move: Move = {
         status: 'started',
         elapsedTime: 0,
         startedAt: now,
         timeout,
         gameId: gamePost.id,
-        ...step.move,
-        player: resolveVariable(step.move.player, variables) as BaseUser
+        submission: step.submission && ({
+            ...step.submission,
+            player: variables[step.submission.player] as BaseUser
+        })
     }
     const movePost = await createChild({
         type: 'post',

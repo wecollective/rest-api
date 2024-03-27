@@ -178,20 +178,20 @@ function insertVariables(text, variables) {
         return substring;
     });
 }
-function resolveVariable(text, variables) {
-    const match = text === null || text === void 0 ? void 0 : text.match(variableRegex);
-    console.log(text, match, variables);
-    if (match) {
-        return variables[match[1]];
-    }
-}
 function startNewMove(gamePost, step, variables, io) {
     return __awaiter(this, void 0, void 0, function* () {
         const game = gamePost.game;
         const play = game.play;
         const now = +new Date();
         const timeout = now + (0, parse_duration_1.default)(step.timeout);
-        const move = Object.assign(Object.assign({ status: 'started', elapsedTime: 0, startedAt: now, timeout, gameId: gamePost.id }, step.move), { player: resolveVariable(step.move.player, variables) });
+        const move = {
+            status: 'started',
+            elapsedTime: 0,
+            startedAt: now,
+            timeout,
+            gameId: gamePost.id,
+            submission: step.submission && (Object.assign(Object.assign({}, step.submission), { player: variables[step.submission.player] }))
+        };
         const movePost = yield createChild({
             type: 'post',
             mediaTypes: '',
