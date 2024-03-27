@@ -165,8 +165,9 @@ function createChild(data, parent) {
         return post;
     });
 }
+const variableRegex = /\[([^\]]+)\]/;
 function insertVariables(text, variables) {
-    return text === null || text === void 0 ? void 0 : text.replace(/\[([^\]]+)\]/, (substring, variableName) => {
+    return text === null || text === void 0 ? void 0 : text.replace(variableRegex, (substring, variableName) => {
         if (variableName in variables) {
             const value = variables[variableName];
             if (typeof value === 'object') {
@@ -177,19 +178,20 @@ function insertVariables(text, variables) {
         return substring;
     });
 }
+function resolveVariable(text, variables) {
+    const match = text === null || text === void 0 ? void 0 : text.match(variableRegex);
+    console.log(text, match, variables);
+    if (match) {
+        return variables[match[1]];
+    }
+}
 function startNewMove(gamePost, step, variables, io) {
     return __awaiter(this, void 0, void 0, function* () {
         const game = gamePost.game;
         const play = game.play;
         const now = +new Date();
         const timeout = now + (0, parse_duration_1.default)(step.timeout);
-        const move = {
-            status: 'started',
-            elapsedTime: 0,
-            startedAt: now,
-            timeout,
-            gameId: gamePost.id
-        };
+        const move = Object.assign(Object.assign({ status: 'started', elapsedTime: 0, startedAt: now, timeout, gameId: gamePost.id }, step.move), { player: resolveVariable(step.move.player, variables) });
         const movePost = yield createChild({
             type: 'post',
             mediaTypes: '',
@@ -383,6 +385,7 @@ function registerGameServerEvents(socket, io) {
             emitChanges(io, changes);
         }));
         socket.on(EVENTS.outgoing.skip, (_c) => __awaiter(this, [_c], void 0, function* ({ id }) {
+            var _d;
             const gamePost = yield getPost(id);
             const play = gamePost.game.play;
             let skippedMovePost;
@@ -396,9 +399,9 @@ function registerGameServerEvents(socket, io) {
                 }
             }
             const changes = yield nextMove(gamePost, io);
-            emitChanges(io, Object.assign(Object.assign({}, changes), { changedMoves: skippedMovePost && [skippedMovePost] }));
+            emitChanges(io, Object.assign(Object.assign({}, changes), { changedMoves: skippedMovePost && [skippedMovePost, ...(_d = changes === null || changes === void 0 ? void 0 : changes.changedMoves) !== null && _d !== void 0 ? _d : []] }));
         }));
-        socket.on(EVENTS.outgoing.pause, (_d) => __awaiter(this, [_d], void 0, function* ({ id }) {
+        socket.on(EVENTS.outgoing.pause, (_e) => __awaiter(this, [_e], void 0, function* ({ id }) {
             const post = yield getPost(id);
             const game = post.game;
             const play = game.play;
@@ -424,7 +427,7 @@ function registerGameServerEvents(socket, io) {
             }
             emitChanges(io, { changedGamePost, changedMoves: pausedMovePost && [pausedMovePost] });
         }));
-        socket.on(EVENTS.outgoing.stop, (_e) => __awaiter(this, [_e], void 0, function* ({ id }) {
+        socket.on(EVENTS.outgoing.stop, (_f) => __awaiter(this, [_f], void 0, function* ({ id }) {
             const post = yield getPost(id);
             const game = post.game;
             const play = game.play;

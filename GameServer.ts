@@ -51,6 +51,7 @@ export type Step = {
             title?: string
             text: string
             timeout: string
+            move: MoveConfig & { player: string }
         }
         | {
             type: 'sequence'
@@ -75,7 +76,15 @@ export type BaseUser = {
 }
 
 
-type Move = (
+type MoveConfig = (
+    | {
+        type: 'audio'
+        maxDuration: number
+    }
+    | { type: 'text' }
+)
+
+export type Move = (
     | { status: 'skipped' | 'ended' | 'stopped' }
     | { status: 'paused'; elapsedTime: number; remainingTime: number }
     | {
@@ -84,7 +93,7 @@ type Move = (
         startedAt: number
         timeout: number
     }
-) & { gameId?: number }
+) & { gameId?: number; player?: BaseUser } & MoveConfig
 
 type PlayVariables = Record<string, string | number | boolean | BaseUser>
 
@@ -259,8 +268,10 @@ async function createChild(data: any, parent: Post): Promise<Post> {
     return post
 }
 
+const variableRegex = /\[([^\]]+)\]/
+
 function insertVariables(text: string | undefined, variables: PlayVariables) {
-    return text?.replace(/\[([^\]]+)\]/, (substring, variableName) => {
+    return text?.replace(variableRegex, (substring, variableName) => {
         if (variableName in variables) {
             const value = variables[variableName]
             if (typeof value === 'object') {
@@ -270,6 +281,14 @@ function insertVariables(text: string | undefined, variables: PlayVariables) {
         }
         return substring
     })
+}
+
+function resolveVariable(text: string | undefined, variables: PlayVariables) {
+    const match = text?.match(variableRegex);
+    console.log(text, match, variables)
+    if (match) {
+        return variables[match[1]]
+    }
 }
 
 type Changes = { changedGamePost: Post, changedMoves?: Post[] }
@@ -285,7 +304,9 @@ async function startNewMove(gamePost: Post, step: MoveStep, variables: PlayVaria
         elapsedTime: 0,
         startedAt: now,
         timeout,
-        gameId: gamePost.id
+        gameId: gamePost.id,
+        ...step.move,
+        player: resolveVariable(step.move.player, variables) as BaseUser
     }
     const movePost = await createChild({
         type: 'post',
@@ -526,7 +547,7 @@ export async function registerGameServerEvents(socket: Socket, io: Server) {
             }
         }
         const changes = await nextMove(gamePost, io)
-        emitChanges(io, { ...changes!, changedMoves: skippedMovePost && [skippedMovePost] })
+        emitChanges(io, { ...changes!, changedMoves: skippedMovePost && [skippedMovePost, ...changes?.changedMoves ?? []] })
     })
 
     socket.on(EVENTS.outgoing.pause, async ({ id }: { id: number }) => {
