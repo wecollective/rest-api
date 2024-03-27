@@ -2023,6 +2023,20 @@ function attachComment(comment, parent, accountId) {
             totalComments: 0,
             totalRatings: 0,
         })
+        if (parent.relationship !== 'parent') {
+            await Link.create({
+                creatorId: accountId,
+                itemAId: parent.id,
+                itemAType: parent.type,
+                itemBId: comment.id,
+                itemBType: comment.type,
+                relationship: parent.relationship,
+                state: 'active',
+                totalLikes: 0,
+                totalComments: 0,
+                totalRatings: 0,
+            })
+        }
         const addRootLink = await Link.create({
             creatorId: accountId,
             itemAId: rootPost.id,

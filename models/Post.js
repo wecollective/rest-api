@@ -52,6 +52,7 @@ module.exports = (sequelize, DataTypes) => {
         Post.hasMany(models.Link, { as: 'AudioBlocks', foreignKey: 'itemAId' })
         Post.hasOne(models.Link, { as: 'Originals', foreignKey: 'itemBId' })
         Post.hasMany(models.Link, { as: 'Remixes', foreignKey: 'itemAId' })
+        Post.hasMany(models.Link, { as: 'Submissions', foreignKey: 'itemAId' })
         Post.hasOne(models.Link, { as: 'MediaLink', foreignKey: 'itemAId' })
         // used for post map (todo: rethink...)
         Post.hasMany(models.Link, { as: 'OutgoingPostLinks', foreignKey: 'itemAId' })

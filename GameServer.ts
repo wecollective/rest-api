@@ -411,9 +411,9 @@ const EVENTS = {
         update: 'gs:outgoing-update',
         start: 'gs:outgoing-start',
         stop: 'gs:outgoing-stop',
-
         skip: 'gs:outgoing-skip',
         pause: 'gs:outgoing-pause',
+        submit: 'gs:outgoing-submit'
     },
     incoming: {
         updated: 'gs:incoming-updated'
@@ -528,6 +528,23 @@ export async function registerGameServerEvents(socket: Socket, io: Server) {
             }
         }
         emitChanges(io, changes)
+    })
+
+    socket.on(EVENTS.outgoing.submit, async ({ id, moveId }) => {
+        const gamePost = await getPost(id);
+        const movePost = await getPost(moveId)
+        const move = movePost.move!
+        if (move.status !== 'started') {
+            return
+        }
+        let completedMovePost = await updatePost(movePost, {
+            move: {
+                ...move,
+                status: 'ended'
+            }
+        })
+        const changes = await nextMove(gamePost, io)
+        emitChanges(io, { ...changes!, changedMoves: [completedMovePost, ...changes?.changedMoves ?? []] })
     })
 
     socket.on(EVENTS.outgoing.skip, async ({ id }: { id: number }) => {

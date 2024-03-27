@@ -784,6 +784,24 @@ router.get('/post-children', async (req, res) => {
                         model: User,
                         as: 'Creator',
                         attributes: ['id', 'handle', 'name', 'flagImagePath', 'coverImagePath'],
+                    },
+                    {
+                        model: Link,
+                        as: 'Submissions',
+                        separate: true,
+                        where: { relationship: 'submission', state: 'active' },
+                        order: [['index', 'ASC']],
+                        include: {
+                            model: Post,
+                            attributes: ['id', 'type', 'text'],
+                            include: [
+                                {
+                                    model: User,
+                                    as: 'Creator',
+                                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'coverImagePath'],
+                                },
+                            ]
+                        }
                     }
                 ]
             }

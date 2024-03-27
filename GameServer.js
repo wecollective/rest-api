@@ -281,6 +281,7 @@ const EVENTS = {
         stop: 'gs:outgoing-stop',
         skip: 'gs:outgoing-skip',
         pause: 'gs:outgoing-pause',
+        submit: 'gs:outgoing-submit'
     },
     incoming: {
         updated: 'gs:incoming-updated'
@@ -384,8 +385,22 @@ function registerGameServerEvents(socket, io) {
             }
             emitChanges(io, changes);
         }));
-        socket.on(EVENTS.outgoing.skip, (_c) => __awaiter(this, [_c], void 0, function* ({ id }) {
+        socket.on(EVENTS.outgoing.submit, (_c) => __awaiter(this, [_c], void 0, function* ({ id, moveId }) {
             var _d;
+            const gamePost = yield getPost(id);
+            const movePost = yield getPost(moveId);
+            const move = movePost.move;
+            if (move.status !== 'started') {
+                return;
+            }
+            let completedMovePost = yield updatePost(movePost, {
+                move: Object.assign(Object.assign({}, move), { status: 'ended' })
+            });
+            const changes = yield nextMove(gamePost, io);
+            emitChanges(io, Object.assign(Object.assign({}, changes), { changedMoves: [completedMovePost, ...(_d = changes === null || changes === void 0 ? void 0 : changes.changedMoves) !== null && _d !== void 0 ? _d : []] }));
+        }));
+        socket.on(EVENTS.outgoing.skip, (_e) => __awaiter(this, [_e], void 0, function* ({ id }) {
+            var _f;
             const gamePost = yield getPost(id);
             const play = gamePost.game.play;
             let skippedMovePost;
@@ -399,9 +414,9 @@ function registerGameServerEvents(socket, io) {
                 }
             }
             const changes = yield nextMove(gamePost, io);
-            emitChanges(io, Object.assign(Object.assign({}, changes), { changedMoves: skippedMovePost && [skippedMovePost, ...(_d = changes === null || changes === void 0 ? void 0 : changes.changedMoves) !== null && _d !== void 0 ? _d : []] }));
+            emitChanges(io, Object.assign(Object.assign({}, changes), { changedMoves: skippedMovePost && [skippedMovePost, ...(_f = changes === null || changes === void 0 ? void 0 : changes.changedMoves) !== null && _f !== void 0 ? _f : []] }));
         }));
-        socket.on(EVENTS.outgoing.pause, (_e) => __awaiter(this, [_e], void 0, function* ({ id }) {
+        socket.on(EVENTS.outgoing.pause, (_g) => __awaiter(this, [_g], void 0, function* ({ id }) {
             const post = yield getPost(id);
             const game = post.game;
             const play = game.play;
@@ -427,7 +442,7 @@ function registerGameServerEvents(socket, io) {
             }
             emitChanges(io, { changedGamePost, changedMoves: pausedMovePost && [pausedMovePost] });
         }));
-        socket.on(EVENTS.outgoing.stop, (_f) => __awaiter(this, [_f], void 0, function* ({ id }) {
+        socket.on(EVENTS.outgoing.stop, (_h) => __awaiter(this, [_h], void 0, function* ({ id }) {
             const post = yield getPost(id);
             const game = post.game;
             const play = game.play;
