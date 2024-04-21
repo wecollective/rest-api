@@ -376,7 +376,10 @@ router.get('/search', authenticateToken, async (req, res) => {
     if (userId) where.creatorId = userId
     if (mediaType) {
         if (mediaType === 'game') {
-            where[Op.and] = [{ mediaTypes: { [Op.like]: `%${mediaType}%` } }, { [Op.not]: { mediaTypes: { [Op.like]: `%glass-bead-game%` } } }]
+            where[Op.and] = [
+                { mediaTypes: { [Op.like]: `%${mediaType}%` } },
+                { [Op.not]: { mediaTypes: { [Op.like]: `%glass-bead-game%` } } },
+            ]
         }
     } else {
         where.mediaTypes = { [Op.like]: `%${mediaType}%` }
@@ -386,7 +389,9 @@ router.get('/search', authenticateToken, async (req, res) => {
         where,
         limit: 10,
         // TODO: no idea why this fails
-        include: findPostInclude(accountId).filter(include => !['UrlBlocks', 'ImageBlocks', 'AudioBlocks'].includes(include.as)),
+        include: findPostInclude(accountId).filter(
+            (include) => !['UrlBlocks', 'ImageBlocks', 'AudioBlocks'].includes(include.as)
+        ),
     })
     res.status(200).json(matchingPosts)
 })
@@ -770,7 +775,7 @@ router.get('/post-comments', async (req, res) => {
 
 router.get('/post-children', async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { postId, limit, offset, childrenIds } = req.query;
+    const { postId, limit, offset, childrenIds } = req.query
 
     const query = {
         order: [['createdAt', 'DESC']],
@@ -798,7 +803,13 @@ router.get('/post-children', async (req, res) => {
                                 {
                                     model: User,
                                     as: 'Creator',
-                                    attributes: ['id', 'handle', 'name', 'flagImagePath', 'coverImagePath'],
+                                    attributes: [
+                                        'id',
+                                        'handle',
+                                        'name',
+                                        'flagImagePath',
+                                        'coverImagePath',
+                                    ],
                                 },
                                 {
                                     model: Link,
@@ -822,29 +833,29 @@ router.get('/post-children', async (req, res) => {
                                         },
                                     },
                                 },
-                            ]
-                        }
-                    }
-                ]
-            }
+                            ],
+                        },
+                    },
+                ],
+            },
         ],
         where: {
             state: 'active',
             relationship: 'parent',
             itemAType: 'post',
             itemAId: postId,
-        }
+        },
     }
 
     if (childrenIds) {
         query.where.itemBId = childrenIds.split(',')
     } else {
-        query.offset = +offset;
-        query.limit = +limit;
+        query.offset = +offset
+        query.limit = +limit
     }
 
     const links = await Link.findAll(query)
-    res.status(200).json({ children: links.map(link => link.Post) })
+    res.status(200).json({ children: links.map((link) => link.Post) })
 })
 
 router.get('/post-indirect-spaces', async (req, res) => {
@@ -1356,15 +1367,15 @@ router.get('/card-faces', async (req, res) => {
                     })
                     const linkToImage = linkToImageBlock
                         ? await Link.findOne({
-                            where: {
-                                itemAType: 'image-block',
-                                itemAId: linkToImageBlock.itemBId,
-                                itemBType: 'image',
-                                state: 'active',
-                            },
-                            attributes: [],
-                            include: { model: Image, attributes: ['url'] },
-                        })
+                              where: {
+                                  itemAType: 'image-block',
+                                  itemAId: linkToImageBlock.itemBId,
+                                  itemBType: 'image',
+                                  state: 'active',
+                              },
+                              attributes: [],
+                              include: { model: Image, attributes: ['url'] },
+                          })
                         : null
                     blocks.push({
                         ...link.Post.dataValues,
@@ -1393,71 +1404,71 @@ router.post('/create-post', authenticateToken, async (req, res) => {
         // add spaces and increment space stats
         const addSpaces = spaceIds
             ? await new Promise(async (resolve) => {
-                const addDirectSpaces = await Promise.all(
-                    spaceIds.map((spaceId) =>
-                        createSpacePost(accountId, spaceId, post.id, 'post', 'direct')
-                    )
-                )
-                // gather direct spaces ancestor ids
-                const spaces = await Space.findAll({
-                    where: { id: spaceIds, state: 'active' },
-                    attributes: ['id'],
-                    include: {
-                        model: Space,
-                        as: 'SpaceAncestors',
-                        attributes: ['id'],
-                        through: { where: { state: 'open' }, attributes: [] },
-                    },
-                })
-                let ancestorIds = []
-                spaces.forEach((space) =>
-                    ancestorIds.push(...space.SpaceAncestors.map((space) => space.id))
-                )
-                // remove duplicates and direct spaces
-                ancestorIds = [...new Set(ancestorIds)].filter((id) => !spaceIds.includes(id))
-                // store ancestor ids for response
-                allSpaceIds.push(...ancestorIds)
-                const addIndirectSpaces = await Promise.all(
-                    ancestorIds.map((spaceId) =>
-                        createSpacePost(accountId, spaceId, post.id, 'post', 'indirect')
-                    )
-                )
-                // increment space stats
-                const incrementSpaceStats = await Space.increment('totalPosts', {
-                    where: { id: allSpaceIds },
-                    silent: true,
-                })
-                Promise.all([addDirectSpaces, addIndirectSpaces, incrementSpaceStats])
-                    .then(() => resolve())
-                    .catch((error) => resolve(error))
-            })
+                  const addDirectSpaces = await Promise.all(
+                      spaceIds.map((spaceId) =>
+                          createSpacePost(accountId, spaceId, post.id, 'post', 'direct')
+                      )
+                  )
+                  // gather direct spaces ancestor ids
+                  const spaces = await Space.findAll({
+                      where: { id: spaceIds, state: 'active' },
+                      attributes: ['id'],
+                      include: {
+                          model: Space,
+                          as: 'SpaceAncestors',
+                          attributes: ['id'],
+                          through: { where: { state: 'open' }, attributes: [] },
+                      },
+                  })
+                  let ancestorIds = []
+                  spaces.forEach((space) =>
+                      ancestorIds.push(...space.SpaceAncestors.map((space) => space.id))
+                  )
+                  // remove duplicates and direct spaces
+                  ancestorIds = [...new Set(ancestorIds)].filter((id) => !spaceIds.includes(id))
+                  // store ancestor ids for response
+                  allSpaceIds.push(...ancestorIds)
+                  const addIndirectSpaces = await Promise.all(
+                      ancestorIds.map((spaceId) =>
+                          createSpacePost(accountId, spaceId, post.id, 'post', 'indirect')
+                      )
+                  )
+                  // increment space stats
+                  const incrementSpaceStats = await Space.increment('totalPosts', {
+                      where: { id: allSpaceIds },
+                      silent: true,
+                  })
+                  Promise.all([addDirectSpaces, addIndirectSpaces, incrementSpaceStats])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
+              })
             : null
 
         // todo: notify source creator
         const addLink = source
             ? await new Promise(async (resolve) => {
-                const createNewLink = await Link.create({
-                    state: 'active',
-                    creatorId: accountId,
-                    relationship: source.relationship ?? 'link',
-                    itemAType: source.type,
-                    itemBType: 'post',
-                    itemAId: source.id,
-                    itemBId: post.id,
-                    description: source.linkDescription,
-                    totalLikes: 0,
-                    totalComments: 0,
-                    totalRatings: 0,
-                })
-                const updateSourceLinks = await Post.increment('totalLinks', {
-                    where: { id: source.id },
-                    silent: true,
-                })
-                const updateTargetLinks = await post.update({ totalLinks: 1 }, { silent: true })
-                Promise.all([createNewLink, updateSourceLinks, updateTargetLinks])
-                    .then(() => resolve())
-                    .catch((error) => resolve(error))
-            })
+                  const createNewLink = await Link.create({
+                      state: 'active',
+                      creatorId: accountId,
+                      relationship: source.relationship ?? 'link',
+                      itemAType: source.type,
+                      itemBType: 'post',
+                      itemAId: source.id,
+                      itemBId: post.id,
+                      description: source.linkDescription,
+                      totalLikes: 0,
+                      totalComments: 0,
+                      totalRatings: 0,
+                  })
+                  const updateSourceLinks = await Post.increment('totalLinks', {
+                      where: { id: source.id },
+                      silent: true,
+                  })
+                  const updateTargetLinks = await post.update({ totalLinks: 1 }, { silent: true })
+                  Promise.all([createNewLink, updateSourceLinks, updateTargetLinks])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
+              })
             : null
 
         Promise.all([addSpaces, addLink])
@@ -1493,14 +1504,14 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             const createNotification = isOwnPost
                 ? null
                 : await Notification.create({
-                    ownerId: parentPost.Creator.id,
-                    type: parentPost.type === 'comment' ? 'comment-reply' : 'post-comment',
-                    seen: false,
-                    spaceAId: postData.originSpaceId,
-                    userId: accountId,
-                    postId: parent.id,
-                    commentId: post.id,
-                })
+                      ownerId: parentPost.Creator.id,
+                      type: parentPost.type === 'comment' ? 'comment-reply' : 'post-comment',
+                      seen: false,
+                      spaceAId: postData.originSpaceId,
+                      userId: accountId,
+                      postId: parent.id,
+                      commentId: post.id,
+                  })
             const muted = await accountMuted(accountId, parentPost.Creator)
             const skipEmail = isOwnPost || muted || parentPost.Creator.emailsDisabled
             const messageText =
@@ -1508,14 +1519,14 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             const sendEmail = skipEmail
                 ? null
                 : await sgMail.send({
-                    to: parentPost.Creator.email,
-                    from: { email: 'admin@weco.io', name: 'we { collective }' },
-                    subject: 'New notification',
-                    text: `
+                      to: parentPost.Creator.email,
+                      from: { email: 'admin@weco.io', name: 'we { collective }' },
+                      subject: 'New notification',
+                      text: `
                         Hi ${parentPost.Creator.name}, ${account.name} just ${messageText} ${parentPost.type} on weco:
                         http://${appURL}/p/${post.id}
                     `,
-                    html: `
+                      html: `
                         <p>
                             Hi ${parentPost.Creator.name},
                             <br/>
@@ -1525,7 +1536,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                             on weco
                         </p>
                     `,
-                })
+                  })
 
             if (parentPost.game) {
                 const io = req.app.get('socketio')
@@ -1563,44 +1574,44 @@ router.post('/create-chat-message', authenticateToken, async (req, res) => {
         // add spaces and increment space stats
         const addSpaces = spaceIds
             ? await new Promise(async (resolve) => {
-                const addDirectSpaces = await Promise.all(
-                    spaceIds.map((spaceId) =>
-                        createSpacePost(accountId, spaceId, post.id, 'post', 'direct')
-                    )
-                )
-                // gather direct spaces ancestor ids
-                const spaces = await Space.findAll({
-                    where: { id: spaceIds, state: 'active' },
-                    attributes: ['id'],
-                    include: {
-                        model: Space,
-                        as: 'SpaceAncestors',
-                        attributes: ['id'],
-                        through: { where: { state: 'open' }, attributes: [] },
-                    },
-                })
-                let ancestorIds = []
-                spaces.forEach((space) =>
-                    ancestorIds.push(...space.SpaceAncestors.map((space) => space.id))
-                )
-                // remove duplicates and direct spaces
-                ancestorIds = [...new Set(ancestorIds)].filter((id) => !spaceIds.includes(id))
-                // store ancestor ids for response
-                allSpaceIds.push(...ancestorIds)
-                const addIndirectSpaces = await Promise.all(
-                    ancestorIds.map((spaceId) =>
-                        createSpacePost(accountId, spaceId, post.id, 'post', 'indirect')
-                    )
-                )
-                // increment space stats
-                const incrementSpaceStats = await Space.increment('totalPosts', {
-                    where: { id: allSpaceIds },
-                    silent: true,
-                })
-                Promise.all([addDirectSpaces, addIndirectSpaces, incrementSpaceStats])
-                    .then(() => resolve())
-                    .catch((error) => resolve(error))
-            })
+                  const addDirectSpaces = await Promise.all(
+                      spaceIds.map((spaceId) =>
+                          createSpacePost(accountId, spaceId, post.id, 'post', 'direct')
+                      )
+                  )
+                  // gather direct spaces ancestor ids
+                  const spaces = await Space.findAll({
+                      where: { id: spaceIds, state: 'active' },
+                      attributes: ['id'],
+                      include: {
+                          model: Space,
+                          as: 'SpaceAncestors',
+                          attributes: ['id'],
+                          through: { where: { state: 'open' }, attributes: [] },
+                      },
+                  })
+                  let ancestorIds = []
+                  spaces.forEach((space) =>
+                      ancestorIds.push(...space.SpaceAncestors.map((space) => space.id))
+                  )
+                  // remove duplicates and direct spaces
+                  ancestorIds = [...new Set(ancestorIds)].filter((id) => !spaceIds.includes(id))
+                  // store ancestor ids for response
+                  allSpaceIds.push(...ancestorIds)
+                  const addIndirectSpaces = await Promise.all(
+                      ancestorIds.map((spaceId) =>
+                          createSpacePost(accountId, spaceId, post.id, 'post', 'indirect')
+                      )
+                  )
+                  // increment space stats
+                  const incrementSpaceStats = await Space.increment('totalPosts', {
+                      where: { id: allSpaceIds },
+                      silent: true,
+                  })
+                  Promise.all([addDirectSpaces, addIndirectSpaces, incrementSpaceStats])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
+              })
             : null
         // attach parent comment
         const linkComment = parent ? await attachComment(post, parent, accountId) : null
@@ -1709,7 +1720,7 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
                 ],
             })
 
-            let newDeadline = 0;
+            let newDeadline = 0
 
             if (gamePost.GlassBeadGame) {
                 await Link.create({
@@ -1725,7 +1736,6 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
                     totalComments: 0,
                     totalRatings: 0,
                 })
-
 
                 const { synchronous, multiplayer, moveTimeWindow } = gamePost.GlassBeadGame
                 if (!synchronous && multiplayer) {
@@ -1761,17 +1771,17 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
                                         const emailPlayer = p.emailsDisabled
                                             ? null
                                             : await sgMail.send({
-                                                to: p.email,
-                                                from: {
-                                                    email: 'admin@weco.io',
-                                                    name: 'we { collective }',
-                                                },
-                                                subject: 'New notification',
-                                                text: `
+                                                  to: p.email,
+                                                  from: {
+                                                      email: 'admin@weco.io',
+                                                      name: 'we { collective }',
+                                                  },
+                                                  subject: 'New notification',
+                                                  text: `
                                                     Hi ${p.name}, ${creator.name} just added a new bead.
                                                     https://${appURL}/p/${parent.id}
                                                 `,
-                                                html: `
+                                                  html: `
                                                     <p>
                                                         Hi ${p.name},
                                                         <br/>
@@ -1780,7 +1790,7 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
                                                         <a href='${appURL}/p/${parent.id}'>bead</a>.
                                                     </p>
                                                 `,
-                                            })
+                                              })
                                         Promise.all([notifyPlayer, emailPlayer])
                                             .then(() => resolve2())
                                             .catch((error) => resolve2(error))
@@ -1833,7 +1843,7 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
 // test
 router.post('/update-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const id = req.body.id;
+    const id = req.body.id
     const post = await Post.findOne({
         where: { id, creatorId: accountId },
         attributes: ['id', 'type', 'mediaTypes'],
@@ -1845,23 +1855,20 @@ router.post('/update-post', authenticateToken, async (req, res) => {
     })
     if (!post) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const toUpdate = {};
+        const toUpdate = {}
         for (const key of ['mediaTypes', 'title', 'text', 'searchableText', 'game', 'move']) {
             if (key in req.body) {
                 toUpdate[key] = req.body[key]
             }
         }
         const promises = []
-        const updatePost = await Post.update(
-            toUpdate,
-            { where: { id, creatorId: accountId } }
-        )
+        const updatePost = await Post.update(toUpdate, { where: { id, creatorId: accountId } })
         promises.push(updatePost)
         if ('game' in req.body) {
             await addRemixes(accountId, req.body.game, id)
         }
         if ('urls' in req.body) {
-            const newUrls = req.body.urls;
+            const newUrls = req.body.urls
             // update urls
             const oldUrlBlockLinks = await Link.findAll({
                 where: {
@@ -2002,17 +2009,17 @@ router.post('/update-post', authenticateToken, async (req, res) => {
                                 const sendEmail = user.emailsDisabled
                                     ? null
                                     : await sgMail.send({
-                                        to: user.email,
-                                        from: {
-                                            email: 'admin@weco.io',
-                                            name: 'we { collective }',
-                                        },
-                                        subject: 'New notification',
-                                        text: `
+                                          to: user.email,
+                                          from: {
+                                              email: 'admin@weco.io',
+                                              name: 'we { collective }',
+                                          },
+                                          subject: 'New notification',
+                                          text: `
                                         Hi ${user.name}, ${post.Creator.name} just mentioned you in a ${post.type} on weco:
                                         http://${appURL}/p/${id}
                                     `,
-                                        html: `
+                                          html: `
                                         <p>
                                             Hi ${user.name},
                                             <br/>
@@ -2022,7 +2029,7 @@ router.post('/update-post', authenticateToken, async (req, res) => {
                                             on weco
                                         </p>
                                     `,
-                                    })
+                                      })
                                 Promise.all([sendNotification, sendEmail])
                                     .then(() => resolve())
                                     .catch((error) => resolve(error))
@@ -2073,28 +2080,28 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
         const sendNotification = skipNotification
             ? null
             : await Notification.create({
-                ownerId: post.Creator.id,
-                type: 'post-repost',
-                seen: false,
-                spaceAId: spaceId,
-                userId: accountId,
-                postId,
-            })
+                  ownerId: post.Creator.id,
+                  type: 'post-repost',
+                  seen: false,
+                  spaceAId: spaceId,
+                  userId: accountId,
+                  postId,
+              })
 
         const sendEmail = skipEmail
             ? null
             : await sgMail.send({
-                to: post.Creator.email,
-                from: {
-                    email: 'admin@weco.io',
-                    name: 'we { collective }',
-                },
-                subject: 'New notification',
-                text: `
+                  to: post.Creator.email,
+                  from: {
+                      email: 'admin@weco.io',
+                      name: 'we { collective }',
+                  },
+                  subject: 'New notification',
+                  text: `
                         Hi ${post.Creator.name}, ${accountName} just reposted your post on weco:
                         http://${appURL}/p/${postId}
                     `,
-                html: `
+                  html: `
                         <p>
                             Hi ${post.Creator.name},
                             <br/>
@@ -2104,7 +2111,7 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                             on weco
                         </p>
                     `,
-            })
+              })
 
         const createReactions = await Promise.all(
             spaceIds.map((id) =>
@@ -2150,14 +2157,14 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                         })
                         const updateSpaceUserStat = spaceUserStat
                             ? await spaceUserStat.increment('totalPostLikes', {
-                                by: post.totalLikes,
-                            })
+                                  by: post.totalLikes,
+                              })
                             : await SpaceUserStat.create({
-                                spaceId: id,
-                                userId: post.Creator.id,
-                                totalPostLikes: post.totalLikes,
-                                totalUnseenMessages: 0,
-                            })
+                                  spaceId: id,
+                                  userId: post.Creator.id,
+                                  totalPostLikes: post.totalLikes,
+                                  totalUnseenMessages: 0,
+                              })
                         Promise.all([
                             createSpacePost,
                             incrementTotalPostLikes,
@@ -2227,14 +2234,14 @@ router.post('/repost-post', authenticateToken, async (req, res) => {
                                 })
                                 const updateSpaceUserStat = spaceUserStat
                                     ? await spaceUserStat.increment('totalPostLikes', {
-                                        by: post.totalLikes,
-                                    })
+                                          by: post.totalLikes,
+                                      })
                                     : await SpaceUserStat.create({
-                                        spaceId: id,
-                                        userId: post.Creator.id,
-                                        totalPostLikes: post.totalLikes,
-                                        totalUnseenMessages: 0,
-                                    })
+                                          spaceId: id,
+                                          userId: post.Creator.id,
+                                          totalPostLikes: post.totalLikes,
+                                          totalUnseenMessages: 0,
+                                      })
                                 Promise.all([
                                     createSpacePost,
                                     updateSpaceStats,
@@ -2298,30 +2305,30 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         const updateSpaceStats =
             type !== 'link'
                 ? Promise.all(
-                    item.AllPostSpaces.map(
-                        (space) =>
-                            new Promise(async (resolve) => {
-                                const updateSpaceStat = await space.increment('totalPostLikes', {
-                                    silent: true,
-                                })
-                                const spaceUserStat = await SpaceUserStat.findOne({
-                                    where: { spaceId: space.id, userId: item.Creator.id },
-                                    attributes: ['id'],
-                                })
-                                const updateSpaceUserStat = spaceUserStat
-                                    ? await spaceUserStat.increment('totalPostLikes')
-                                    : await SpaceUserStat.create({
-                                        spaceId: space.id,
-                                        userId: item.Creator.id,
-                                        totalPostLikes: 1,
-                                        totalUnseenMessages: 0,
-                                    })
-                                Promise.all([updateSpaceStat, updateSpaceUserStat])
-                                    .then(() => resolve())
-                                    .catch((error) => resolve(error))
-                            })
-                    )
-                )
+                      item.AllPostSpaces.map(
+                          (space) =>
+                              new Promise(async (resolve) => {
+                                  const updateSpaceStat = await space.increment('totalPostLikes', {
+                                      silent: true,
+                                  })
+                                  const spaceUserStat = await SpaceUserStat.findOne({
+                                      where: { spaceId: space.id, userId: item.Creator.id },
+                                      attributes: ['id'],
+                                  })
+                                  const updateSpaceUserStat = spaceUserStat
+                                      ? await spaceUserStat.increment('totalPostLikes')
+                                      : await SpaceUserStat.create({
+                                            spaceId: space.id,
+                                            userId: item.Creator.id,
+                                            totalPostLikes: 1,
+                                            totalUnseenMessages: 0,
+                                        })
+                                  Promise.all([updateSpaceStat, updateSpaceUserStat])
+                                      .then(() => resolve())
+                                      .catch((error) => resolve(error))
+                              })
+                      )
+                  )
                 : null
 
         const createReaction = await Reaction.create({
@@ -2353,14 +2360,14 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         const createNotification = skipNotification
             ? null
             : await Notification.create({
-                ownerId: item.Creator.id,
-                type: `${type}-like`,
-                seen: false,
-                userId: accountId,
-                spaceAId,
-                postId,
-                commentId,
-            })
+                  ownerId: item.Creator.id,
+                  type: `${type}-like`,
+                  seen: false,
+                  userId: accountId,
+                  spaceAId,
+                  postId,
+                  commentId,
+              })
 
         const { handle, name, flagImagePath } = await User.findOne({
             where: { id: accountId },
@@ -2382,14 +2389,14 @@ router.post('/add-like', authenticateToken, async (req, res) => {
         const sendEmail = skipEmail
             ? null
             : await sgMail.send({
-                to: item.Creator.email,
-                from: { email: 'admin@weco.io', name: 'we { collective }' },
-                subject: 'New notification',
-                text: `
+                  to: item.Creator.email,
+                  from: { email: 'admin@weco.io', name: 'we { collective }' },
+                  subject: 'New notification',
+                  text: `
                         Hi ${item.Creator.name}, ${name} just liked your ${type} on weco:
                         http://${itemUrl}
                     `,
-                html: `
+                  html: `
                         <p>
                             Hi ${item.Creator.name},
                             <br/>
@@ -2399,7 +2406,7 @@ router.post('/add-like', authenticateToken, async (req, res) => {
                             on weco
                         </p>
                     `,
-            })
+              })
 
         Promise.all([
             updateTotalLikes,
@@ -2438,22 +2445,22 @@ router.post('/remove-like', authenticateToken, async (req, res) => {
         const updateSpaceStats =
             type === 'post'
                 ? Promise.all(
-                    item.AllPostSpaces.map(
-                        (space) =>
-                            new Promise(async (resolve) => {
-                                const updateSpaceStat = await space.decrement('totalPostLikes', {
-                                    silent: true,
-                                })
-                                const updateSpaceUserStat = await SpaceUserStat.decrement(
-                                    'totalPostLikes',
-                                    { where: { spaceId: space.id, userId: item.Creator.id } }
-                                )
-                                Promise.all([updateSpaceStat, updateSpaceUserStat])
-                                    .then(() => resolve())
-                                    .catch((error) => resolve(error))
-                            })
-                    )
-                )
+                      item.AllPostSpaces.map(
+                          (space) =>
+                              new Promise(async (resolve) => {
+                                  const updateSpaceStat = await space.decrement('totalPostLikes', {
+                                      silent: true,
+                                  })
+                                  const updateSpaceUserStat = await SpaceUserStat.decrement(
+                                      'totalPostLikes',
+                                      { where: { spaceId: space.id, userId: item.Creator.id } }
+                                  )
+                                  Promise.all([updateSpaceStat, updateSpaceUserStat])
+                                      .then(() => resolve())
+                                      .catch((error) => resolve(error))
+                              })
+                      )
+                  )
                 : null
 
         const removeReaction = await Reaction.update(
@@ -2517,27 +2524,27 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
         const sendNotification = skipNotification
             ? null
             : await Notification.create({
-                ownerId: item.Creator.id,
-                type: `${type}-rating`,
-                seen: false,
-                spaceAId: spaceId,
-                userId: accountId,
-                postId,
-                commentId,
-            })
+                  ownerId: item.Creator.id,
+                  type: `${type}-rating`,
+                  seen: false,
+                  spaceAId: spaceId,
+                  userId: accountId,
+                  postId,
+                  commentId,
+              })
 
         const itemUrl = `${appURL}/p/${id}`
         const sendEmail = skipEmail
             ? null
             : await sgMail.send({
-                to: item.Creator.email,
-                from: { email: 'admin@weco.io', name: 'we { collective }' },
-                subject: 'New notification',
-                text: `
+                  to: item.Creator.email,
+                  from: { email: 'admin@weco.io', name: 'we { collective }' },
+                  subject: 'New notification',
+                  text: `
                         Hi ${item.Creator.name}, ${accountName} just rated your ${type} on weco:
                         http://${itemUrl}
                     `,
-                html: `
+                  html: `
                         <p>
                             Hi ${item.Creator.name},
                             <br/>
@@ -2547,7 +2554,7 @@ router.post('/add-rating', authenticateToken, async (req, res) => {
                             on weco
                         </p>
                     `,
-            })
+              })
 
         Promise.all([updateTotalRatings, createReaction, sendNotification, sendEmail])
             .then(() => res.status(200).json({ message: 'Success' }))
@@ -2705,29 +2712,33 @@ router.post('/add-link', authenticateToken, async (req, res) => {
                             const sendEmail = skipEmail
                                 ? null
                                 : await sgMail.send({
-                                    to: email,
-                                    from: { email: 'admin@weco.io', name: 'we { collective }' },
-                                    subject: 'New notification',
-                                    text: `
-                                    Hi ${name}, ${accountName} just linked ${type === 'user' ? 'you' : `your ${type}`
-                                        } to another ${location === 'source' ? sourceType : targetType
-                                        } on weco:
+                                      to: email,
+                                      from: { email: 'admin@weco.io', name: 'we { collective }' },
+                                      subject: 'New notification',
+                                      text: `
+                                    Hi ${name}, ${accountName} just linked ${
+                                          type === 'user' ? 'you' : `your ${type}`
+                                      } to another ${
+                                          location === 'source' ? sourceType : targetType
+                                      } on weco:
                                         http://${url}
                                 `,
-                                    html: `
+                                      html: `
                                     <p>
                                         Hi ${name},
                                         <br/>
                                         <a href='${appURL}/u/${accountHandle}'>${accountName}</a>
-                                        just linked ${type === 'user'
-                                            ? `<a href='${url}'>you</a>`
-                                            : `your <a href='${url}'>${type}</a>`
+                                        just linked ${
+                                            type === 'user'
+                                                ? `<a href='${url}'>you</a>`
+                                                : `your <a href='${url}'>${type}</a>`
                                         }
-                                        to another ${location === 'source' ? sourceType : targetType
+                                        to another ${
+                                            location === 'source' ? sourceType : targetType
                                         } on weco
                                     </p>
                                 `,
-                                })
+                                  })
                             Promise.all([createNotification, sendEmail])
                                 .then(() => resolve())
                                 .catch((error) => resolve(error))
@@ -2801,34 +2812,34 @@ router.post('/respond-to-event', authenticateToken, async (req, res) => {
         const updateStatus = previousResponse
             ? UserEvent.update({ state: 'removed' }, { where: { id: previousResponse.id } })
             : new Promise(async (resolve) => {
-                const removeOtherResponseTypes = await UserEvent.update(
-                    { state: 'removed' },
-                    { where: { userId: accountId, eventId, state: 'active' } }
-                )
+                  const removeOtherResponseTypes = await UserEvent.update(
+                      { state: 'removed' },
+                      { where: { userId: accountId, eventId, state: 'active' } }
+                  )
 
-                const newResponse = await UserEvent.create({
-                    userId: accountId,
-                    eventId,
-                    relationship: response,
-                    state: 'active',
-                })
+                  const newResponse = await UserEvent.create({
+                      userId: accountId,
+                      eventId,
+                      relationship: response,
+                      state: 'active',
+                  })
 
-                const scheduleReminder = await scheduleEventNotification({
-                    type: response,
-                    postId,
-                    eventId,
-                    userEventId: newResponse.id,
-                    startTime,
-                    userId: accountId,
-                    userName: user.name,
-                    userEmail: user.email,
-                    emailsDisabled: user.emailsDisabled,
-                })
+                  const scheduleReminder = await scheduleEventNotification({
+                      type: response,
+                      postId,
+                      eventId,
+                      userEventId: newResponse.id,
+                      startTime,
+                      userId: accountId,
+                      userName: user.name,
+                      userEmail: user.email,
+                      emailsDisabled: user.emailsDisabled,
+                  })
 
-                Promise.all([removeOtherResponseTypes, scheduleReminder])
-                    .then(() => resolve())
-                    .catch((error) => resolve(error))
-            })
+                  Promise.all([removeOtherResponseTypes, scheduleReminder])
+                      .then(() => resolve())
+                      .catch((error) => resolve(error))
+              })
 
         updateStatus
             .then(() => res.status(200).json({ message: 'Success' }))
@@ -2881,89 +2892,89 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
         const { type, action, threshold } = post.Poll
         const executeAction = action
             ? Promise.all(
-                voteData.map(
-                    (answer) =>
-                        new Promise(async (resolve1) => {
-                            // find poll answer
-                            const pollAnswer = await Post.findOne({
-                                where: { id: answer.id },
-                                attributes: ['id', 'text'],
-                                include: {
-                                    model: Reaction,
-                                    where: { type: 'vote', state: 'active' },
-                                    required: false,
-                                    attributes: ['value'],
-                                },
-                            })
-                            const answerLink = await Link.findOne({
-                                where: {
-                                    itemAId: postId,
-                                    itemAType: 'post',
-                                    itemBId: answer.id,
-                                    itemBType: 'poll-answer',
-                                },
-                                attributes: ['id', 'state'],
-                            })
-                            const { text, Reactions } = pollAnswer
-                            let totalVotes
-                            if (type === 'weighted-choice')
-                                totalVotes =
-                                    Reactions.map((r) => +r.value).reduce((a, b) => a + b, 0) /
-                                    100
-                            else totalVotes = Reactions.length
-                            const createSpace =
-                                action === 'Create spaces' &&
-                                    answerLink.state !== 'done' &&
-                                    totalVotes >= threshold
-                                    ? new Promise(async (resolve2) => {
-                                        const markAnswerDone = await answerLink.update({
-                                            state: 'done',
+                  voteData.map(
+                      (answer) =>
+                          new Promise(async (resolve1) => {
+                              // find poll answer
+                              const pollAnswer = await Post.findOne({
+                                  where: { id: answer.id },
+                                  attributes: ['id', 'text'],
+                                  include: {
+                                      model: Reaction,
+                                      where: { type: 'vote', state: 'active' },
+                                      required: false,
+                                      attributes: ['value'],
+                                  },
+                              })
+                              const answerLink = await Link.findOne({
+                                  where: {
+                                      itemAId: postId,
+                                      itemAType: 'post',
+                                      itemBId: answer.id,
+                                      itemBType: 'poll-answer',
+                                  },
+                                  attributes: ['id', 'state'],
+                              })
+                              const { text, Reactions } = pollAnswer
+                              let totalVotes
+                              if (type === 'weighted-choice')
+                                  totalVotes =
+                                      Reactions.map((r) => +r.value).reduce((a, b) => a + b, 0) /
+                                      100
+                              else totalVotes = Reactions.length
+                              const createSpace =
+                                  action === 'Create spaces' &&
+                                  answerLink.state !== 'done' &&
+                                  totalVotes >= threshold
+                                      ? new Promise(async (resolve2) => {
+                                            const markAnswerDone = await answerLink.update({
+                                                state: 'done',
+                                            })
+                                            const newSpace = await Space.create({
+                                                creatorId: post.Creator.id,
+                                                handle: uuidv4().substring(0, 15),
+                                                name: text,
+                                                description: null,
+                                                state: 'active',
+                                                privacy: 'public',
+                                                totalPostLikes: 0,
+                                                totalPosts: 0,
+                                                totalComments: 0,
+                                                totalFollowers: 1,
+                                            })
+                                            const createModRelationship = SpaceUser.create({
+                                                relationship: 'moderator',
+                                                state: 'active',
+                                                spaceId: newSpace.id,
+                                                userId: post.Creator.id,
+                                            })
+                                            const createFollowerRelationship = SpaceUser.create({
+                                                relationship: 'follower',
+                                                state: 'active',
+                                                spaceId: newSpace.id,
+                                                userId: post.Creator.id,
+                                            })
+                                            const attachToParent = await attachParentSpace(
+                                                newSpace.id,
+                                                post.Poll.spaceId
+                                            )
+                                            Promise.all([
+                                                markAnswerDone,
+                                                createModRelationship,
+                                                createFollowerRelationship,
+                                                attachToParent,
+                                            ])
+                                                .then(() => resolve2())
+                                                .catch((error) => resolve2(error))
                                         })
-                                        const newSpace = await Space.create({
-                                            creatorId: post.Creator.id,
-                                            handle: uuidv4().substring(0, 15),
-                                            name: text,
-                                            description: null,
-                                            state: 'active',
-                                            privacy: 'public',
-                                            totalPostLikes: 0,
-                                            totalPosts: 0,
-                                            totalComments: 0,
-                                            totalFollowers: 1,
-                                        })
-                                        const createModRelationship = SpaceUser.create({
-                                            relationship: 'moderator',
-                                            state: 'active',
-                                            spaceId: newSpace.id,
-                                            userId: post.Creator.id,
-                                        })
-                                        const createFollowerRelationship = SpaceUser.create({
-                                            relationship: 'follower',
-                                            state: 'active',
-                                            spaceId: newSpace.id,
-                                            userId: post.Creator.id,
-                                        })
-                                        const attachToParent = await attachParentSpace(
-                                            newSpace.id,
-                                            post.Poll.spaceId
-                                        )
-                                        Promise.all([
-                                            markAnswerDone,
-                                            createModRelationship,
-                                            createFollowerRelationship,
-                                            attachToParent,
-                                        ])
-                                            .then(() => resolve2())
-                                            .catch((error) => resolve2(error))
-                                    })
-                                    : null
+                                      : null
 
-                            Promise.all([createSpace])
-                                .then(() => resolve1())
-                                .catch((error) => resolve1(error))
-                        })
-                )
-            )
+                              Promise.all([createSpace])
+                                  .then(() => resolve1())
+                                  .catch((error) => resolve1(error))
+                          })
+                  )
+              )
             : null
 
         const skipNotification = post.Creator.id === accountId
@@ -2972,27 +2983,27 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
         const createNotification = skipNotification
             ? null
             : await Notification.create({
-                ownerId: post.Creator.id,
-                type: 'poll-vote',
-                seen: false,
-                userId: accountId,
-                postId,
-            })
+                  ownerId: post.Creator.id,
+                  type: 'poll-vote',
+                  seen: false,
+                  userId: accountId,
+                  postId,
+              })
 
         const sendEmail = skipEmail
             ? null
             : await sgMail.send({
-                to: post.Creator.email,
-                from: {
-                    email: 'admin@weco.io',
-                    name: 'we { collective }',
-                },
-                subject: 'New notification',
-                text: `
+                  to: post.Creator.email,
+                  from: {
+                      email: 'admin@weco.io',
+                      name: 'we { collective }',
+                  },
+                  subject: 'New notification',
+                  text: `
                         Hi ${post.Creator.name}, ${userName} just voted on your Poll:
                         http://${appURL}/p/${postId}
                     `,
-                html: `
+                  html: `
                         <p>
                             Hi ${post.Creator.name},
                             <br/>
@@ -3001,7 +3012,7 @@ router.post('/vote-on-poll', authenticateToken, async (req, res) => {
                             <a href='${appURL}/p/${postId}'>Poll</a>
                         </p>
                     `,
-            })
+              })
 
         const updateLastPostActivity = await Post.update(
             { lastActivity: new Date() },
@@ -3174,23 +3185,23 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
         )
 
         await Link.update(
-            { state: 'deleted', },
+            { state: 'deleted' },
             {
                 where: {
                     state: 'active',
                     [Op.or]: [
                         {
                             itemAType: 'post',
-                            itemAId: postId
+                            itemAId: postId,
                         },
                         {
                             itemBType: 'post',
-                            itemBId: postId
-                        }
-                    ]
-                }
+                            itemBId: postId,
+                        },
+                    ],
+                },
             }
-        );
+        )
 
         const updateSpaceStats = await Promise.all(
             post.AllPostSpaces.map(
@@ -3210,8 +3221,8 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
                         })
                         const updateSpaceUserStat = spaceUserStat
                             ? await spaceUserStat.update({
-                                totalPostLikes: spaceUserStat.totalPostLikes - post.totalLikes,
-                            })
+                                  totalPostLikes: spaceUserStat.totalPostLikes - post.totalLikes,
+                              })
                             : null
                         Promise.all([updateSpace, updateSpaceUserStat])
                             .then(() => resolve())
@@ -3242,21 +3253,21 @@ router.post('/delete-comment', authenticateToken, async (req, res) => {
             { where: { id: postId, creatorId: accountId } }
         )
         await Link.update(
-            { state: 'deleted', },
+            { state: 'deleted' },
             {
                 where: {
                     state: 'active',
                     [Op.or]: [
                         {
-                            itemAId: postId
+                            itemAId: postId,
                         },
                         {
-                            itemBId: postId
-                        }
-                    ]
-                }
+                            itemBId: postId,
+                        },
+                    ],
+                },
             }
-        );
+        )
         // get links & root post for tally updates
         const rootLink = await Link.findOne({
             where: { itemBId: postId, itemBType: 'comment', relationship: 'root' },
