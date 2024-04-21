@@ -7,7 +7,7 @@
         "deps": "docker-compose up --build mysql",
         "migrate": "sequelize db:migrate",
         "seed": "sequelize db:seed:all",
-        "dev": "concurrently -n node,ts 'nodemon Server.js' 'tsc --watch'",
+        "dev": "concurrently -n node,ts \"nodemon Server.js\" \"tsc --watch\"",
         "start": "node Server.js"
     },
     "keywords": [],

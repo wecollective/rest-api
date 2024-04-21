@@ -30,3 +30,7 @@ sudo du -x -h / | sort -h | tail -40
 # flush pm2 logs
 
 pm2 flush
+
+# deployment notes
+
+Change dev script "concurrently -n node,ts \"nodemon Server.js\" \"tsc --watch\"" to "concurrently -n node,ts 'nodemon Server.js' 'tsc --watch'" to work on linux server
