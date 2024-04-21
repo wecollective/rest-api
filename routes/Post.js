@@ -885,6 +885,7 @@ router.get('/plot-graph-data', (req, res) => {
 })
 
 router.get('/scrape-url', authenticateToken, async (req, res) => {
+    // error sometimes happening when server memory is full. Deleting core.* files solved issue 19/03/2024
     const accountId = req.user ? req.user.id : null
     const { url } = req.query
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
@@ -903,7 +904,9 @@ router.get('/scrape-url', authenticateToken, async (req, res) => {
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15',
             ]
             await page.setUserAgent(userAgents[Math.floor(Math.random() * userAgents.length)])
-            await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 }) // waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2'
+            // const waitUntil = url.includes('weco.io') ? 'networkidle2' : 'domcontentloaded'
+            // await page.goto(url, { waitUntil, timeout: 20000 }) // waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2'
+            await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 })
             await page.waitForSelector('title')
             const urlData = await page.evaluate(async () => {
                 let data = {
