@@ -62,6 +62,9 @@ module.exports = {
             game: {
                 type: Sequelize.JSON,
             },
+            move: {
+                type: Sequelize.JSON,
+            },
             lastActivity: {
                 type: Sequelize.DATE,
             },
