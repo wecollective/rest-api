@@ -42,8 +42,8 @@ const sgMail = require('@sendgrid/mail')
 const { uniq } = require('lodash')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
-const imageMBLimit = 10
-const audioMBLimit = 30
+const imageMBLimit = 20
+const audioMBLimit = 100
 const defaultPostValues = {
     state: 'active',
     watermark: false,
