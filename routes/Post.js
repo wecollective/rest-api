@@ -3,6 +3,7 @@ const { appURL } = require('../Config')
 const express = require('express')
 const router = express.Router()
 const sgMail = require('@sendgrid/mail')
+const axios = require('axios')
 const { scheduleEventNotification } = require('../ScheduledTasks')
 const { v4: uuidv4 } = require('uuid')
 const puppeteer = require('puppeteer')
@@ -891,65 +892,98 @@ router.get('/scrape-url', authenticateToken, async (req, res) => {
     if (!accountId) res.status(401).json({ message: 'Unauthorized' })
     // else if (!isValidUrl(url)) return res.status(400).json({ message: 'Invalid URL' })
     else {
-        const browser = await puppeteer.launch({ headless: 'new' })
-        try {
-            const page = await browser.newPage()
-            const userAgents = [
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15',
-            ]
-            await page.setUserAgent(userAgents[Math.floor(Math.random() * userAgents.length)])
-            // const waitUntil = url.includes('weco.io') ? 'networkidle2' : 'domcontentloaded'
-            // await page.goto(url, { waitUntil, timeout: 20000 }) // waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2'
-            await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 })
-            await page.waitForSelector('title')
-            const urlData = await page.evaluate(async () => {
-                let data = {
-                    title: document.title || null,
-                    description: null,
-                    domain: null,
-                    favicon: null,
-                    image: null,
-                }
-                // description
-                const ogDescription = await document.querySelector(
-                    'meta[property="og:description"]'
+        // if it's a YouTube URL and a video id can be extracted use the YouTube API to fetch metadata
+        const youtubeDomains = ['youtube.com', 'www.youtube.com', 'youtu.be']
+        const { hostname, pathname, searchParams } = new URL(url)
+        let videoId = ''
+        if (youtubeDomains.includes(hostname)) {
+            // attempt to extract video id
+            const vParam = searchParams.get('v')
+            if (vParam) videoId = vParam
+            else if (hostname === 'youtu.be') videoId = pathname.slice(1)
+            else if (pathname.startsWith('/embed/')) videoId = pathname.split('/embed/')[1]
+        }
+        if (videoId) {
+            try {
+                const { data } = await axios.get(
+                    `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${process.env.YOUTUBE_API_KEY}`
                 )
-                if (ogDescription) data.description = ogDescription.content
-                else {
-                    const nameDescription = await document.querySelector('meta[name="description"]')
-                    if (nameDescription) data.description = nameDescription.content
-                }
-                // domain
-                const ogSiteName = await document.querySelector('meta[property="og:site_name"]')
-                if (ogSiteName) data.domain = ogSiteName.content
-                // favicon
-                const favicon = await document.querySelector('link[rel="icon"]')
-                if (favicon) data.favicon = favicon.href
-                // image
-                const metaImage = await document.querySelector('meta[property="og:image"]')
-                if (metaImage) data.image = metaImage.content
-                else {
-                    const firstImage = await document.querySelector('body div img')
-                    if (firstImage) data.image = firstImage.src
-                }
-                return data
-            })
-            // manually create domain if not present
-            if (!urlData.domain) urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
-            // create full url for image if incomplete
-            if (urlData.image && urlData.image[0] === '/')
-                urlData.image = `https://${new URL(url).hostname}${urlData.image}`
-            res.status(200).json(urlData)
-        } catch (error) {
-            res.status(200).json({ data: null, error })
-        } finally {
-            await browser.close()
+                const { title, description, thumbnails } = data.items[0].snippet
+                res.status(200).json({
+                    title,
+                    description,
+                    image: thumbnails.high.url,
+                    domain: 'YouTube',
+                    favicon: 'https://www.youtube.com/s/desktop/780e45f1/img/favicon_32x32.png',
+                })
+            } catch (error) {
+                res.status(200).json({ data: null, error })
+            }
+        } else {
+            // use Puppeteer to scrape other URLs
+            const browser = await puppeteer.launch({ headless: false })
+            try {
+                const page = await browser.newPage()
+                const userAgents = [
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15',
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15',
+                ]
+                await page.setUserAgent(userAgents[Math.floor(Math.random() * userAgents.length)])
+                // const waitUntil = url.includes('weco.io') ? 'networkidle2' : 'domcontentloaded'
+                // waitUntil: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2'
+                await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 })
+                await page.waitForSelector('title')
+                const urlData = await page.evaluate(async () => {
+                    let data = {
+                        title: document.title || null,
+                        description: null,
+                        domain: null,
+                        favicon: null,
+                        image: null,
+                    }
+                    // description
+                    const ogDescription = await document.querySelector(
+                        'meta[property="og:description"]'
+                    )
+                    if (ogDescription) data.description = ogDescription.content
+                    else {
+                        const nameDescription = await document.querySelector(
+                            'meta[name="description"]'
+                        )
+                        if (nameDescription) data.description = nameDescription.content
+                    }
+                    // domain
+                    const ogSiteName = await document.querySelector('meta[property="og:site_name"]')
+                    if (ogSiteName) data.domain = ogSiteName.content
+                    // favicon
+                    const favicon = await document.querySelector('link[rel="icon"]')
+                    if (favicon) data.favicon = favicon.href
+                    // image
+                    const metaImage = await document.querySelector('meta[property="og:image"]')
+                    if (metaImage) data.image = metaImage.content
+                    else {
+                        const firstImage = await document.querySelector('body div img')
+                        if (firstImage) data.image = firstImage.src
+                    }
+                    return data
+                })
+                // manually create domain if not present
+                if (!urlData.domain)
+                    urlData.domain = url.split('://')[1].split('/')[0].toUpperCase()
+                // create full url for image if incomplete
+                if (urlData.image && urlData.image[0] === '/')
+                    urlData.image = `https://${new URL(url).hostname}${urlData.image}`
+                res.status(200).json(urlData)
+            } catch (error) {
+                res.status(200).json({ data: null, error })
+            } finally {
+                await browser.close()
+            }
         }
     }
 })
