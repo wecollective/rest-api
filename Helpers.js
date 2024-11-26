@@ -39,10 +39,11 @@ var ffmpeg = require('fluent-ffmpeg')
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
 ffmpeg.setFfmpegPath(ffmpegPath)
 const sgMail = require('@sendgrid/mail')
+const { uniq } = require('lodash')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
-const imageMBLimit = 10
-const audioMBLimit = 30
+const imageMBLimit = 20
+const audioMBLimit = 100
 const defaultPostValues = {
     state: 'active',
     watermark: false,
@@ -965,6 +966,8 @@ const fullPostAttributes = [
     'totalReposts',
     'totalRatings',
     'totalLinks',
+    'game',
+    'move',
 ]
 
 // todo: replace all use cases with const fullPostAttributes above
@@ -984,6 +987,8 @@ function findFullPostAttributes(model, accountId) {
         'totalReposts',
         'totalRatings',
         'totalLinks',
+        'game',
+        'move',
         // accountLike('post', model, accountId),
         // accountComment('post', model, accountId),
         // accountLink('post', model, accountId),
@@ -1140,6 +1145,28 @@ function findPostInclude(accountId) {
                         attributes: ['url'],
                     },
                 },
+            },
+        },
+        {
+            model: Link,
+            as: 'Originals',
+            required: false,
+            where: { relationship: 'remix', state: 'active' },
+            include: {
+                model: Post,
+                as: 'Parent',
+                attributes: ['id', 'title', 'game', 'state'],
+            },
+        },
+        {
+            model: Link,
+            as: 'Remixes',
+            separate: true,
+            where: { relationship: 'remix', state: 'active' },
+            order: [['index', 'ASC']],
+            include: {
+                model: Post,
+                attributes: ['id', 'title', 'game', 'state'],
             },
         },
         {
@@ -1683,6 +1710,50 @@ function addGBGPlayers(postId, creator, settings) {
     })
 }
 
+async function addRemixes(accountId, game, postId) {
+    let originals = []
+    function findOriginals(steps) {
+        for (const step of steps) {
+            if (step.originalStep) {
+                originals.push(step.originalStep.gameId)
+            }
+            if (step.type === 'sequence') {
+                findOriginals(step.steps)
+            }
+        }
+    }
+    findOriginals(game.steps)
+    originals = uniq(originals)
+    const links = await Link.findAll({
+        attributes: ['itemAId'],
+        where: {
+            state: 'active',
+            itemAType: 'post',
+            itemBType: 'post',
+            itemAId: originals,
+            itemBId: postId,
+            relationship: 'remix',
+        },
+    })
+    for (const originalId of originals) {
+        if (links?.some((link) => link.itemAId === originalId)) {
+            continue
+        }
+        await Link.create({
+            creatorId: accountId,
+            state: 'active',
+            itemAType: 'post',
+            itemBType: 'post',
+            itemAId: originalId,
+            itemBId: postId,
+            relationship: 'remix',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+    }
+}
+
 // todo:
 // + check notifyMentions is adding the correct notification type
 function createPost(data, files, accountId) {
@@ -1700,6 +1771,8 @@ function createPost(data, files, accountId) {
             event,
             poll,
             glassBeadGame,
+            game,
+            move,
             card,
             color,
             watermark,
@@ -1721,10 +1794,16 @@ function createPost(data, files, accountId) {
             color: color || null,
             watermark: !!watermark,
             lastActivity: new Date(),
+            game,
+            move,
         })
 
+        if (game) {
+            await addRemixes(accountId, game, post.id)
+        }
+
         // todo: add the correct notification type
-        const notifyMentions = mentions.length
+        const notifyMentions = mentions?.length
             ? await new Promise(async (resolve) => {
                   const users = await User.findAll({
                       where: { id: mentions, state: 'active' },
@@ -1946,6 +2025,20 @@ function attachComment(comment, parent, accountId) {
             totalComments: 0,
             totalRatings: 0,
         })
+        if (parent.relationship !== 'parent') {
+            await Link.create({
+                creatorId: accountId,
+                itemAId: parent.id,
+                itemAType: parent.type,
+                itemBId: comment.id,
+                itemBType: comment.type,
+                relationship: parent.relationship,
+                state: 'active',
+                totalLikes: 0,
+                totalComments: 0,
+                totalRatings: 0,
+            })
+        }
         const addRootLink = await Link.create({
             creatorId: accountId,
             itemAId: rootPost.id,
@@ -2217,6 +2310,7 @@ module.exports = {
     accountLink,
     uploadFiles,
     createPost,
+    addRemixes,
     attachComment,
     scheduleNextBeadDeadline,
     pushNotification,

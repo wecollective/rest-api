@@ -59,6 +59,12 @@ module.exports = {
             totalGlassBeadGames: {
                 type: Sequelize.INTEGER,
             },
+            game: {
+                type: Sequelize.JSON,
+            },
+            move: {
+                type: Sequelize.JSON,
+            },
             lastActivity: {
                 type: Sequelize.DATE,
             },

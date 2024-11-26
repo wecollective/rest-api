@@ -35,6 +35,7 @@ const {
     pushNotification,
     fullPostAttributes,
     defaultPostValues,
+    addRemixes,
 } = require('../Helpers')
 const {
     Space,
@@ -364,20 +365,34 @@ router.get('/link-data', authenticateToken, async (req, res) => {
     res.status(200).json({ source, link, target })
 })
 
-router.get('/target-from-text', authenticateToken, async (req, res) => {
+router.get('/search', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { type, sourceId, text, userId } = req.query
+    const { type, sourceId, search, userId, mediaType, ids } = req.query
     const where = {
         type: type.toLowerCase(),
         state: 'active',
-        [Op.or]: [{ text: { [Op.like]: `%${text}%` } }, { title: { [Op.like]: `%${text}%` } }],
+        [Op.or]: [{ text: { [Op.like]: `%${search}%` } }, { title: { [Op.like]: `%${search}%` } }],
     }
     if (sourceId) where[Op.not] = { id: sourceId }
     if (userId) where.creatorId = userId
+    if (mediaType) {
+        if (mediaType === 'game') {
+            where[Op.and] = [
+                { mediaTypes: { [Op.like]: `%${mediaType}%` } },
+                { [Op.not]: { mediaTypes: { [Op.like]: `%glass-bead-game%` } } },
+            ]
+        }
+    } else {
+        where.mediaTypes = { [Op.like]: `%${mediaType}%` }
+    }
+
     const matchingPosts = await Post.findAll({
         where,
         limit: 10,
-        include: findPostInclude(accountId),
+        // TODO: no idea why this fails
+        include: findPostInclude(accountId).filter(
+            (include) => !['UrlBlocks', 'ImageBlocks', 'AudioBlocks'].includes(include.as)
+        ),
     })
     res.status(200).json(matchingPosts)
 })
@@ -686,7 +701,7 @@ router.get('/post-comments', async (req, res) => {
     // failed approaches:
     // + full nested include with no recursive promises (doesn't allow limit beyond first generation)
     // + get links first instead of using getBlocks function ~1.5s
-    const { postId, offset, filter } = req.query
+    const { postId, offset, filter, limit } = req.query
     const limits = [5, 4, 3, 2, 1] // number of comments to inlcude per generation (length of array determines max depth)
     const post = await Post.findOne({
         where: { id: postId },
@@ -709,7 +724,7 @@ router.get('/post-comments', async (req, res) => {
             ['id', 'ASC'],
         ]
 
-    async function getChildComments(parent, depth) {
+    async function getChildComments(parent, depth, limit) {
         return new Promise(async (resolve) => {
             const comments = await parent.getBlocks({
                 attributes: [...fullPostAttributes, 'totalChildComments'],
@@ -728,7 +743,7 @@ router.get('/post-comments', async (req, res) => {
                         attributes: ['id', 'handle', 'name', 'flagImagePath'],
                     },
                 ],
-                limit: limits[depth],
+                limit: limit || limits[depth],
                 offset: depth ? 0 : +offset,
                 order,
             })
@@ -749,7 +764,7 @@ router.get('/post-comments', async (req, res) => {
         })
     }
 
-    getChildComments(post, 0)
+    getChildComments(post, 0, +limit)
         .then(() =>
             res.status(200).json({
                 totalChildren: post.totalChildComments,
@@ -757,6 +772,91 @@ router.get('/post-comments', async (req, res) => {
             })
         )
         .catch((error) => res.status(500).json({ message: 'Error', error }))
+})
+
+router.get('/post-children', async (req, res) => {
+    const accountId = req.user ? req.user.id : null
+    const { postId, limit, offset, childrenIds } = req.query
+
+    const query = {
+        order: [['createdAt', 'DESC']],
+        attributes: ['state'],
+        include: [
+            {
+                model: Post,
+                attributes: fullPostAttributes,
+                include: [
+                    {
+                        model: User,
+                        as: 'Creator',
+                        attributes: ['id', 'handle', 'name', 'flagImagePath', 'coverImagePath'],
+                    },
+                    {
+                        model: Link,
+                        as: 'Submissions',
+                        separate: true,
+                        where: { relationship: 'submission', state: 'active' },
+                        order: [['index', 'ASC']],
+                        include: {
+                            model: Post,
+                            attributes: ['id', 'type', 'text'],
+                            include: [
+                                {
+                                    model: User,
+                                    as: 'Creator',
+                                    attributes: [
+                                        'id',
+                                        'handle',
+                                        'name',
+                                        'flagImagePath',
+                                        'coverImagePath',
+                                    ],
+                                },
+                                {
+                                    model: Link,
+                                    as: 'AudioBlocks',
+                                    separate: true,
+                                    where: { itemBType: 'audio-block' },
+                                    attributes: ['index'],
+                                    order: [['index', 'ASC']],
+                                    include: {
+                                        model: Post,
+                                        attributes: ['id', 'text'],
+                                        include: {
+                                            model: Link,
+                                            as: 'MediaLink',
+                                            where: { state: 'active', relationship: 'parent' },
+                                            attributes: ['id'],
+                                            include: {
+                                                model: Audio,
+                                                attributes: ['url'],
+                                            },
+                                        },
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        ],
+        where: {
+            state: 'active',
+            relationship: 'parent',
+            itemAType: 'post',
+            itemAId: postId,
+        },
+    }
+
+    if (childrenIds) {
+        query.where.itemBId = childrenIds.split(',')
+    } else {
+        query.offset = +offset
+        query.limit = +limit
+    }
+
+    const links = await Link.findAll(query)
+    res.status(200).json({ children: links.map((link) => link.Post) })
 })
 
 router.get('/post-indirect-spaces', async (req, res) => {
@@ -1387,7 +1487,7 @@ router.post('/create-post', authenticateToken, async (req, res) => {
                   const createNewLink = await Link.create({
                       state: 'active',
                       creatorId: accountId,
-                      relationship: 'link',
+                      relationship: source.relationship ?? 'link',
                       itemAType: source.type,
                       itemBType: 'post',
                       itemAId: source.id,
@@ -1430,7 +1530,7 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
             })
             const parentPost = await Post.findOne({
                 where: { id: parent.id },
-                attributes: ['id', 'type'],
+                attributes: ['id', 'type', 'game'],
                 include: {
                     model: User,
                     as: 'Creator',
@@ -1474,6 +1574,12 @@ router.post('/create-comment', authenticateToken, async (req, res) => {
                         </p>
                     `,
                   })
+
+            if (parentPost.game) {
+                const io = req.app.get('socketio')
+                io.to(parent.id).emit('gs:incoming-updated', { changedChildren: [post] })
+            }
+
             Promise.all([createNotification, sendEmail])
                 .then(() => resolve())
                 .catch((error) => resolve(error))
@@ -1609,107 +1715,110 @@ router.post('/create-poll-answer', authenticateToken, async (req, res) => {
 })
 
 router.post('/create-bead', authenticateToken, async (req, res) => {
-    const accountId = req.user ? req.user.id : null
-    if (!accountId) res.status(401).json({ message: 'Unauthorized' })
-    else {
-        const { postData, files } = await uploadFiles(req, res, accountId)
-        const { post: newBead } = await createPost(postData, files, accountId)
-        const { parent } = postData.links
+    try {
+        const accountId = req.user ? req.user.id : null
+        if (!accountId) res.status(401).json({ message: 'Unauthorized' })
+        else {
+            const { postData, files } = await uploadFiles(req, res, accountId)
+            const { post: newBead } = await createPost(postData, files, accountId)
+            const { parent } = postData.links
 
-        const creator = await User.findOne({
-            where: { id: accountId },
-            attributes: ['name', 'handle'],
-        })
+            const creator = await User.findOne({
+                where: { id: accountId },
+                attributes: ['name', 'handle'],
+            })
 
-        const gamePost = await Post.findOne({
-            where: { id: parent.id },
-            include: [
-                {
-                    model: User,
-                    as: 'Creator',
-                    attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
-                },
-                { model: GlassBeadGame },
-                {
-                    model: User,
-                    as: 'Players',
-                    attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
-                    through: { where: { type: 'glass-bead-game' }, attributes: ['index'] },
-                },
-                {
-                    model: Post,
-                    as: 'Beads',
-                    required: false,
-                    through: { where: { state: 'active' }, attributes: ['index'] },
-                    include: {
+            const gamePost = await Post.findOne({
+                where: { id: parent.id },
+                include: [
+                    {
                         model: User,
                         as: 'Creator',
                         attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
                     },
-                },
-            ],
-        })
+                    { model: GlassBeadGame },
+                    {
+                        model: User,
+                        as: 'Players',
+                        attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
+                        through: { where: { type: 'glass-bead-game' }, attributes: ['index'] },
+                    },
+                    {
+                        model: Post,
+                        as: 'Beads',
+                        required: false,
+                        through: { where: { state: 'active' }, attributes: ['index'] },
+                        include: {
+                            model: User,
+                            as: 'Creator',
+                            attributes: ['id', 'name', 'handle', 'email', 'emailsDisabled'],
+                        },
+                    },
+                ],
+            })
 
-        const createLink = await Link.create({
-            creatorId: accountId,
-            itemAId: parent.id,
-            itemAType: 'post',
-            itemBId: newBead.id,
-            itemBType: 'bead',
-            index: gamePost.GlassBeadGame.totalBeads,
-            relationship: 'parent',
-            state: 'active',
-            totalLikes: 0,
-            totalComments: 0,
-            totalRatings: 0,
-        })
+            let newDeadline = 0
 
-        const { synchronous, multiplayer, moveTimeWindow } = gamePost.GlassBeadGame
-        const notifyPlayers =
-            !synchronous && multiplayer
-                ? await new Promise(async (resolve) => {
-                      // find other players to notify
-                      const otherPlayers = []
-                      if (gamePost.Players.length) {
-                          // if restricted game, use linked Players
-                          otherPlayers.push(...gamePost.Players.filter((p) => p.id !== accountId))
-                      } else {
-                          // if open game, use linked Bead Creators
-                          gamePost.Beads.forEach((bead) => {
-                              // filter out game creator and existing records
-                              if (
-                                  bead.Creator.id !== accountId &&
-                                  !otherPlayers.find((p) => p.id === bead.Creator.id)
-                              )
-                                  otherPlayers.push(bead.Creator)
-                          })
-                      }
-                      // notify players
-                      const sendNotifications = await Promise.all(
-                          otherPlayers.map(
-                              (p) =>
-                                  new Promise(async (resolve2) => {
-                                      const notifyPlayer = await Notification.create({
-                                          type: 'gbg-move-from-other-player',
-                                          ownerId: p.id,
-                                          postId: parent.id,
-                                          userId: accountId,
-                                          seen: false,
-                                      })
-                                      const emailPlayer = p.emailsDisabled
-                                          ? null
-                                          : await sgMail.send({
-                                                to: p.email,
-                                                from: {
-                                                    email: 'admin@weco.io',
-                                                    name: 'we { collective }',
-                                                },
-                                                subject: 'New notification',
-                                                text: `
+            if (gamePost.GlassBeadGame) {
+                await Link.create({
+                    creatorId: accountId,
+                    itemAId: parent.id,
+                    itemAType: 'post',
+                    itemBId: newBead.id,
+                    itemBType: 'bead',
+                    index: gamePost.GlassBeadGame.totalBeads,
+                    relationship: 'parent',
+                    state: 'active',
+                    totalLikes: 0,
+                    totalComments: 0,
+                    totalRatings: 0,
+                })
+
+                const { synchronous, multiplayer, moveTimeWindow } = gamePost.GlassBeadGame
+                if (!synchronous && multiplayer) {
+                    await new Promise(async (resolve) => {
+                        // find other players to notify
+                        const otherPlayers = []
+                        if (gamePost.Players.length) {
+                            // if restricted game, use linked Players
+                            otherPlayers.push(...gamePost.Players.filter((p) => p.id !== accountId))
+                        } else {
+                            // if open game, use linked Bead Creators
+                            gamePost.Beads.forEach((bead) => {
+                                // filter out game creator and existing records
+                                if (
+                                    bead.Creator.id !== accountId &&
+                                    !otherPlayers.find((p) => p.id === bead.Creator.id)
+                                )
+                                    otherPlayers.push(bead.Creator)
+                            })
+                        }
+                        // notify players
+                        const sendNotifications = await Promise.all(
+                            otherPlayers.map(
+                                (p) =>
+                                    new Promise(async (resolve2) => {
+                                        const notifyPlayer = await Notification.create({
+                                            type: 'gbg-move-from-other-player',
+                                            ownerId: p.id,
+                                            postId: parent.id,
+                                            userId: accountId,
+                                            seen: false,
+                                        })
+                                        const emailPlayer = p.emailsDisabled
+                                            ? null
+                                            : await sgMail.send({
+                                                  to: p.email,
+                                                  from: {
+                                                      email: 'admin@weco.io',
+                                                      name: 'we { collective }',
+                                                  },
+                                                  subject: 'New notification',
+                                                  text: `
                                                     Hi ${p.name}, ${creator.name} just added a new bead.
                                                     https://${appURL}/p/${parent.id}
                                                 `,
-                                                html: `
+                                                  html: `
                                                     <p>
                                                         Hi ${p.name},
                                                         <br/>
@@ -1718,47 +1827,60 @@ router.post('/create-bead', authenticateToken, async (req, res) => {
                                                         <a href='${appURL}/p/${parent.id}'>bead</a>.
                                                     </p>
                                                 `,
-                                            })
-                                      Promise.all([notifyPlayer, emailPlayer])
-                                          .then(() => resolve2())
-                                          .catch((error) => resolve2(error))
-                                  })
-                          )
-                      )
-                      // schedule next deadline
-                      const scheduleNewDeadline = moveTimeWindow
-                          ? await scheduleNextBeadDeadline(
+                                              })
+                                        Promise.all([notifyPlayer, emailPlayer])
+                                            .then(() => resolve2())
+                                            .catch((error) => resolve2(error))
+                                    })
+                            )
+                        )
+                        // schedule next deadline
+                        if (moveTimeWindow) {
+                            newDeadline = await scheduleNextBeadDeadline(
                                 parent.id,
                                 gamePost.GlassBeadGame,
                                 gamePost.Players
                             )
-                          : null
+                        }
+                    })
+                }
 
-                      Promise.all([sendNotifications, scheduleNewDeadline])
-                          .then((data) => resolve(data[1]))
-                          .catch((error) => resolve(error))
-                  })
-                : null
+                await GlassBeadGame.increment('totalBeads', {
+                    where: { postId: parent.id },
+                })
+            } else {
+                await Link.create({
+                    creatorId: accountId,
+                    itemAId: parent.id,
+                    itemAType: 'post',
+                    itemBId: newBead.id,
+                    itemBType: 'bead',
+                    index: 1,
+                    relationship: 'submission',
+                    state: 'active',
+                    totalLikes: 0,
+                    totalComments: 0,
+                    totalRatings: 0,
+                })
+            }
 
-        const incrementTotalBeads = await GlassBeadGame.increment('totalBeads', {
-            where: { postId: parent.id },
-        })
+            await Post.update(
+                { lastActivity: new Date() },
+                { where: { id: parent.id }, silent: true }
+            )
 
-        const updateLastPostActivity = await Post.update(
-            { lastActivity: new Date() },
-            { where: { id: parent.id }, silent: true }
-        )
-
-        Promise.all([createLink, notifyPlayers, incrementTotalBeads, updateLastPostActivity])
-            .then((data) => res.status(200).json({ newBead, newDeadline: data[1] }))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
+            res.status(200).json({ newBead, newDeadline })
+        }
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({ message: 'Error', error })
     }
 })
 
 // test
 router.post('/update-post', authenticateToken, async (req, res) => {
     const accountId = req.user ? req.user.id : null
-    const { id, mediaTypes, title, text, searchableText, mentions, urls: newUrls } = req.body
+    const id = req.body.id
     const post = await Post.findOne({
         where: { id, creatorId: accountId },
         attributes: ['id', 'type', 'mediaTypes'],
@@ -1770,71 +1892,83 @@ router.post('/update-post', authenticateToken, async (req, res) => {
     })
     if (!post) res.status(401).json({ message: 'Unauthorized' })
     else {
-        const updatePost = await Post.update(
-            { mediaTypes, title, text, searchableText },
-            { where: { id, creatorId: accountId } }
-        )
-        // update urls
-        const oldUrlBlockLinks = await Link.findAll({
-            where: {
-                itemAId: post.id,
-                itemAType: post.type,
-                itemBType: 'url-block',
-                state: 'active',
-            },
-            attributes: ['id', 'itemBId'],
-        })
-        const oldUrlLinks = await Promise.all(
-            oldUrlBlockLinks.map(
-                (oldUrlBlockLink) =>
-                    new Promise(async (resolve) => {
-                        const oldUrlLink = await Link.findOne({
-                            where: {
-                                itemAId: oldUrlBlockLink.itemBId,
-                                itemAType: 'url-block',
-                                itemBType: 'url',
-                                state: 'active',
-                            },
-                            attributes: [],
-                            include: { model: Url, attributes: ['url'] },
+        const toUpdate = {}
+        for (const key of ['mediaTypes', 'title', 'text', 'searchableText', 'game', 'move']) {
+            if (key in req.body) {
+                toUpdate[key] = req.body[key]
+            }
+        }
+        const promises = []
+        const updatePost = await Post.update(toUpdate, { where: { id, creatorId: accountId } })
+        promises.push(updatePost)
+        if ('game' in req.body) {
+            await addRemixes(accountId, req.body.game, id)
+        }
+        if ('urls' in req.body) {
+            const newUrls = req.body.urls
+            // update urls
+            const oldUrlBlockLinks = await Link.findAll({
+                where: {
+                    itemAId: post.id,
+                    itemAType: post.type,
+                    itemBType: 'url-block',
+                    state: 'active',
+                },
+                attributes: ['id', 'itemBId'],
+            })
+            const oldUrlLinks = await Promise.all(
+                oldUrlBlockLinks.map(
+                    (oldUrlBlockLink) =>
+                        new Promise(async (resolve) => {
+                            const oldUrlLink = await Link.findOne({
+                                where: {
+                                    itemAId: oldUrlBlockLink.itemBId,
+                                    itemAType: 'url-block',
+                                    itemBType: 'url',
+                                    state: 'active',
+                                },
+                                attributes: [],
+                                include: { model: Url, attributes: ['url'] },
+                            })
+                            resolve({ id: oldUrlBlockLink.id, url: oldUrlLink.Url.url })
                         })
-                        resolve({ id: oldUrlBlockLink.id, url: oldUrlLink.Url.url })
-                    })
+                )
             )
-        )
-        const removeOldUrls = await Promise.all(
-            oldUrlLinks.map(
-                (oldUrlLink) =>
-                    new Promise(async (resolve) => {
-                        const match = newUrls.find((newUrl) => newUrl.url === oldUrlLink.url)
-                        if (match) resolve()
-                        else {
-                            Link.update({ state: 'deleted' }, { where: { id: oldUrlLink.id } })
-                                .then(() => resolve())
-                                .catch((error) => resolve(error))
-                        }
-                    })
+            const removeOldUrls = await Promise.all(
+                oldUrlLinks.map(
+                    (oldUrlLink) =>
+                        new Promise(async (resolve) => {
+                            const match = newUrls.find((newUrl) => newUrl.url === oldUrlLink.url)
+                            if (match) resolve()
+                            else {
+                                Link.update({ state: 'deleted' }, { where: { id: oldUrlLink.id } })
+                                    .then(() => resolve())
+                                    .catch((error) => resolve(error))
+                            }
+                        })
+                )
             )
-        )
-        const addNewUrls = await Promise.all(
-            newUrls.map(
-                (newUrl, index) =>
-                    new Promise((resolve) => {
-                        const match = oldUrlLinks.find(
-                            (oldUrlLink) => oldUrlLink.url === newUrl.url
-                        )
-                        if (match) {
-                            Link.update({ index }, { where: { id: match.id } })
-                                .then(() => resolve())
-                                .catch((error) => resolve(error))
-                        } else {
-                            createUrl(accountId, id, post.type, newUrl, index)
-                                .then(() => resolve())
-                                .catch((error) => resolve(error))
-                        }
-                    })
+            const addNewUrls = await Promise.all(
+                newUrls.map(
+                    (newUrl, index) =>
+                        new Promise((resolve) => {
+                            const match = oldUrlLinks.find(
+                                (oldUrlLink) => oldUrlLink.url === newUrl.url
+                            )
+                            if (match) {
+                                Link.update({ index }, { where: { id: match.id } })
+                                    .then(() => resolve())
+                                    .catch((error) => resolve(error))
+                            } else {
+                                createUrl(accountId, id, post.type, newUrl, index)
+                                    .then(() => resolve())
+                                    .catch((error) => resolve(error))
+                            }
+                        })
+                )
             )
-        )
+            promises.push(removeOldUrls, addNewUrls)
+        }
 
         // const oldUrls = await post.getBlocks({
         //     attributes: ['id'],
@@ -1882,46 +2016,47 @@ router.post('/update-post', authenticateToken, async (req, res) => {
         // )
 
         // notify mentions
-        const mentionedUsers = await User.findAll({
-            where: { handle: mentions, state: 'active' },
-            attributes: ['id', 'name', 'email', 'emailsDisabled'],
-        })
+        if ('mentions' in req.body) {
+            const mentionedUsers = await User.findAll({
+                where: { handle: req.body.mentions, state: 'active' },
+                attributes: ['id', 'name', 'email', 'emailsDisabled'],
+            })
 
-        const notifyMentions = await Promise.all(
-            mentionedUsers.map(
-                (user) =>
-                    new Promise(async (resolve) => {
-                        const alreadySent = await Notification.findOne({
-                            where: {
-                                ownerId: user.id,
-                                type: `${post.type}-mention`, // post, comment, or bead (todo: poll-answer)
-                                userId: accountId,
-                                postId: id,
-                            },
-                        })
-                        if (alreadySent) resolve()
-                        else {
-                            const sendNotification = await Notification.create({
-                                ownerId: user.id,
-                                type: `${post.type}-mention`,
-                                seen: false,
-                                userId: accountId,
-                                postId: id,
+            const notifyMentions = await Promise.all(
+                mentionedUsers.map(
+                    (user) =>
+                        new Promise(async (resolve) => {
+                            const alreadySent = await Notification.findOne({
+                                where: {
+                                    ownerId: user.id,
+                                    type: `${post.type}-mention`, // post, comment, or bead (todo: poll-answer)
+                                    userId: accountId,
+                                    postId: id,
+                                },
                             })
-                            const sendEmail = user.emailsDisabled
-                                ? null
-                                : await sgMail.send({
-                                      to: user.email,
-                                      from: {
-                                          email: 'admin@weco.io',
-                                          name: 'we { collective }',
-                                      },
-                                      subject: 'New notification',
-                                      text: `
+                            if (alreadySent) resolve()
+                            else {
+                                const sendNotification = await Notification.create({
+                                    ownerId: user.id,
+                                    type: `${post.type}-mention`,
+                                    seen: false,
+                                    userId: accountId,
+                                    postId: id,
+                                })
+                                const sendEmail = user.emailsDisabled
+                                    ? null
+                                    : await sgMail.send({
+                                          to: user.email,
+                                          from: {
+                                              email: 'admin@weco.io',
+                                              name: 'we { collective }',
+                                          },
+                                          subject: 'New notification',
+                                          text: `
                                         Hi ${user.name}, ${post.Creator.name} just mentioned you in a ${post.type} on weco:
                                         http://${appURL}/p/${id}
                                     `,
-                                      html: `
+                                          html: `
                                         <p>
                                             Hi ${user.name},
                                             <br/>
@@ -1931,18 +2066,23 @@ router.post('/update-post', authenticateToken, async (req, res) => {
                                             on weco
                                         </p>
                                     `,
-                                  })
-                            Promise.all([sendNotification, sendEmail])
-                                .then(() => resolve())
-                                .catch((error) => resolve(error))
-                        }
-                    })
+                                      })
+                                Promise.all([sendNotification, sendEmail])
+                                    .then(() => resolve())
+                                    .catch((error) => resolve(error))
+                            }
+                        })
+                )
             )
-        )
+            promises.push(notifyMentions)
+        }
 
-        Promise.all([updatePost, removeOldUrls, addNewUrls, notifyMentions])
+        Promise.all(promises)
             .then(() => res.status(200).json(updatePost))
-            .catch((error) => res.status(500).json({ message: 'Error', error }))
+            .catch((error) => {
+                console.error(error)
+                res.status(500).json({ message: 'Error', error })
+            })
     }
 })
 
@@ -3081,6 +3221,25 @@ router.post('/delete-post', authenticateToken, async (req, res) => {
             { where: { id: postId, creatorId: accountId } }
         )
 
+        await Link.update(
+            { state: 'deleted' },
+            {
+                where: {
+                    state: 'active',
+                    [Op.or]: [
+                        {
+                            itemAType: 'post',
+                            itemAId: postId,
+                        },
+                        {
+                            itemBType: 'post',
+                            itemBId: postId,
+                        },
+                    ],
+                },
+            }
+        )
+
         const updateSpaceStats = await Promise.all(
             post.AllPostSpaces.map(
                 (space) =>
@@ -3129,6 +3288,22 @@ router.post('/delete-comment', authenticateToken, async (req, res) => {
         const removeComment = await Post.update(
             { state: 'deleted' },
             { where: { id: postId, creatorId: accountId } }
+        )
+        await Link.update(
+            { state: 'deleted' },
+            {
+                where: {
+                    state: 'active',
+                    [Op.or]: [
+                        {
+                            itemAId: postId,
+                        },
+                        {
+                            itemBId: postId,
+                        },
+                    ],
+                },
+            }
         )
         // get links & root post for tally updates
         const rootLink = await Link.findOne({
