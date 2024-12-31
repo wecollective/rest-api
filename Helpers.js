@@ -43,6 +43,7 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
 const imageMBLimit = 250
 const audioMBLimit = 250
+const fileMBLimit = 250
 const defaultPostValues = {
     state: 'active',
     watermark: false,
@@ -1580,7 +1581,10 @@ function uploadFile(accountId, file) {
 
 async function uploadFiles(req, res, accountId) {
     return new Promise((resolve) => {
-        const multerParams = { dest: './temp/post-files', limits: { fileSize: 30 * 1024 * 1024 } }
+        const multerParams = {
+            dest: './temp/post-files',
+            limits: { fileSize: fileMBLimit * 1024 * 1024 },
+        }
         multer(multerParams).any()(req, res, (error) => {
             if (noMulterErrors(error, res)) {
                 Promise.all(req.files.map((file) => uploadFile(accountId, file)))
