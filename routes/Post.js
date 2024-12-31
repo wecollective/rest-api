@@ -55,6 +55,7 @@ const {
     Poll,
     Url,
     Audio,
+    File,
     ToyBoxItem,
     PostAncestor,
 } = require('../models')
@@ -99,8 +100,10 @@ router.get('/post-data', authenticateToken, async (req, res) => {
         let model = Url
         let attributes = ['url', 'image', 'title', 'description', 'domain', 'favicon']
         if (['image', 'audio'].includes(mediaType)) attributes = ['url']
+        if (mediaType === 'file') attributes = ['url', 'name', 'mbsize', 'type']
         if (mediaType === 'image') model = Image
         if (mediaType === 'audio') model = Audio
+        if (mediaType === 'file') model = File
         const linkToMedia = await Link.findOne({
             where: { itemAId: postId, itemBType: mediaType, state: 'active' },
             attributes: [],
@@ -109,6 +112,7 @@ router.get('/post-data', authenticateToken, async (req, res) => {
         if (mediaType === 'url') post.setDataValue('Url', linkToMedia.Url)
         if (mediaType === 'image') post.setDataValue('Image', linkToMedia.Image)
         if (mediaType === 'audio') post.setDataValue('Audio', linkToMedia.Audio)
+        if (mediaType === 'file') post.setDataValue('File', linkToMedia.File)
         res.status(200).json(post)
     } else if (post.type === 'chat-reply') {
         const parentLink = await Link.findOne({

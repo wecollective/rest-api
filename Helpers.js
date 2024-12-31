@@ -23,10 +23,10 @@ const {
     UserPost,
     Reaction,
     WebPushSubscription,
+    File,
 } = require('./models')
 var aws = require('aws-sdk')
 var multer = require('multer')
-var multerS3 = require('multer-s3')
 aws.config.update({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -41,8 +41,8 @@ ffmpeg.setFfmpegPath(ffmpegPath)
 const sgMail = require('@sendgrid/mail')
 sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
-const imageMBLimit = 10
-const audioMBLimit = 30
+const imageMBLimit = 250
+const audioMBLimit = 250
 const defaultPostValues = {
     state: 'active',
     watermark: false,
@@ -66,8 +66,8 @@ function isValidUrl(string) {
 
 function findFileName(file, accountId) {
     const date = Date.now().toString()
-    const extension = file.fieldname.includes('audio') ? 'mp3' : file.mimetype.split('/')[1]
-    return `${accountId}-${date}-${file.filename}.${extension}`
+    const extension = `.${file.mimetype.split('/')[1].split('+')[0]}`
+    return `${accountId}-${date}-${file.filename}${extension}`
 }
 
 function noMulterErrors(error, res) {
@@ -118,7 +118,10 @@ function convertAndUploadAudio(file, accountId) {
 
 function uploadPostFile(file, accountId) {
     return new Promise((resolve) => {
-        const bucketType = file.fieldname.includes('audio') ? 'post-audio' : 'post-images'
+        // filednames (defined in attachPostFiles function): 'audio', 'audio-blob', 'image', or 'file'
+        let bucketType = 'post-audio'
+        if (file.fieldname === 'image') bucketType = 'post-images'
+        if (file.fieldname === 'file') bucketType = 'post-files'
         const bucket = `weco-${process.env.NODE_ENV}-${bucketType}`
         const fileName = findFileName(file, accountId)
         fs.readFile(`temp/post-files/${file.filename}`, (err, data) => {
@@ -281,6 +284,57 @@ function createAudio(accountId, postId, postType, audio, index, files) {
             totalRatings: 0,
         })
         Promise.all([linkBlockToAudio, linkPostToBlock])
+            .then(() => resolve())
+            .catch((error) => resolve(error))
+    })
+}
+
+function createFile(accountId, postId, postType, file, index, allFiles) {
+    return new Promise(async (resolve) => {
+        const newFileBlock = await Post.create({
+            ...defaultPostValues,
+            creatorId: accountId,
+            type: 'file-block',
+            mediaTypes: 'file',
+            text: file.text || null,
+            searchableText: file.text || null,
+            lastActivity: new Date(),
+        })
+        const match = allFiles.find((f) => f.originalname === file.id)
+        const newFile = await File.create({
+            creatorId: accountId,
+            url: match.url || null,
+            state: 'active',
+            mbsize: file.File.size,
+            type: file.File.type,
+            name: file.File.name,
+        })
+        const linkBlockToFile = await Link.create({
+            creatorId: accountId,
+            itemAId: newFileBlock.id,
+            itemAType: 'file-block',
+            itemBId: newFile.id,
+            itemBType: 'file',
+            relationship: 'parent',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        const linkPostToBlock = await Link.create({
+            creatorId: accountId,
+            itemAId: postId,
+            itemAType: postType,
+            itemBId: newFileBlock.id,
+            itemBType: 'file-block',
+            index,
+            relationship: 'parent',
+            state: 'active',
+            totalLikes: 0,
+            totalComments: 0,
+            totalRatings: 0,
+        })
+        Promise.all([linkBlockToFile, linkPostToBlock])
             .then(() => resolve())
             .catch((error) => resolve(error))
     })
@@ -1143,6 +1197,28 @@ function findPostInclude(accountId) {
             },
         },
         {
+            model: Link,
+            as: 'FileBlocks',
+            separate: true,
+            where: { itemBType: 'file-block' },
+            attributes: ['index'],
+            order: [['index', 'ASC']],
+            include: {
+                model: Post,
+                attributes: ['id', 'text'],
+                include: {
+                    model: Link,
+                    as: 'MediaLink',
+                    where: { state: 'active', relationship: 'parent' },
+                    attributes: ['id'],
+                    include: {
+                        model: File,
+                        attributes: ['url', 'name', 'type', 'mbsize'],
+                    },
+                },
+            },
+        },
+        {
             model: Reaction,
             where: { creatorId: accountId, state: 'active' },
             attributes: ['type'],
@@ -1685,7 +1761,7 @@ function addGBGPlayers(postId, creator, settings) {
 
 // todo:
 // + check notifyMentions is adding the correct notification type
-function createPost(data, files, accountId) {
+function createPost(data, allFiles, accountId) {
     return new Promise(async (resolveA) => {
         const {
             type, // post, comment, poll-answer
@@ -1697,6 +1773,7 @@ function createPost(data, files, accountId) {
             urls,
             images,
             audios,
+            files,
             event,
             poll,
             glassBeadGame,
@@ -1742,13 +1819,23 @@ function createPost(data, files, accountId) {
 
         const createImages = images
             ? await Promise.all(
-                  images.map((image, i) => createImage(accountId, post.id, type, image, i, files))
+                  images.map((image, i) =>
+                      createImage(accountId, post.id, type, image, i, allFiles)
+                  )
               )
             : null
 
         const createAudios = audios
             ? await Promise.all(
-                  audios.map((audio, i) => createAudio(accountId, post.id, type, audio, i, files))
+                  audios.map((audio, i) =>
+                      createAudio(accountId, post.id, type, audio, i, allFiles)
+                  )
+              )
+            : null
+
+        const createFiles = files
+            ? await Promise.all(
+                  files.map((file, i) => createFile(accountId, post.id, type, file, i, allFiles))
               )
             : null
 
@@ -1901,6 +1988,7 @@ function createPost(data, files, accountId) {
             createUrls,
             createImages,
             createAudios,
+            createFiles,
             createEvent,
             createPoll,
             createGBG,

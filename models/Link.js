@@ -33,6 +33,7 @@ module.exports = (sequelize, DataTypes) => {
         Link.belongsTo(models.Url, { foreignKey: 'itemBId' })
         Link.belongsTo(models.Image, { foreignKey: 'itemBId' })
         Link.belongsTo(models.Audio, { foreignKey: 'itemBId' })
+        Link.belongsTo(models.File, { foreignKey: 'itemBId' })
         // used for post map (todo: rethink...)
         Link.belongsTo(models.Post, {
             foreignKey: 'itemAId',
