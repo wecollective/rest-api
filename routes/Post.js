@@ -925,7 +925,7 @@ router.get('/scrape-url', authenticateToken, async (req, res) => {
             }
         } else {
             // use Puppeteer to scrape other URLs
-            const browser = await puppeteer.launch({ headless: false })
+            const browser = await puppeteer.launch({ headless: 'new' })
             try {
                 const page = await browser.newPage()
                 const userAgents = [
