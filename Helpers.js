@@ -1864,7 +1864,7 @@ function createPost(data, allFiles, accountId) {
                       threshold: threshold || null,
                   })
                   const creatAnswers = await Promise.all(
-                      answers.map((a) => createPollAnswer(a, accountId, post.id, files))
+                      answers.map((a) => createPollAnswer(a, accountId, post.id, allFiles))
                   )
                   Promise.all([createPoll, creatAnswers])
                       .then(() => resolve())
@@ -1875,7 +1875,7 @@ function createPost(data, allFiles, accountId) {
         const createGBG = glassBeadGame
             ? await new Promise(async (resolve) => {
                   const { settings, topicImage, topicGroup, beads, sourcePostId } = glassBeadGame
-                  const imageFile = files.find((file) => file.originalname === topicImage.id)
+                  const imageFile = allFiles.find((file) => file.originalname === topicImage.id)
                   const { players } = settings
                   const createGame = await GlassBeadGame.create({
                       postId: post.id,
@@ -1959,7 +1959,9 @@ function createPost(data, allFiles, accountId) {
                   //           : null
 
                   const createBeads = await Promise.all(
-                      beads.map((bead, index) => createBead(bead, index, accountId, post.id, files))
+                      beads.map((bead, index) =>
+                          createBead(bead, index, accountId, post.id, allFiles)
+                      )
                   )
 
                   const addPlayers =
@@ -1982,7 +1984,7 @@ function createPost(data, allFiles, accountId) {
         const createCard = card
             ? await Promise.all(
                   [card.front, card.back].map((cardFace, index) =>
-                      createCardFace(cardFace, index, accountId, post.id, files)
+                      createCardFace(cardFace, index, accountId, post.id, allFiles)
                   )
               )
             : null
