@@ -897,7 +897,19 @@ router.get('/scrape-url', authenticateToken, async (req, res) => {
     // else if (!isValidUrl(url)) return res.status(400).json({ message: 'Invalid URL' })
     else {
         // if it's a YouTube URL and a video id can be extracted use the YouTube API to fetch metadata
-        const youtubeDomains = ['youtube.com', 'www.youtube.com', 'youtu.be']
+        const youtubeDomains = [
+            'youtube.com',
+            'www.youtube.com',
+            'youtu.be',
+            'm.youtube.com',
+            'youtube-nocookie.com',
+            'www.youtube-nocookie.com',
+            'music.youtube.com',
+            'gaming.youtube.com',
+            'kids.youtube.com',
+            'www.youtube.kids.com',
+            'studio.youtube.com',
+        ]
         const { hostname, pathname, searchParams } = new URL(url)
         let videoId = ''
         if (youtubeDomains.includes(hostname)) {
@@ -906,6 +918,7 @@ router.get('/scrape-url', authenticateToken, async (req, res) => {
             if (vParam) videoId = vParam
             else if (hostname === 'youtu.be') videoId = pathname.slice(1)
             else if (pathname.startsWith('/embed/')) videoId = pathname.split('/embed/')[1]
+            console.log(999, 'videoId: ', videoId)
         }
         if (videoId) {
             try {
